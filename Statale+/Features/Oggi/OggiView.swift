@@ -125,8 +125,10 @@ struct OggiView: View {
     }
 }
 
-/// Lezioni di oggi con la prossima lezione in grassetto e la barra "Ora" (statica, non animata) posta sopra di essa:
-/// prima dell'inizio sta sopra la prima lezione, poi scende seguendo le lezioni; a fine giornata resta in fondo.
+/// Lezioni di oggi con la prossima lezione in grassetto e l'indicatore dell'ora (statico, non animato):
+/// - fra una lezione e l'altra (o prima della prima): barra "Ora HH:MM" sopra la prossima lezione;
+/// - durante una lezione: traccia verticale sul bordo sinistro della riga con il pallino all'altezza del tempo trascorso;
+/// - a fine giornata: barra "Lezioni finite per oggi" in fondo.
 /// La "prossima" è la prima lezione non annullata che non è ancora finita (quindi anche quella in corso).
 struct LezioniOggiList: View {
     let lezioni: [Lezione]
@@ -137,13 +139,22 @@ struct LezioniOggiList: View {
         lezioni.firstIndex { !$0.annullato && $0.fine > adesso }
     }
 
+    static func inCorso(_ l: Lezione, _ adesso: Date) -> Bool { l.inizio <= adesso && adesso < l.fine }
+
+    /// Frazione di lezione trascorsa (0…1).
+    static func frazione(_ l: Lezione, _ adesso: Date) -> Double {
+        let totale = l.fine.timeIntervalSince(l.inizio)
+        return totale > 0 ? min(1, max(0, adesso.timeIntervalSince(l.inizio) / totale)) : 0
+    }
+
     var body: some View {
         let ordinate = lezioni.sorted { $0.inizio < $1.inizio }
         let prossima = Self.indiceProssima(ordinate, adesso: adesso)
         ForEach(Array(ordinate.enumerated()), id: \.element.id) { i, l in
             LezioneOggiRow(lezione: l, enfasi: i == prossima ? .prossima : (l.fine <= adesso ? .passata : .normale),
                            mostraAzioni: mostraAzioni,
-                           barraSopra: i == prossima ? BarraOra(adesso: adesso) : nil,
+                           barraSopra: i == prossima && !Self.inCorso(l, adesso) ? BarraOra(adesso: adesso) : nil,
+                           avanzamento: i == prossima && Self.inCorso(l, adesso) ? Self.frazione(l, adesso) : nil,
                            barraSotto: prossima == nil && i == ordinate.count - 1 ? BarraOra(adesso: adesso, testo: "Lezioni finite per oggi") : nil)
         }
     }
@@ -168,6 +179,32 @@ struct BarraOra: View {
     }
 }
 
+/// Traccia verticale della lezione in corso: parte colorata fino al tempo trascorso e pallino "adesso".
+private struct AvanzamentoLezione: View {
+    let frazione: Double
+
+    var body: some View {
+        GeometryReader { g in
+            let y = g.size.height * frazione
+            ZStack(alignment: .top) {
+                Capsule().fill(Color.red.opacity(0.18)).frame(width: 3)
+                Capsule().fill(Color.red).frame(width: 3, height: max(y, 3))
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2))
+                    .offset(y: min(max(y - 5, -2), g.size.height - 8))
+            }
+            .frame(width: 10)
+        }
+        .frame(width: 10)
+        .padding(.vertical, 2)
+        .transaction { $0.animation = nil }
+        .accessibilityElement()
+        .accessibilityLabel("Lezione in corso, \(Int(frazione * 100)) per cento trascorso")
+    }
+}
+
 /// Lezione di oggi con le azioni rapide, visibili da 10 minuti prima dell'inizio fino alla fine:
 /// "Conferma presenza" sparisce quando la presenza risulta registrata (server, altro dispositivo o risposta positiva).
 private struct LezioneOggiRow: View {
@@ -175,6 +212,7 @@ private struct LezioneOggiRow: View {
     var enfasi: LezioneRow.Enfasi = .normale
     var mostraAzioni = true
     var barraSopra: BarraOra?
+    var avanzamento: Double?
     var barraSotto: BarraOra?
     @Environment(AppModel.self) private var app
 
@@ -183,6 +221,9 @@ private struct LezioneOggiRow: View {
             VStack(alignment: .leading, spacing: 8) {
                 if let barraSopra { barraSopra }
                 LezioneRow(lezione: lezione, enfasi: enfasi)
+                    .overlay(alignment: .leading) {
+                        if let avanzamento { AvanzamentoLezione(frazione: avanzamento).offset(x: -13) }
+                    }
                 if mostraAzioni, AppModel.inFinestraAzioni(lezione, now: ctx.date) {
                     HStack(spacing: 10) {
                         if app.presenzaConfermata(lezione) {

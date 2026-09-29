@@ -45,9 +45,12 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - Saluto con foto profilo locale.
 - **Lezioni di oggi** del proprio corso (insegnamenti attivati), con etichette aggiornate ogni minuto:
   `ANNULLATA` (rossa), `IN CORSO` (viola), `INIZIA TRA X MIN` (arancione, da 60 minuti prima).
-- La **prossima lezione** (la prima non annullata non ancora finita, quindi anche quella in corso) è in grassetto, con
-  una barra statica "Ora HH:MM" sopra: prima dell'inizio sta sopra la prima lezione, poi scende seguendo le lezioni;
-  a fine giornata diventa "Lezioni finite per oggi". Le lezioni passate sono attenuate.
+- La **prossima lezione** (la prima non annullata non ancora finita, quindi anche quella in corso) è in grassetto e
+  l'ora corrente è indicata in modo statico:
+  - fra una lezione e l'altra (o prima della prima) con una barra "Ora HH:MM" sopra la prossima lezione;
+  - durante una lezione con una traccia verticale sul bordo sinistro della riga e un pallino all'altezza del tempo
+    trascorso (a metà lezione il pallino è a metà riga);
+  - a fine giornata con "Lezioni finite per oggi" in fondo. Le lezioni passate sono attenuate.
   In `OggiView.swift` c'è una preview (`#Preview("Lezioni di oggi")`) con orari modificabili.
 - **Azioni rapide** su una lezione da 10 minuti prima dell'inizio fino alla fine:
   - **Conferma presenza** → apre _Altro › Presenze_ sulla lezione. Il pulsante scompare a lezione finita, se il server
@@ -318,6 +321,11 @@ Da completare:
 ---
 
 ## Changelog
+
+### 2026-09-29 (4)
+
+- Oggi: durante una lezione l'ora corrente è una traccia verticale con pallino proporzionale al tempo trascorso,
+  al posto della barra sopra la lezione.
 
 ### 2026-09-29 (3)
 
