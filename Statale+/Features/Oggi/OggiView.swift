@@ -190,9 +190,11 @@ struct BarraOra: View {
 }
 
 /// Nota "Prossima lezione" a lezioni del giorno terminate: giorno relativo, data, ora, materia e aula.
+/// Un tap apre Orario sulla settimana della lezione, evidenziandola.
 struct ProssimaLezioneNota: View {
     let lezione: Lezione
     let adesso: Date
+    @Environment(AppModel.self) private var app
 
     private var quando: String {
         let cal = Formats.calendar
@@ -203,17 +205,26 @@ struct ProssimaLezioneNota: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("Prossima lezione").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-            Text(quando).font(.subheadline)
-            Text(lezione.insegnamento).font(.subheadline.weight(.semibold))
-            Label("\(lezione.aula) · \(lezione.sede)", systemImage: "mappin.and.ellipse")
-                .font(.caption).foregroundStyle(.secondary)
+        Button { app.mostraInOrario(lezione) } label: {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Prossima lezione").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                    Text(quando).font(.subheadline)
+                    Text(lezione.insegnamento).font(.subheadline.weight(.semibold))
+                    Label("\(lezione.aula) · \(lezione.sede)", systemImage: "mappin.and.ellipse")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .contentShape(RoundedRectangle(cornerRadius: 10))
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityHint("Apre l'orario sulla settimana della lezione")
     }
 }
 
@@ -410,7 +421,7 @@ private func oraDiOggi(_ hhmm: String) -> Date { Formats.at(.now, hhmm) ?? .now 
     ]
     // Prima lezione dei giorni successivi (es. lunedì se oggi è giovedì): compare a lezioni di oggi finite (es. "19:00").
     let prossima = Lezione.anteprima("09:30", "11:30", "Psicometria", aula: "Aula 208", giorniDaOggi: 4)
-    let adesso = oraDiOggi("10:59")   // oppure: Date.now
+    let adesso = oraDiOggi("18:59")   // oppure: Date.now
     return List {
         Section("Lezioni di oggi") {
             LezioniOggiList(lezioni: lezioni, prossimaFutura: prossima, oraSimulata: adesso, mostraAzioni: false)

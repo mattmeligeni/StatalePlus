@@ -42,6 +42,8 @@ final class AppModel {
     var presenzaTarget: Lezione?
     /// Insegnamento da registrare, impostato da "Inizia registrazione" in Oggi.
     var registrazioneRichiesta: InsegnamentoAgenda?
+    /// Lezione da mostrare in Orario (tap su "Prossima lezione" in Oggi).
+    var orarioRichiesta: Lezione?
     /// Inizio del calendario appelli scelto con "Vai a data" (nil = da oggi).
     var appelliDa: Date?
     /// Lezioni per cui il server ha confermato la presenza in questa sessione.

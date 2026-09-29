@@ -53,7 +53,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     (animazione disattivata con _Riduci movimento_);
   - a fine giornata "Lezioni finite per oggi" in fondo e, sotto, la nota **Prossima lezione** con giorno relativo
     ("Domani", "Tra 4 giorni"), data, ora, materia e aula (mostrata solo a lezioni del giorno terminate o se oggi non ci
-    sono lezioni). Le lezioni passate sono attenuate.
+    sono lezioni). Un tap apre _Orario_ sulla settimana di quella lezione (tornando al proprio corso se ne era scelto un
+    altro) e la evidenzia per qualche secondo. Le lezioni passate sono attenuate.
   - I passaggi fra `INIZIA TRA X MIN`, `IN CORSO` e `ANNULLATA` avvengono in dissolvenza; i minuti del conto alla
     rovescia cambiano con l'animazione numerica; barra e pallino si scambiano con una dissolvenza.
   In `OggiView.swift` c'è una preview (`#Preview("Lezioni di oggi")`) con orari modificabili e un'ora di partenza
@@ -331,7 +332,8 @@ Da completare:
 ### 2026-09-29 (6)
 
 - Oggi: dissolvenza fra le etichette di stato e fra barra e pallino, conto alla rovescia animato.
-- Nota "Prossima lezione" (giorno relativo, data, materia) a lezioni del giorno terminate.
+- Nota "Prossima lezione" (giorno relativo, data, materia) a lezioni del giorno terminate; un tap apre l'Orario sulla
+  settimana della lezione e la evidenzia.
 
 ### 2026-09-29 (5)
 

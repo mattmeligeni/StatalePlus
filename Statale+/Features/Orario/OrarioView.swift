@@ -8,6 +8,7 @@ struct OrarioView: View {
     @State private var showInsegnamenti = false
     @State private var selected: Lezione?
     @State private var showVaiA = false
+    @State private var evidenziata: String?
 
     private var weekStart: Date {
         let cal = Formats.calendar
@@ -64,7 +65,10 @@ struct OrarioView: View {
                         if !items.isEmpty {
                             Section {
                                 ForEach(items) { l in
-                                    Button { selected = l } label: { LezioneRow(lezione: l) }.tint(.primary)
+                                    Button { selected = l } label: { LezioneRow(lezione: l) }
+                                        .tint(.primary)
+                                        .listRowBackground(evidenziata == chiave(l)
+                                                           ? Color.accentColor.opacity(0.18) : Color(.secondarySystemGroupedBackground))
                                 }
                             } header: {
                                 Text(day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "it_IT"))))
@@ -91,6 +95,7 @@ struct OrarioView: View {
             }
             .refreshable { app.segnaRefresh(); await app.loadOrario(refreshInsegnamenti: true) }
             .task { if app.orario.updatedAt == nil { await app.loadOrario() } }
+            .task(id: app.orarioRichiesta?.id) { await mostraRichiesta() }
             .sheet(isPresented: $showInsegnamenti) { InsegnamentiSheet() }
             .sheet(isPresented: $showCorsi) {
                 CorsoPicker(titolo: "Corso per l'orario", albero: app.alberoOrario, load: app.loadAlberoOrario,
@@ -111,6 +116,20 @@ struct OrarioView: View {
         app.setPeriodoOrario(p.id)
         Task { await app.loadOrario() }
     }
+
+    /// Lezione richiesta da Oggi: settimana e periodo giusti, poi evidenziazione per qualche secondo.
+    private func mostraRichiesta() async {
+        guard let l = app.orarioRichiesta else { return }
+        app.orarioRichiesta = nil
+        vaiA(l.inizio)
+        if app.orario.value == nil { await app.loadOrario() }
+        withAnimation(.easeOut(duration: 0.25)) { evidenziata = chiave(l) }
+        try? await Task.sleep(for: .seconds(2.5))
+        withAnimation(.easeInOut(duration: 0.6)) { evidenziata = nil }
+    }
+
+    /// Stessa lezione anche se ricaricata (gli id XML sono stabili, ma si confrontano anche orario e insegnamento).
+    private func chiave(_ l: Lezione) -> String { "\(l.codiceInsegnamento)|\(l.inizio.timeIntervalSince1970)" }
 
     private func cambiaCorso(_ c: CorsoSelezionato) {
         app.setCorsoOrario(c)

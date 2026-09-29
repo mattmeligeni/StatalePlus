@@ -61,6 +61,13 @@ extension AppModel {
         Task { await recorder.start(in: recordings, insegnamento: ins) }
     }
 
+    /// Porta alla tab Orario sulla settimana della lezione (tornando al proprio corso se serve).
+    func mostraInOrario(_ l: Lezione) {
+        if !isMioCorsoOrario, let mio = agenda?.mioCorsoOrario { setCorsoOrario(mio) }
+        orarioRichiesta = l
+        tab = .orario
+    }
+
     // MARK: Refresh automatico
 
     static let intervalloRefresh: TimeInterval = 300
