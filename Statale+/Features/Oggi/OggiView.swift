@@ -1,10 +1,12 @@
 import SwiftUI
+import Combine
 
 /// Cruscotto: lezioni di oggi, prossimo appello prenotato, avvisi Ariel recenti, tasse.
 struct OggiView: View {
     @Environment(AppModel.self) private var app
     @State private var avvisi = Live<[AvvisoAriel]>()
     @State private var tasse = Live<SituazioneTasse>()
+    @State private var adesso = Date.now
 
     var body: some View {
         NavigationStack {
@@ -16,7 +18,7 @@ struct OggiView: View {
                     if oggi.isEmpty {
                         Text("Nessuna lezione oggi").foregroundStyle(.secondary)
                     } else {
-                        ForEach(oggi) { LezioneOggiRow(lezione: $0) }
+                        LezioniOggiList(lezioni: oggi, adesso: adesso)
                     }
                 }
 
@@ -28,7 +30,7 @@ struct OggiView: View {
                     }
                 }
 
-                LiveSection(title: "Avvisi Ariel (ultimi 7 giorni)", live: avvisi, retry: loadAvvisi) { list in
+                LiveSection(title: "Avvisi Ariel (ultimi 10 giorni)", live: avvisi, retry: loadAvvisi) { list in
                     if list.isEmpty {
                         Text("Nessun avviso recente").foregroundStyle(.secondary)
                     } else {
@@ -61,6 +63,7 @@ struct OggiView: View {
                 UpdatedFooter(date: app.lezioniUtente.updatedAt).listRowBackground(Color.clear)
             }
             .navigationTitle("Oggi")
+            .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { adesso = $0 }
             .refreshable { await loadAll() }
             .task {
                 async let a: Void = app.lezioniUtente.updatedAt == nil ? app.loadLezioniUtente() : ()
@@ -116,9 +119,52 @@ struct OggiView: View {
             corsi = try await app.services.ariel.offerta()
             app.store.update { $0.offerta = corsi; $0.offertaAggiornata = .now }
         }
-        let since = Date.now.addingTimeInterval(-7 * 86_400)
+        let since = Date.now.addingTimeInterval(-10 * 86_400)
         return await app.services.ariel.avvisiRecenti(corsi: corsi.filter(\.attivo), since: since)
             .map { AvvisoAriel(corso: $0.corso.titolo, discussione: $0.discussione) }
+    }
+}
+
+/// Lezioni di oggi con la prossima lezione in grassetto e la barra "Ora" (statica, non animata) posta sopra di essa:
+/// prima dell'inizio sta sopra la prima lezione, poi scende seguendo le lezioni; a fine giornata resta in fondo.
+/// La "prossima" è la prima lezione non annullata che non è ancora finita (quindi anche quella in corso).
+struct LezioniOggiList: View {
+    let lezioni: [Lezione]
+    let adesso: Date
+    var mostraAzioni = true
+
+    static func indiceProssima(_ lezioni: [Lezione], adesso: Date) -> Int? {
+        lezioni.firstIndex { !$0.annullato && $0.fine > adesso }
+    }
+
+    var body: some View {
+        let ordinate = lezioni.sorted { $0.inizio < $1.inizio }
+        let prossima = Self.indiceProssima(ordinate, adesso: adesso)
+        ForEach(Array(ordinate.enumerated()), id: \.element.id) { i, l in
+            LezioneOggiRow(lezione: l, enfasi: i == prossima ? .prossima : (l.fine <= adesso ? .passata : .normale),
+                           mostraAzioni: mostraAzioni,
+                           barraSopra: i == prossima ? BarraOra(adesso: adesso) : nil,
+                           barraSotto: prossima == nil && i == ordinate.count - 1 ? BarraOra(adesso: adesso, testo: "Lezioni finite per oggi") : nil)
+        }
+    }
+}
+
+/// Indicatore dell'ora corrente fra le lezioni.
+struct BarraOra: View {
+    let adesso: Date
+    var testo: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(testo ?? "Ora \(Formats.time(adesso))")
+                .font(.caption2.bold().monospacedDigit())
+                .foregroundStyle(.red)
+                .fixedSize()
+            Circle().fill(.red).frame(width: 7, height: 7)
+            Rectangle().fill(.red).frame(height: 1.5)
+        }
+        .transaction { $0.animation = nil }
+        .accessibilityLabel(testo ?? "Ora \(Formats.time(adesso))")
     }
 }
 
@@ -126,13 +172,18 @@ struct OggiView: View {
 /// "Conferma presenza" sparisce quando la presenza risulta registrata (server, altro dispositivo o risposta positiva).
 private struct LezioneOggiRow: View {
     let lezione: Lezione
+    var enfasi: LezioneRow.Enfasi = .normale
+    var mostraAzioni = true
+    var barraSopra: BarraOra?
+    var barraSotto: BarraOra?
     @Environment(AppModel.self) private var app
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 15)) { ctx in
             VStack(alignment: .leading, spacing: 8) {
-                LezioneRow(lezione: lezione)
-                if AppModel.inFinestraAzioni(lezione, now: ctx.date) {
+                if let barraSopra { barraSopra }
+                LezioneRow(lezione: lezione, enfasi: enfasi)
+                if mostraAzioni, AppModel.inFinestraAzioni(lezione, now: ctx.date) {
                     HStack(spacing: 10) {
                         if app.presenzaConfermata(lezione) {
                             Label("Presenza registrata", systemImage: "checkmark.seal.fill")
@@ -155,6 +206,7 @@ private struct LezioneOggiRow: View {
                     .controlSize(.small)
                     .padding(.leading, 64)
                 }
+                if let barraSotto { barraSotto }
             }
         }
     }
@@ -214,3 +266,38 @@ struct AppelloRow: View {
         }
     }
 }
+
+#if DEBUG
+// MARK: - Anteprima locale
+
+extension Lezione {
+    /// Lezione finta di oggi per le preview: orari "HH:mm".
+    static func anteprima(_ inizio: String, _ fine: String, _ nome: String,
+                          aula: String = "Aula 101", sede: String = "Festa del Perdono", annullata: Bool = false) -> Lezione {
+        let oggi = Date.now
+        return Lezione(id: UUID().uuidString, codiceInsegnamento: "ABC-1", insegnamento: nome, docente: "Mario Bianchi",
+                       inizio: Formats.at(oggi, inizio) ?? oggi, fine: Formats.at(oggi, fine) ?? oggi,
+                       aula: aula, aulaCodice: "", sede: sede, annullato: annullata, tipo: "Lezione", note: "")
+    }
+}
+
+/// Ora di oggi "HH:mm" (per simulare l'ora corrente nella preview).
+private func oraDiOggi(_ hhmm: String) -> Date { Formats.at(.now, hhmm) ?? .now }
+
+#Preview("Lezioni di oggi") {
+    // Cambia gli orari (e `adesso`) per vedere grassetto e barra spostarsi.
+    let lezioni: [Lezione] = [
+        .anteprima("08:30", "10:30", "Neuropsicologia clinica"),
+        .anteprima("11:00", "13:00", "Psicometria", aula: "Aula 208"),
+        .anteprima("14:30", "16:30", "Neuroscienze cognitive", aula: "Sala Conferenze", annullata: true),
+        .anteprima("17:00", "18:30", "Laboratorio di valutazione", aula: "Aula K21", sede: "Noto"),
+    ]
+    let adesso = oraDiOggi("11:30")   // oppure: Date.now
+    return List {
+        Section("Lezioni di oggi") {
+            LezioniOggiList(lezioni: lezioni, adesso: adesso, mostraAzioni: false)
+        }
+    }
+    .environment(AppModel())
+}
+#endif

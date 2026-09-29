@@ -112,6 +112,7 @@ extension AppModel {
         resetLive()
         aule.reset(); alberoOrario.reset(); alberoEsami.reset()
         if eliminaDatiLocali {
+            elaborazioni.annullaTutto()
             recordings.deleteAll()
             photo.remove()
             let fm = FileManager.default

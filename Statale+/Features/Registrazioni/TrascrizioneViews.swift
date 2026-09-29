@@ -1,0 +1,277 @@
+import SwiftUI
+
+// MARK: - Sezioni nel dettaglio
+
+/// Trascrizione con Speech: avvio, avanzamento, anteprima e accesso al testo completo.
+struct TrascrizioneSection: View {
+    let registrazione: Registrazione
+    @Environment(AppModel.self) private var app
+    @State private var anteprima: String?
+
+    var body: some View {
+        let id = registrazione.id
+        Section {
+            if let s = app.elaborazioni.stato(.trascrizione, id) {
+                StatoElaborazione(stato: s) { app.elaborazioni.annulla(.trascrizione, id) }
+            } else if registrazione.trascrittaIl != nil {
+                if let anteprima { Text(anteprima).font(.callout).lineLimit(4).foregroundStyle(.secondary) }
+                NavigationLink { TrascrizioneView(id: id) } label: {
+                    Label("Leggi e modifica la trascrizione", systemImage: "text.alignleft")
+                }
+            } else {
+                Button { app.elaborazioni.trascrivi(registrazione, in: app.recordings) } label: {
+                    Label("Trascrivi registrazione", systemImage: "waveform.badge.magnifyingglass")
+                }
+            }
+            if let e = app.elaborazioni.errori[id], app.elaborazioni.stato(.trascrizione, id) == nil {
+                Label(e, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
+            }
+        } header: {
+            Text("Trascrizione")
+        } footer: {
+            if registrazione.trascrittaIl == nil {
+                Text("Riconoscimento vocale di Apple in italiano, sul dispositivo quando supportato. Puoi uscire da questa schermata durante la trascrizione.")
+            }
+        }
+        .task(id: registrazione.trascrittaIl) {
+            anteprima = app.recordings.trascrizione(id).map { String($0.prefix(400)) }
+        }
+    }
+}
+
+/// Riassunto con Apple Intelligence (visibile solo sui dispositivi compatibili).
+struct RiassuntoSection: View {
+    let registrazione: Registrazione
+    @Environment(AppModel.self) private var app
+    @State private var testo: String?
+
+    var body: some View {
+        let id = registrazione.id
+        Section {
+            switch AppleIntelligence.stato {
+            case .nonAttiva:
+                Label("Attiva Apple Intelligence in Impostazioni per generare i riassunti delle lezioni.", systemImage: "apple.intelligence")
+                    .font(.callout)
+            case .inPreparazione:
+                Label("Apple Intelligence sta scaricando il modello. Riprova tra poco.", systemImage: "arrow.down.circle")
+                    .font(.callout)
+            case .nonSupportata:
+                EmptyView()
+            case .disponibile:
+                if let s = app.elaborazioni.stato(.riassunto, id) {
+                    StatoElaborazione(stato: s) { app.elaborazioni.annulla(.riassunto, id) }
+                } else if registrazione.riassuntoIl != nil, let testo {
+                    MarkdownTesto(markdown: testo).lineLimit(8)
+                    NavigationLink { RiassuntoView(id: id) } label: { Label("Apri riassunto", systemImage: "doc.text.magnifyingglass") }
+                } else if registrazione.trascrittaIl == nil {
+                    Text("Trascrivi prima la registrazione per poterla riassumere.").font(.callout).foregroundStyle(.secondary)
+                } else {
+                    Button { app.elaborazioni.riassumi(registrazione, in: app.recordings) } label: {
+                        Label("Genera riassunto", systemImage: "sparkles")
+                    }
+                }
+            }
+        } header: {
+            Label("Riassunto", systemImage: "apple.intelligence")
+        } footer: {
+            if AppleIntelligence.stato == .disponibile, registrazione.riassuntoIl == nil, registrazione.trascrittaIl != nil {
+                Text("Generato sul dispositivo: riassunto, punti chiave e domande di ripasso.")
+            }
+        }
+        .task(id: registrazione.riassuntoIl) { testo = app.recordings.riassunto(id) }
+    }
+}
+
+private struct StatoElaborazione: View {
+    let stato: ElaborazioniAudio.Stato
+    let annulla: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ProgressView(value: stato.progresso) {
+                Text(stato.messaggio).font(.callout)
+            } currentValueLabel: {
+                Text(stato.progresso.formatted(.percent.precision(.fractionLength(0)))).font(.caption.monospacedDigit())
+            }
+            Button("Annulla", role: .destructive, action: annulla).font(.callout).buttonStyle(.borderless)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Trascrizione completa
+
+/// Testo completo modificabile, con Writing Tools (iOS 18+) per correggere, riscrivere o riassumere.
+struct TrascrizioneView: View {
+    let id: UUID
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var testo = ""
+    @State private var caricato = false
+    @State private var confermaRifai = false
+    @State private var confermaElimina = false
+
+    var body: some View {
+        TextEditor(text: $testo)
+            .font(.body)
+            .strumentiScrittura()
+            .padding(.horizontal, 8)
+            .navigationTitle("Trascrizione")
+            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                Text("\(testo.split(whereSeparator: \.isWhitespace).count) parole")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity).padding(6).background(.bar)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { ShareLink(item: testo) }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { UIPasteboard.general.string = testo } label: { Label("Copia tutto", systemImage: "doc.on.doc") }
+                        Button { confermaRifai = true } label: { Label("Trascrivi di nuovo", systemImage: "arrow.clockwise") }
+                        Button(role: .destructive) { confermaElimina = true } label: { Label("Elimina trascrizione", systemImage: "trash") }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                }
+            }
+            .onAppear {
+                guard !caricato else { return }
+                testo = app.recordings.trascrizione(id) ?? ""
+                caricato = true
+            }
+            .task(id: testo) {
+                // Salvataggio con debounce mentre si modifica.
+                guard caricato else { return }
+                try? await Task.sleep(for: .seconds(1))
+                salva()
+            }
+            .onDisappear { salva() }
+            .confirmationDialog("Trascrivere di nuovo?", isPresented: $confermaRifai, titleVisibility: .visible) {
+                Button("Trascrivi di nuovo", role: .destructive) {
+                    caricato = false
+                    app.recordings.salvaTrascrizione(id, nil)
+                    if let r = app.recordings.item(id) { app.elaborazioni.trascrivi(r, in: app.recordings) }
+                    dismiss()
+                }
+            } message: { Text("Le modifiche fatte a mano andranno perse.") }
+            .confirmationDialog("Eliminare la trascrizione?", isPresented: $confermaElimina, titleVisibility: .visible) {
+                Button("Elimina", role: .destructive) {
+                    caricato = false
+                    app.recordings.salvaTrascrizione(id, nil)
+                    dismiss()
+                }
+            }
+    }
+
+    private func salva() {
+        guard caricato, testo != app.recordings.trascrizione(id) else { return }
+        app.recordings.salvaTrascrizione(id, testo)
+    }
+}
+
+// MARK: - Riassunto completo
+
+struct RiassuntoView: View {
+    let id: UUID
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var testo = ""
+    @State private var caricato = false
+    @State private var modifica = false
+
+    var body: some View {
+        Group {
+            if modifica {
+                TextEditor(text: $testo)
+                    .font(.body.monospaced())
+                    .strumentiScrittura()
+                    .padding(.horizontal, 8)
+            } else {
+                ScrollView {
+                    MarkdownTesto(markdown: testo)
+                        .textSelection(.enabled)
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .navigationTitle("Riassunto")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(modifica ? "Fine" : "Modifica") {
+                    if modifica { salva() }
+                    modifica.toggle()
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    ShareLink(item: testo) { Label("Condividi", systemImage: "square.and.arrow.up") }
+                    Button { UIPasteboard.general.string = testo } label: { Label("Copia", systemImage: "doc.on.doc") }
+                    Button {
+                        if let r = app.recordings.item(id) { app.elaborazioni.riassumi(r, in: app.recordings) }
+                        dismiss()
+                    } label: { Label("Genera di nuovo", systemImage: "sparkles") }
+                    Button(role: .destructive) {
+                        caricato = false
+                        app.recordings.salvaRiassunto(id, nil)
+                        dismiss()
+                    } label: { Label("Elimina riassunto", systemImage: "trash") }
+                } label: { Image(systemName: "ellipsis.circle") }
+            }
+        }
+        .onAppear {
+            guard !caricato else { return }
+            testo = app.recordings.riassunto(id) ?? ""
+            caricato = true
+        }
+        .onDisappear { salva() }
+    }
+
+    private func salva() {
+        guard caricato, testo != app.recordings.riassunto(id) else { return }
+        app.recordings.salvaRiassunto(id, testo)
+    }
+}
+
+// MARK: - Supporto
+
+/// Rendering essenziale del Markdown dei riassunti: titoli `##`, elenchi puntati/numerati, grassetto/corsivo inline.
+struct MarkdownTesto: View {
+    let markdown: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(markdown.components(separatedBy: "\n").enumerated()), id: \.offset) { _, riga in
+                let r = riga.trimmingCharacters(in: .whitespaces)
+                if r.hasPrefix("#") {
+                    Text(inline(r.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces)))
+                        .font(.headline).padding(.top, 6)
+                } else if r.hasPrefix("- ") || r.hasPrefix("* ") || r.hasPrefix("• ") {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("•")
+                        Text(inline(String(r.dropFirst(2))))
+                    }
+                } else if let m = r.firstMatch(#"^(\d+)[.)]\s+(.*)$"#, group: 2), let n = r.firstMatch(#"^(\d+)[.)]"#) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(n).").monospacedDigit()
+                        Text(inline(m))
+                    }
+                } else if !r.isEmpty {
+                    Text(inline(r))
+                }
+            }
+        }
+        .font(.callout)
+    }
+
+    private func inline(_ s: String) -> AttributedString {
+        (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
+    }
+}
+
+extension View {
+    /// Writing Tools completi (riscrittura, correzione, riassunto) su iOS 18+.
+    @ViewBuilder
+    func strumentiScrittura() -> some View {
+        if #available(iOS 18.0, *) { writingToolsBehavior(.complete) } else { self }
+    }
+}

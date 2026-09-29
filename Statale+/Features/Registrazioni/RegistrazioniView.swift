@@ -244,64 +244,81 @@ struct RegistrazioneDetailView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var player = AudioPlayer()
-    @State private var r: Registrazione?
     @State private var confermaElimina = false
+
+    /// Collegamento diretto all'archivio: trascrizioni e riassunti che finiscono in background restano coerenti.
+    private func campo<T>(_ kp: WritableKeyPath<Registrazione, T>, _ vuoto: T) -> Binding<T> {
+        Binding(get: { app.recordings.item(id)?[keyPath: kp] ?? vuoto },
+                set: { v in
+                    guard var r = app.recordings.item(id) else { return }
+                    r[keyPath: kp] = v
+                    app.recordings.update(r)
+                })
+    }
+
+    private var insegnamento: Binding<String?> {
+        Binding(get: { app.recordings.item(id)?.codiceInsegnamento },
+                set: { codice in
+                    guard var r = app.recordings.item(id) else { return }
+                    r.codiceInsegnamento = codice
+                    r.insegnamento = app.agenda?.insegnamentiUtenteAttivati.first { $0.codice == codice }?.nome
+                        ?? (codice == nil ? nil : r.insegnamento)
+                    app.recordings.update(r)
+                })
+    }
 
     var body: some View {
         Group {
-            if let binding = Binding($r) {
+            if let r = app.recordings.item(id) {
                 Form {
                     Section {
-                        TextField("Titolo", text: binding.titolo, axis: .vertical)
-                        Picker("Insegnamento", selection: binding.codiceInsegnamento) {
+                        TextField("Titolo", text: campo(\.titolo, ""), axis: .vertical)
+                        Picker("Insegnamento", selection: insegnamento) {
                             Text("Nessuno").tag(String?.none)
                             ForEach(app.agenda?.insegnamentiUtenteAttivati ?? []) { Text($0.nome).tag(Optional($0.codice)) }
-                            if let c = binding.wrappedValue.codiceInsegnamento,
-                               !(app.agenda?.insegnamentiUtenteAttivati.contains { $0.codice == c } ?? false) {
-                                Text(binding.wrappedValue.insegnamento ?? c).tag(Optional(c))
+                            if let c = r.codiceInsegnamento, !(app.agenda?.insegnamentiUtenteAttivati.contains { $0.codice == c } ?? false) {
+                                Text(r.insegnamento ?? c).tag(Optional(c))
                             }
                         }
-                        LabeledContent("Registrata", value: binding.wrappedValue.creata.formatted(date: .long, time: .shortened))
+                        LabeledContent("Registrata", value: r.creata.formatted(date: .long, time: .shortened))
                     }
                     Section { PlayerControls(player: player) }
-                    if !binding.wrappedValue.segnalibri.isEmpty {
+                    TrascrizioneSection(registrazione: r)
+                    if AppleIntelligence.stato != .nonSupportata {
+                        RiassuntoSection(registrazione: r)
+                    }
+                    if !r.segnalibri.isEmpty {
                         Section("Segnalibri") {
-                            ForEach(Array(binding.wrappedValue.segnalibri.enumerated()), id: \.offset) { i, t in
+                            ForEach(Array(r.segnalibri.enumerated()), id: \.offset) { i, t in
                                 Button { player.seek(to: t); player.play() } label: {
                                     Label("Segnalibro \(i + 1) · \(durata(t, precisa: true))", systemImage: "bookmark")
                                 }
                             }
-                            .onDelete { binding.wrappedValue.segnalibri.remove(atOffsets: $0) }
+                            .onDelete { campo(\.segnalibri, []).wrappedValue.remove(atOffsets: $0) }
                         }
                     }
                     Section("Note") {
-                        TextField("Appunti sulla lezione", text: binding.note, axis: .vertical).lineLimit(4...)
+                        TextField("Appunti sulla lezione", text: campo(\.note, ""), axis: .vertical).lineLimit(4...)
                     }
                     Section {
-                        ShareLink(item: app.recordings.url(for: binding.wrappedValue)) { Label("Condividi audio", systemImage: "square.and.arrow.up") }
+                        ShareLink(item: app.recordings.url(for: r)) { Label("Condividi audio", systemImage: "square.and.arrow.up") }
                         Button("Elimina registrazione", role: .destructive) { confermaElimina = true }
                     }
                 }
-                .navigationTitle(binding.wrappedValue.titolo)
+                .navigationTitle(r.titolo)
                 .navigationBarTitleDisplayMode(.inline)
             } else {
                 ContentUnavailableView("Registrazione non trovata", systemImage: "waveform.slash")
             }
         }
-        .onAppear {
-            r = app.recordings.items.first { $0.id == id }
-            if let r { player.load(app.recordings.url(for: r)) }
-        }
-        .onChange(of: r) { _, new in
-            guard var new else { return }
-            new.insegnamento = app.agenda?.insegnamentiUtenteAttivati.first { $0.codice == new.codiceInsegnamento }?.nome
-                ?? (new.codiceInsegnamento == nil ? nil : new.insegnamento)
-            app.recordings.update(new)
-        }
+        .onAppear { if let r = app.recordings.item(id) { player.load(app.recordings.url(for: r)) } }
         .onDisappear { player.stop() }
         .confirmationDialog("Eliminare la registrazione?", isPresented: $confermaElimina, titleVisibility: .visible) {
             Button("Elimina", role: .destructive) {
-                if let r { player.stop(); app.recordings.delete(r) }
+                player.stop()
+                app.elaborazioni.annulla(.trascrizione, id)
+                app.elaborazioni.annulla(.riassunto, id)
+                if let r = app.recordings.item(id) { app.recordings.delete(r) }
                 dismiss()
             }
         }

@@ -14,6 +14,8 @@ nonisolated struct Registrazione: Codable, Sendable, Identifiable, Hashable {
     let file: String                  // "<id>.m4a"
     var segnalibri: [TimeInterval]
     var note: String
+    var trascrittaIl: Date? = nil       // testo in `<id>.txt` (Speech, modificabile)
+    var riassuntoIl: Date? = nil        // Markdown in `<id>.riassunto.md` (Apple Intelligence)
 }
 
 // MARK: - Archivio
@@ -35,6 +37,37 @@ final class RecordingStore {
     }
 
     func url(for r: Registrazione) -> URL { folder.appending(path: r.file) }
+    private func trascrizioneURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).txt") }
+    private func riassuntoURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).riassunto.md") }
+
+    func item(_ id: UUID) -> Registrazione? { items.first { $0.id == id } }
+
+    // MARK: Trascrizione e riassunto (file separati dall'indice)
+
+    func trascrizione(_ id: UUID) -> String? { try? String(contentsOf: trascrizioneURL(id), encoding: .utf8) }
+    func riassunto(_ id: UUID) -> String? { try? String(contentsOf: riassuntoURL(id), encoding: .utf8) }
+
+    func salvaTrascrizione(_ id: UUID, _ testo: String?) {
+        scrivi(testo, trascrizioneURL(id))
+        guard var r = item(id) else { return }
+        r.trascrittaIl = testo == nil ? nil : .now
+        update(r)
+    }
+
+    func salvaRiassunto(_ id: UUID, _ testo: String?) {
+        scrivi(testo, riassuntoURL(id))
+        guard var r = item(id) else { return }
+        r.riassuntoIl = testo == nil ? nil : .now
+        update(r)
+    }
+
+    private func scrivi(_ testo: String?, _ url: URL) {
+        if let testo {
+            try? Data(testo.utf8).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        } else {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
 
     func add(_ r: Registrazione) { items.insert(r, at: 0); save() }
 
@@ -46,13 +79,16 @@ final class RecordingStore {
 
     func delete(_ r: Registrazione) {
         try? FileManager.default.removeItem(at: url(for: r))
+        try? FileManager.default.removeItem(at: trascrizioneURL(r.id))
+        try? FileManager.default.removeItem(at: riassuntoURL(r.id))
         items.removeAll { $0.id == r.id }
         save()
     }
 
     /// Elimina tutte le registrazioni e l'indice.
     func deleteAll() {
-        items.forEach { try? FileManager.default.removeItem(at: url(for: $0)) }
+        (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?
+            .forEach { try? FileManager.default.removeItem(at: $0) }
         items = []
         save()
     }

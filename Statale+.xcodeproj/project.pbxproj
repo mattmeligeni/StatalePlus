@@ -250,6 +250,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Statale+";
 				INFOPLIST_KEY_NSCameraUsageDescription = "La fotocamera serve per scansionare il QR del codice lezione.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Il microfono serve per registrare le lezioni.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Il riconoscimento vocale serve per trascrivere le registrazioni delle lezioni.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -286,6 +287,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Statale+";
 				INFOPLIST_KEY_NSCameraUsageDescription = "La fotocamera serve per scansionare il QR del codice lezione.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Il microfono serve per registrare le lezioni.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Il riconoscimento vocale serve per trascrivere le registrazioni delle lezioni.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

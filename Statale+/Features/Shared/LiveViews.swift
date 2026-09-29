@@ -81,8 +81,11 @@ struct TimeStatusBadge: View {
 
 /// Riga di una lezione (Oggi, Orario, calendario insegnamento).
 struct LezioneRow: View {
+    enum Enfasi { case normale, prossima, passata }
+
     let lezione: Lezione
     var mostraData = false
+    var enfasi: Enfasi = .normale
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -92,12 +95,13 @@ struct LezioneRow: View {
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Text(Formats.time(lezione.inizio)).font(.subheadline.monospacedDigit().bold())
+                    .foregroundStyle(enfasi == .prossima ? Color.accentColor : .primary)
                 Text(Formats.time(lezione.fine)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             .frame(width: 52, alignment: .trailing)
             VStack(alignment: .leading, spacing: 3) {
                 Text(lezione.insegnamento)
-                    .font(.subheadline.weight(.semibold))
+                    .font(enfasi == .prossima ? .headline : .subheadline.weight(enfasi == .normale ? .semibold : .regular))
                     .strikethrough(lezione.annullato)
                     .lineLimit(2)
                 Label("\(lezione.aula) · \(lezione.sede)", systemImage: "mappin.and.ellipse")
@@ -108,7 +112,7 @@ struct LezioneRow: View {
                 }
             }
         }
-        .opacity(lezione.annullato ? 0.7 : 1)
+        .opacity(lezione.annullato ? 0.7 : (enfasi == .passata ? 0.55 : 1))
         .accessibilityElement(children: .combine)
     }
 }

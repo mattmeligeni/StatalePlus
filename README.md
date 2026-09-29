@@ -2,12 +2,12 @@
 
 App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi per gli studenti dell'Università degli Studi di Milano, oggi sparsi in quattro sistemi diversi:
 
-| Sistema | Cosa fornisce |
-|---|---|
-| **UNIMIA** (`unimia.unimi.it`) | profilo, carriera e libretto, tasse, esiti in attesa |
-| **SIFA online** (`studente.unimi.it`) | esami iscrivibili, prenotazioni agli appelli, esiti da accettare, pagamenti |
-| **Ariel / myAriel** (`ariel.unimi.it`, `myariel.unimi.it`) | corsi Moodle, schede insegnamento, materiali, bacheche, partecipanti, valutazioni |
-| **API mobili** (`orari-be.divsi.unimi.it`) | orario lezioni (Agenda), appelli, aule (EasyRoom), rilevazione presenze (EasyBadge) |
+| Sistema                                                    | Cosa fornisce                                                                       |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **UNIMIA** (`unimia.unimi.it`)                             | profilo, carriera e libretto, tasse, esiti in attesa                                |
+| **SIFA online** (`studente.unimi.it`)                      | esami iscrivibili, prenotazioni agli appelli, esiti da accettare, pagamenti         |
+| **Ariel / myAriel** (`ariel.unimi.it`, `myariel.unimi.it`) | corsi Moodle, schede insegnamento, materiali, bacheche, partecipanti, valutazioni   |
+| **API mobili** (`orari-be.divsi.unimi.it`)                 | orario lezioni (Agenda), appelli, aule (EasyRoom), rilevazione presenze (EasyBadge) |
 
 > Progetto indipendente, non affiliato all'Ateneo.
 
@@ -33,6 +33,7 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 ## Funzionalità
 
 ### Accesso
+
 - Riservato agli **studenti immatricolati** con indirizzo `@studenti.unimi.it`.
 - Si può scrivere solo `nome.cognome`: il dominio viene aggiunto in automatico. Qualsiasi altro dominio
   (es. `@unimi.it`, `@gmail.com`) o formato non valido viene rifiutato prima di contattare i server.
@@ -40,18 +41,24 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   vengono scartate e si torna all'onboarding.
 
 ### Oggi
+
 - Saluto con foto profilo locale.
 - **Lezioni di oggi** del proprio corso (insegnamenti attivati), con etichette aggiornate ogni minuto:
   `ANNULLATA` (rossa), `IN CORSO` (viola), `INIZIA TRA X MIN` (arancione, da 60 minuti prima).
+- La **prossima lezione** (la prima non annullata non ancora finita, quindi anche quella in corso) è in grassetto, con
+  una barra statica "Ora HH:MM" sopra: prima dell'inizio sta sopra la prima lezione, poi scende seguendo le lezioni;
+  a fine giornata diventa "Lezioni finite per oggi". Le lezioni passate sono attenuate.
+  In `OggiView.swift` c'è una preview (`#Preview("Lezioni di oggi")`) con orari modificabili.
 - **Azioni rapide** su una lezione da 10 minuti prima dell'inizio fino alla fine:
-  - **Conferma presenza** → apre *Altro › Presenze* sulla lezione. Il pulsante scompare a lezione finita, se il server
+  - **Conferma presenza** → apre _Altro › Presenze_ sulla lezione. Il pulsante scompare a lezione finita, se il server
     risulta già avere la presenza (anche confermata da un altro dispositivo o dal web) o dopo una risposta positiva.
-  - **Inizia registrazione** → apre *Registrazioni* e avvia subito la registrazione dell'insegnamento.
+  - **Inizia registrazione** → apre _Registrazioni_ e avvia subito la registrazione dell'insegnamento.
 - **Prossimo appello prenotato** (da SIFA), arricchito con aula e sede dal calendario Agenda e pulsante Mappe.
-- **Avvisi Ariel** degli ultimi 7 giorni (bacheche dei corsi attivi).
+- **Avvisi Ariel** degli ultimi 10 giorni (bacheche dei corsi attivi).
 - **Tasse**: importo da pagare e prossima scadenza.
 
 ### Orario
+
 - Settimana navigabile, lezioni raggruppate per giorno, dettaglio con aula, sede, docente e **Apri in Mappe**.
 - **Vai a data**: scelta una data (es. 7 ottobre 2026) porta alla sua settimana (5–11 ottobre); se la data cade in un
   altro periodo didattico, cambia anche la pillola del periodo.
@@ -61,12 +68,14 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - Default: il corso dell'utente, ricavato dal codice corso UNIMIA (es. `DBD`) incrociato con l'albero Agenda.
 
 ### Ariel
+
 - Offerta dell'anno accademico corrente: corsi con sito attivo in cima, gli altri in grigio.
 - Dettaglio corso: scheda insegnamento (obiettivi, periodo, lingua, docenti, link), **Calendario lezioni**
   (modal con le sole lezioni della materia dalle API Agenda), contenuti per sezione, moduli con descrizione,
   file (anteprima Quick Look), forum e discussioni, partecipanti, valutazioni.
 
 ### Registrazioni
+
 - Registrazione vocale collegata a un insegnamento attivato (suggerito automaticamente se c'è una lezione in corso).
 - Timer, livello microfono, pausa/ripresa, **segnalibri**, annulla; continua a schermo bloccato e si mette in pausa
   durante le telefonate.
@@ -74,23 +83,35 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   (numero, durata totale, data dell'ultima); toccandone uno si apre il suo elenco. La ricerca per titolo,
   insegnamento o note mostra i risultati in un'unica lista.
 - Dettaglio: player (±15/30 s, velocità 0,75–2×, salto ai segnalibri), titolo, insegnamento, note, condivisione, eliminazione.
+- **Trascrizione** in italiano con il framework Speech di Apple:
+  - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber` on-device, pensati per audio lunghi (il modello della lingua viene
+    scaricato la prima volta);
+  - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 s, on-device quando supportato, con punteggiatura.
+  - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
+    (iOS 18+), conteggio parole, condivisione, nuova trascrizione.
+- **Riassunto con Apple Intelligence** (FoundationModels, iOS 26+, solo se disponibile sul dispositivo): la trascrizione è
+  divisa in parti (il modello on-device ha un contesto di ~4K token), ogni parte diventa appunti e gli appunti diventano un
+  riassunto in Markdown con _Riassunto_, _Punti chiave_ e _Da ripassare_ (domande di verifica). Visualizzazione formattata,
+  modifica con Writing Tools, rigenerazione. Se Apple Intelligence è disattivata o in download l'app lo indica.
 
 ### Altro
+
 - **Carriera e libretto**: profilo, recapiti, libretto, esiti da accettare, PDF "prossimi appelli" del corso.
 - **Tasse e pagamenti**: righe della situazione amministrativa, totali, avvisi, link ai pagamenti SIFA.
 - **Esami**
-  - *Calendario*: appelli dalle API Agenda per corso e anno (pillole), raggruppati per settimana, corso modificabile
-    dal menu; **Vai a data** fa partire il calendario dalla settimana scelta (anche nel passato), *Oggi* torna al presente.
-  - *Iscrizioni*: prenotazioni confermate, esiti da accettare, pulsante **Iscriviti a un appello** che apre la replica di
-    "Esami del tuo corso di studio" (ricerca per descrizione, Codice / Descrizione / Crediti, pulsante *Iscrizione*).
+  - _Calendario_: appelli dalle API Agenda per corso e anno (pillole), raggruppati per settimana, corso modificabile
+    dal menu; **Vai a data** fa partire il calendario dalla settimana scelta (anche nel passato), _Oggi_ torna al presente.
+  - _Iscrizioni_: prenotazioni confermate, esiti da accettare, pulsante **Iscriviti a un appello** che apre la replica di
+    "Esami del tuo corso di studio" (ricerca per descrizione, Codice / Descrizione / Crediti, pulsante _Iscrizione_).
 - **Aule**: sedi espandibili con le aule e lo stato attuale (libera / occupata fino alle…), ricerca sempre visibile per
-  sede, aula o indirizzo, indirizzo cliccabile; *Dove si tiene* cerca le attività della giornata odierna.
+  sede, aula o indirizzo, indirizzo cliccabile; _Dove si tiene_ cerca le attività della giornata odierna.
 - **Presenze**: registrazione presenza con codice lezione (digitato o da **QR**), risposta del server mostrata così com'è;
   percentuali di frequenza per corso e dettaglio degli slot.
 - **Impostazioni**: foto profilo, account, stato delle sessioni, dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
 
 ### Mappe
+
 Tutti i collegamenti a Mappe usano l'**indirizzo della sede presa da EasyRoom**: per codice aula (gli appelli usano
 lo stesso `room_code` di EasyRoom, es. `33230#4001`), poi per nome aula + sede, poi per sede; ricerca testuale solo come
 ultima risorsa.
@@ -126,7 +147,7 @@ Statale+/
 ├── Core/
 │   ├── Auth/            CASSession, ArielSession, KeychainStore
 │   ├── HTML/            parser HTML tollerante + selettori CSS (sostituisce librerie esterne)
-│   ├── Local/           foto profilo, registrazioni (store, recorder, player)
+│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech), riassunti (FoundationModels)
 │   ├── Networking/      HTTPClient (rate limiting per host, redirect guard, rilevazione Cloudflare)
 │   ├── Persistence/     StableStore (cache stabile su disco)
 │   └── Util/            formati di data/importi, decodifica tollerante, helper HTML
@@ -141,8 +162,8 @@ Statale+/
 - **Dati live**: `Live<T>` gestisce valore, errore, caricamento e "aggiornato alle HH:MM"; un nuovo caricamento rende
   obsoleto quello in corso (es. cambio periodo durante un fetch).
 - **Rete**: tre client HTTP.
-  - *CAS* (UNIMIA + SIFA) e *Ariel*: `HTTPCookieStorage.shared`, sessioni separate.
-  - *Pubblico* (API mobili): **senza cookie**, perché `orari-be.divsi.unimi.it` è un sottodominio di `unimi.it` e
+  - _CAS_ (UNIMIA + SIFA) e _Ariel_: `HTTPCookieStorage.shared`, sessioni separate.
+  - _Pubblico_ (API mobili): **senza cookie**, perché `orari-be.divsi.unimi.it` è un sottodominio di `unimi.it` e
     riceverebbe il `CASTGC` (dominio `.unimi.it`).
   - Richieste distanziate per host (0,7–0,8 s autenticate, 0,3 s pubbliche), User-Agent unico, solo HTTPS,
     redirect verso URL di logout bloccati (una `ClosingPage` SIFA farebbe Single Logout e invaliderebbe il CASTGC).
@@ -154,55 +175,59 @@ Statale+/
 Un solo login in onboarding (email `nome.cognome@studenti.unimi.it` + password), salvato nel **Keychain** dopo un login
 CAS riuscito. Re-login trasparente quando una sessione scade.
 
-| Meccanismo | Flusso |
-|---|---|
-| **CAS** (UNIMIA, SIFA) | `GET cas.unimi.it/login?service=…` → campi hidden `lt`, `execution` → `POST /login` (`username`, `password`, `selTipoUtente=S`, `_eventId=submit`, …) → redirect con ticket → sessione. Il cookie `CASTGC` abilita gli altri service senza credenziali. |
-| **SIFA** | Ogni app è un service CAS: `GET studente.unimi.it/<app>/checkLogin.asp`. A freddo Cloudflare risponde 401: prima un `GET https://studente.unimi.it/` per ottenere `__cf_bm`. App Wicket **stateful**: si usano solo pagine montate a classe, mai URL `?N`. |
-| **Ariel** | Login **proprio**, non CAS: form ASP.NET su `elearning.unimi.it/authentication/skin/portaleariel/login.aspx` con `tbLogin` (parte locale dell'email), `tbPassword`, `ddlType` (`@studenti.unimi.it`), `hdnSilent=true` + tutti i campi hidden. Cookie `arielauth`; Moodle usa il `sesskey` letto dalla config JS. |
-| **API mobili** | Nessuna autenticazione; EasyBadge richiede solo la matricola **minuscola** nel body. |
+| Meccanismo             | Flusso                                                                                                                                                                                                                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CAS** (UNIMIA, SIFA) | `GET cas.unimi.it/login?service=…` → campi hidden `lt`, `execution` → `POST /login` (`username`, `password`, `selTipoUtente=S`, `_eventId=submit`, …) → redirect con ticket → sessione. Il cookie `CASTGC` abilita gli altri service senza credenziali.                                                           |
+| **SIFA**               | Ogni app è un service CAS: `GET studente.unimi.it/<app>/checkLogin.asp`. A freddo Cloudflare risponde 401: prima un `GET https://studente.unimi.it/` per ottenere `__cf_bm`. App Wicket **stateful**: si usano solo pagine montate a classe, mai URL `?N`.                                                        |
+| **Ariel**              | Login **proprio**, non CAS: form ASP.NET su `elearning.unimi.it/authentication/skin/portaleariel/login.aspx` con `tbLogin` (parte locale dell'email), `tbPassword`, `ddlType` (`@studenti.unimi.it`), `hdnSilent=true` + tutti i campi hidden. Cookie `arielauth`; Moodle usa il `sesskey` letto dalla config JS. |
+| **API mobili**         | Nessuna autenticazione; EasyBadge richiede solo la matricola **minuscola** nel body.                                                                                                                                                                                                                              |
 
 ---
 
 ## Fonti dati ed endpoint
 
 ### UNIMIA — `https://unimia.unimi.it/portal/server.pt`
-| Dato | Endpoint |
-|---|---|
-| Profilo, recapiti, codice corso | `/community/unimia/207/home/8993` (`#div_studente`, `#div_anagrafica`, `<h2>Home: NOME</h2>`) |
-| Tasse | `/gateway/PTARGS_6_0_219_207_8993_43/` (header `X-Requested-With`, `Referer`) |
-| Esiti in attesa / iscrizioni | portlet `240` / `310` (stesso schema) |
-| Libretto | `/gateway/PTARGS_0_0_209_207_0_43/http%3B/portlets.alui.unimi.it%3B8880/portale_utenti_cocoon_portlet/carriera.html?modalita=dettaglio&…&matricola=<M>&dottorato=` (niente quote totale del path) |
-| PDF prossimi appelli | `https://studente.unimi.it/foProssimiEsami/pdf/<CODICE_CORSO>` |
+
+| Dato                            | Endpoint                                                                                                                                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profilo, recapiti, codice corso | `/community/unimia/207/home/8993` (`#div_studente`, `#div_anagrafica`, `<h2>Home: NOME</h2>`)                                                                                                     |
+| Tasse                           | `/gateway/PTARGS_6_0_219_207_8993_43/` (header `X-Requested-With`, `Referer`)                                                                                                                     |
+| Esiti in attesa / iscrizioni    | portlet `240` / `310` (stesso schema)                                                                                                                                                             |
+| Libretto                        | `/gateway/PTARGS_0_0_209_207_0_43/http%3B/portlets.alui.unimi.it%3B8880/portale_utenti_cocoon_portlet/carriera.html?modalita=dettaglio&…&matricola=<M>&dottorato=` (niente quote totale del path) |
+| PDF prossimi appelli            | `https://studente.unimi.it/foProssimiEsami/pdf/<CODICE_CORSO>`                                                                                                                                    |
 
 ### SIFA — `https://studente.unimi.it`
-| Dato | Pagina |
-|---|---|
-| Esami iscrivibili | `foIscrizioneEsami/esamiPack/EsamiNonSostenutiDelCorsoPage` (`table.smart-table`: Codice, Descrizione, Crediti, *Iscrizione* `ILinkListener`) |
-| Prenotazioni | `foIscrizioneEsami/esamiPack/EsamiIscrizioniConfermatePage` (vuoto: "Nessun esame presente") |
-| Esiti finali | `foVerbalizzazione/esitiFinali` |
-| Pagamenti | `fo_pagamenti/` (solo link) |
+
+| Dato              | Pagina                                                                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Esami iscrivibili | `foIscrizioneEsami/esamiPack/EsamiNonSostenutiDelCorsoPage` (`table.smart-table`: Codice, Descrizione, Crediti, _Iscrizione_ `ILinkListener`) |
+| Prenotazioni      | `foIscrizioneEsami/esamiPack/EsamiIscrizioniConfermatePage` (vuoto: "Nessun esame presente")                                                  |
+| Esiti finali      | `foVerbalizzazione/esitiFinali`                                                                                                               |
+| Pagamenti         | `fo_pagamenti/` (solo link)                                                                                                                   |
 
 ### Ariel / myAriel
-| Dato | Endpoint |
-|---|---|
-| Offerta corsi | `https://ariel.unimi.it/Offerta/myof` (linguette per anno accademico) |
-| Struttura corso | `POST myariel.unimi.it/lib/ajax/service.php?sesskey=…&info=core_courseformat_get_state` body `[{"index":0,"methodname":"core_courseformat_get_state","args":{"courseid":N}}]` |
-| Scheda insegnamento | `course/view.php?id=N` (`section.block_w4info`) |
-| Moduli / forum / discussioni | `mod/<tipo>/view.php?id=…`, `mod/forum/discuss.php?d=…` |
-| Partecipanti / valutazioni | `user/index.php?id=N`, `grade/report/index.php?id=N` |
+
+| Dato                         | Endpoint                                                                                                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Offerta corsi                | `https://ariel.unimi.it/Offerta/myof` (linguette per anno accademico)                                                                                                         |
+| Struttura corso              | `POST myariel.unimi.it/lib/ajax/service.php?sesskey=…&info=core_courseformat_get_state` body `[{"index":0,"methodname":"core_courseformat_get_state","args":{"courseid":N}}]` |
+| Scheda insegnamento          | `course/view.php?id=N` (`section.block_w4info`)                                                                                                                               |
+| Moduli / forum / discussioni | `mod/<tipo>/view.php?id=…`, `mod/forum/discuss.php?d=…`                                                                                                                       |
+| Partecipanti / valutazioni   | `user/index.php?id=N`, `grade/report/index.php?id=N`                                                                                                                          |
 
 ### API mobili — `https://orari-be.divsi.unimi.it`
-| Dato | Endpoint |
-|---|---|
-| Albero corsi (orario) | `GET /agendastudenti/api_profilo_aa_scuola_tipo_cdl_pd.php` |
-| Insegnamenti | `GET /agendastudenti/api_profilo_lista_insegnamenti.php?cdl=<id>&periodo_didattico=<id>` |
-| Orario insegnamento (XML) | `GET /agendastudenti//App/zipped.php?file=<anno>/<codice>_<periodo>.xml` |
-| Albero corsi (esami) | `GET /agendastudenti/api_profilo_esami_scuola_tipo_cdl.php` |
-| Appelli | `GET /agendastudenti/test_call.php?view=easytest&include=et_cdl&et_er=1&datefrom=DD-MM-YYYY&dateto=DD-MM-YYYY&esami_cdl%5B%5D=<CDL>%7C<ANNO>` |
-| Aule (XML) | `GET /EasyRoom/do.php` |
-| Frequenze | `POST /easybadge-new/api/corso_iscritti.php` `{"Matricola":"12345a"}` |
-| Slot lezione | `POST /easybadge-new/api/timbrature.php` `{"Matricola":"12345a","Corsi":[{"codice":"XXX-1_1"}]}` |
-| Timbratura | `POST /easybadge-new/api/TimbratureApi.php` `{"matricola_studente","codice_lezione","posto":"","lingua":"it","autenticazione":true,"action":"CreateFromJSON","dati_addizionali":{"timestamp":<epoch ms>,"longitudine":0,"latitudine":0}}` → `{"result","message"}` |
+
+| Dato                      | Endpoint                                                                                                                                                                                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Albero corsi (orario)     | `GET /agendastudenti/api_profilo_aa_scuola_tipo_cdl_pd.php`                                                                                                                                                                                                        |
+| Insegnamenti              | `GET /agendastudenti/api_profilo_lista_insegnamenti.php?cdl=<id>&periodo_didattico=<id>`                                                                                                                                                                           |
+| Orario insegnamento (XML) | `GET /agendastudenti//App/zipped.php?file=<anno>/<codice>_<periodo>.xml`                                                                                                                                                                                           |
+| Albero corsi (esami)      | `GET /agendastudenti/api_profilo_esami_scuola_tipo_cdl.php`                                                                                                                                                                                                        |
+| Appelli                   | `GET /agendastudenti/test_call.php?view=easytest&include=et_cdl&et_er=1&datefrom=DD-MM-YYYY&dateto=DD-MM-YYYY&esami_cdl%5B%5D=<CDL>%7C<ANNO>`                                                                                                                      |
+| Aule (XML)                | `GET /EasyRoom/do.php`                                                                                                                                                                                                                                             |
+| Frequenze                 | `POST /easybadge-new/api/corso_iscritti.php` `{"Matricola":"12345a"}`                                                                                                                                                                                              |
+| Slot lezione              | `POST /easybadge-new/api/timbrature.php` `{"Matricola":"12345a","Corsi":[{"codice":"XXX-1_1"}]}`                                                                                                                                                                   |
+| Timbratura                | `POST /easybadge-new/api/TimbratureApi.php` `{"matricola_studente","codice_lezione","posto":"","lingua":"it","autenticazione":true,"action":"CreateFromJSON","dati_addizionali":{"timestamp":<epoch ms>,"longitudine":0,"latitudine":0}}` → `{"result","message"}` |
 
 ---
 
@@ -231,14 +256,15 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 
 ## Persistenza
 
-| Dato | Dove |
-|---|---|
-| Credenziali | Keychain (`WhenUnlockedThisDeviceOnly`) |
+| Dato                                                                                                       | Dove                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Credenziali                                                                                                | Keychain (`WhenUnlockedThisDeviceOnly`)                                                                                   |
 | Profilo, configurazione Agenda (corso, periodi, insegnamenti attivati), offerta Ariel, schede insegnamento | `Application Support/stable.json` con scadenze (profilo 24 h, offerta 24 h, agenda e schede 7 giorni), esclusa dal backup |
-| Foto profilo | `Application Support/profilo.jpg` |
-| Registrazioni | `Application Support/Registrazioni/<id>.m4a` + indice `registrazioni.json` (AAC mono 64 kbps, ~29 MB/ora) |
-| Cookie di sessione | `HTTPCookieStorage` di sistema |
-| Orario, appelli, tasse, presenze, aule, esiti, partecipanti | solo in memoria |
+| Foto profilo                                                                                               | `Application Support/profilo.jpg`                                                                                         |
+| Registrazioni                                                                                              | `Application Support/Registrazioni/<id>.m4a` + indice `registrazioni.json` (AAC mono 64 kbps, ~29 MB/ora)                 |
+| Trascrizioni e riassunti                                                                                   | `Application Support/Registrazioni/<id>.txt` e `<id>.riassunto.md`, separati dall'indice                                  |
+| Cookie di sessione                                                                                         | `HTTPCookieStorage` di sistema                                                                                            |
+| Orario, appelli, tasse, presenze, aule, esiti, partecipanti                                                | solo in memoria                                                                                                           |
 
 **Uscita**: credenziali, cookie e dati dell'account vengono sempre rimossi; l'utente sceglie se eliminare anche
 registrazioni, foto profilo, file scaricati e cache o conservarli per un altro profilo.
@@ -255,25 +281,29 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 
 ## Permessi
 
-| Permesso | Uso |
-|---|---|
-| Microfono | registrazione delle lezioni |
-| Fotocamera | scansione del QR del codice lezione |
-| Audio in background | la registrazione continua a schermo bloccato |
-| Libreria foto | nessun permesso: la foto profilo usa `PhotosPicker` |
+| Permesso            | Uso                                                 |
+| ------------------- | --------------------------------------------------- |
+| Microfono           | registrazione delle lezioni                         |
+| Fotocamera          | scansione del QR del codice lezione                 |
+| Riconoscimento vocale | trascrizione delle registrazioni (iOS 17–25)      |
+| Audio in background | la registrazione continua a schermo bloccato        |
+| Libreria foto       | nessun permesso: la foto profilo usa `PhotosPicker` |
 
 ---
 
 ## Stato dei lavori
 
 Da completare:
+
 - [ ] **Iscrizione agli appelli** da app: `SifaService.iscrivi(_:)` è predisposto (UI completa), manca il flusso Wicket
-  (seguire l'`ILinkListener` della riga nella stessa sessione, scelta appello, conferma).
+      (seguire l'`ILinkListener` della riga nella stessa sessione, scelta appello, conferma).
+- [ ] **Pagamenti SIFA**
 - [ ] **Formato del QR** del codice lezione: `QRLezione.codice(from:)` oggi usa il testo letto così com'è.
 - [ ] **Prenotazioni**: le colonne di una prenotazione reale non sono ancora state osservate; data ed esame sono
-  ricavati per euristica (`Prenotazione.from`).
+      ricavati per euristica (`Prenotazione.from`).
 - [ ] Libretto, esiti da accettare e cartelle Ariel con file: parsing generico, da rifinire su casi popolati.
 - [ ] Piano di studi (SPA con XHR interne) non integrato.
+- [ ] Media Aritmetica/Ponderata
 
 ---
 
@@ -289,13 +319,22 @@ Da completare:
 
 ## Changelog
 
+### 2026-09-29 (3)
+
+- Trascrizione delle registrazioni con Speech (SpeechAnalyzer su iOS 26+, SFSpeechRecognizer prima), modificabile con
+  Writing Tools.
+- Riassunti con Apple Intelligence (FoundationModels): riassunto, punti chiave e domande di ripasso.
+- Oggi: avvisi Ariel degli ultimi 10 giorni; prossima lezione in grassetto con barra "Ora" statica; preview locale.
+
 ### 2026-09-29 (2)
+
 - Onboarding: accesso riservato agli indirizzi `@studenti.unimi.it`, completamento automatico da `nome.cognome`,
   errore per ogni altro dominio.
 - Registrazioni raggruppate per insegnamento con navigazione all'elenco dedicato.
 - "Vai a data" nella vista settimanale di Orario ed Esami; appelli raggruppati per settimana.
 
 ### 2026-09-29
+
 - Prima versione dell'app: login unico (CAS + Ariel), tab Oggi, Orario, Ariel, Registrazioni, Altro.
 - Parser HTML interno al posto di SwiftSoup: nessuna dipendenza esterna.
 - Orario ed Esami con scelta di corso (scuola → tipo → corso) e pillole di periodo/anno dalle API mobili.

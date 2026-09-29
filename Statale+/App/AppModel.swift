@@ -20,6 +20,7 @@ final class AppModel {
     let photo = ProfilePhoto()
     let recordings = RecordingStore()
     let recorder = AudioRecorder()
+    let elaborazioni = ElaborazioniAudio()
 
     // Dati live condivisi
     let lezioniUtente = Live<[Lezione]>()          // Oggi, Registrazioni: corso dell'utente, insegnamenti attivati
