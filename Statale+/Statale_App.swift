@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct Statale_App: App {
+    @State private var app = AppModel()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(app)
         }
     }
 }
