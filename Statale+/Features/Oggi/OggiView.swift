@@ -152,7 +152,7 @@ struct LezioniOggiList: View {
         let prossima = Self.indiceProssima(ordinate, adesso: adesso)
         ForEach(Array(ordinate.enumerated()), id: \.element.id) { i, l in
             LezioneOggiRow(lezione: l, enfasi: i == prossima ? .prossima : (l.fine <= adesso ? .passata : .normale),
-                           mostraAzioni: mostraAzioni,
+                           mostraAzioni: mostraAzioni, adesso: adesso,
                            barraSopra: i == prossima && !Self.inCorso(l, adesso) ? BarraOra(adesso: adesso) : nil,
                            avanzamento: i == prossima && Self.inCorso(l, adesso) ? Self.frazione(l, adesso) : nil,
                            barraSotto: prossima == nil && i == ordinate.count - 1 ? BarraOra(adesso: adesso, testo: "Lezioni finite per oggi") : nil)
@@ -211,6 +211,7 @@ private struct LezioneOggiRow: View {
     let lezione: Lezione
     var enfasi: LezioneRow.Enfasi = .normale
     var mostraAzioni = true
+    var adesso: Date?
     var barraSopra: BarraOra?
     var avanzamento: Double?
     var barraSotto: BarraOra?
@@ -220,7 +221,7 @@ private struct LezioneOggiRow: View {
         TimelineView(.periodic(from: .now, by: 15)) { ctx in
             VStack(alignment: .leading, spacing: 8) {
                 if let barraSopra { barraSopra }
-                LezioneRow(lezione: lezione, enfasi: enfasi)
+                LezioneRow(lezione: lezione, enfasi: enfasi, adesso: adesso)
                     .overlay(alignment: .leading) {
                         if let avanzamento { AvanzamentoLezione(frazione: avanzamento).offset(x: -13) }
                     }
@@ -333,7 +334,7 @@ private func oraDiOggi(_ hhmm: String) -> Date { Formats.at(.now, hhmm) ?? .now 
         .anteprima("14:30", "16:30", "Neuroscienze cognitive", aula: "Sala Conferenze", annullata: true),
         .anteprima("17:00", "18:30", "Laboratorio di valutazione", aula: "Aula K21", sede: "Noto"),
     ]
-    let adesso = oraDiOggi("11:30")   // oppure: Date.now
+    let adesso = oraDiOggi("19:30")   // oppure: Date.now
     return List {
         Section("Lezioni di oggi") {
             LezioniOggiList(lezioni: lezioni, adesso: adesso, mostraAzioni: false)

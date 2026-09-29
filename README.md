@@ -326,6 +326,7 @@ Da completare:
 
 - Oggi: durante una lezione l'ora corrente è una traccia verticale con pallino proporzionale al tempo trascorso,
   al posto della barra sopra la lezione.
+- Etichette `IN CORSO` / `INIZIA TRA X MIN` calcolate sulla stessa ora di barra e grassetto (anche nella preview).
 
 ### 2026-09-29 (3)
 

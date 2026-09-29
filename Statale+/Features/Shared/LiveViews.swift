@@ -56,16 +56,25 @@ struct TimeStatusBadge: View {
     let inizio: Date
     let fine: Date?
     var annullato = false
+    /// Ora di riferimento fornita dal chiamante (Oggi, preview); se nil usa l'ora reale, aggiornata ogni minuto.
+    var adesso: Date?
 
     var body: some View {
-        TimelineView(.everyMinute) { ctx in
-            if let s = status(at: ctx.date) {
-                Text(s.text)
-                    .font(.caption2.bold())
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(s.color, in: Capsule())
-            }
+        if let adesso {
+            etichetta(at: adesso)
+        } else {
+            TimelineView(.everyMinute) { ctx in etichetta(at: ctx.date) }
+        }
+    }
+
+    @ViewBuilder
+    private func etichetta(at now: Date) -> some View {
+        if let s = status(at: now) {
+            Text(s.text)
+                .font(.caption2.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(s.color, in: Capsule())
         }
     }
 
@@ -86,6 +95,7 @@ struct LezioneRow: View {
     let lezione: Lezione
     var mostraData = false
     var enfasi: Enfasi = .normale
+    var adesso: Date?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -106,7 +116,7 @@ struct LezioneRow: View {
                     .lineLimit(2)
                 Label("\(lezione.aula) · \(lezione.sede)", systemImage: "mappin.and.ellipse")
                     .font(.caption).foregroundStyle(.secondary)
-                TimeStatusBadge(inizio: lezione.inizio, fine: lezione.fine, annullato: lezione.annullato)
+                TimeStatusBadge(inizio: lezione.inizio, fine: lezione.fine, annullato: lezione.annullato, adesso: adesso)
                 if !lezione.note.isEmpty {
                     Text(lezione.note).font(.caption).foregroundStyle(.orange)
                 }
