@@ -45,13 +45,15 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - Saluto con foto profilo locale.
 - **Lezioni di oggi** del proprio corso (insegnamenti attivati), con etichette aggiornate ogni minuto:
   `ANNULLATA` (rossa), `IN CORSO` (viola), `INIZIA TRA X MIN` (arancione, da 60 minuti prima).
-- La **prossima lezione** (la prima non annullata non ancora finita, quindi anche quella in corso) è in grassetto e
-  l'ora corrente è indicata in modo statico:
-  - fra una lezione e l'altra (o prima della prima) con una barra "Ora HH:MM" sopra la prossima lezione;
-  - durante una lezione con una traccia verticale sul bordo sinistro della riga e un pallino all'altezza del tempo
-    trascorso (a metà lezione il pallino è a metà riga);
-  - a fine giornata con "Lezioni finite per oggi" in fondo. Le lezioni passate sono attenuate.
-  In `OggiView.swift` c'è una preview (`#Preview("Lezioni di oggi")`) con orari modificabili.
+- La **prossima lezione** (la prima non annullata non ancora finita, quindi anche quella in corso) è in grassetto.
+  Tutto è **live** (ogni riga si ricalcola ogni secondo: prossima lezione, barra, etichette):
+  - fra una lezione e l'altra (o prima della prima) una barra "Ora HH:MM" sta sopra la prossima lezione;
+  - durante una lezione, sul bordo sinistro della riga, una traccia verticale con il pallino all'altezza del tempo
+    trascorso che **scorre in tempo reale** e **pulsa**, con un bagliore che scende lungo la parte già trascorsa
+    (animazione disattivata con _Riduci movimento_);
+  - a fine giornata "Lezioni finite per oggi" in fondo. Le lezioni passate sono attenuate.
+  In `OggiView.swift` c'è una preview (`#Preview("Lezioni di oggi")`) con orari modificabili e un'ora di partenza
+  simulata che poi avanza dal vivo.
 - **Azioni rapide** su una lezione da 10 minuti prima dell'inizio fino alla fine:
   - **Conferma presenza** → apre _Altro › Presenze_ sulla lezione. Il pulsante scompare a lezione finita, se il server
     risulta già avere la presenza (anche confermata da un altro dispositivo o dal web) o dopo una risposta positiva.
@@ -321,6 +323,11 @@ Da completare:
 ---
 
 ## Changelog
+
+### 2026-09-29 (5)
+
+- Oggi completamente live: prossima lezione, barra, etichette `IN CORSO` / `INIZIA TRA X MIN` aggiornate ogni secondo;
+  pallino della lezione in corso animato (scorre, pulsa, bagliore sulla parte trascorsa).
 
 ### 2026-09-29 (4)
 

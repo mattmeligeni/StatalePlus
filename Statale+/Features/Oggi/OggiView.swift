@@ -1,12 +1,10 @@
 import SwiftUI
-import Combine
 
 /// Cruscotto: lezioni di oggi, prossimo appello prenotato, avvisi Ariel recenti, tasse.
 struct OggiView: View {
     @Environment(AppModel.self) private var app
     @State private var avvisi = Live<[AvvisoAriel]>()
     @State private var tasse = Live<SituazioneTasse>()
-    @State private var adesso = Date.now
 
     var body: some View {
         NavigationStack {
@@ -18,7 +16,7 @@ struct OggiView: View {
                     if oggi.isEmpty {
                         Text("Nessuna lezione oggi").foregroundStyle(.secondary)
                     } else {
-                        LezioniOggiList(lezioni: oggi, adesso: adesso)
+                        LezioniOggiList(lezioni: oggi)
                     }
                 }
 
@@ -63,7 +61,6 @@ struct OggiView: View {
                 UpdatedFooter(date: app.lezioniUtente.updatedAt).listRowBackground(Color.clear)
             }
             .navigationTitle("Oggi")
-            .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { adesso = $0 }
             .refreshable { await loadAll() }
             .task {
                 async let a: Void = app.lezioniUtente.updatedAt == nil ? app.loadLezioniUtente() : ()
@@ -125,15 +122,23 @@ struct OggiView: View {
     }
 }
 
-/// Lezioni di oggi con la prossima lezione in grassetto e l'indicatore dell'ora (statico, non animato):
-/// - fra una lezione e l'altra (o prima della prima): barra "Ora HH:MM" sopra la prossima lezione;
-/// - durante una lezione: traccia verticale sul bordo sinistro della riga con il pallino all'altezza del tempo trascorso;
-/// - a fine giornata: barra "Lezioni finite per oggi" in fondo.
-/// La "prossima" è la prima lezione non annullata che non è ancora finita (quindi anche quella in corso).
+/// Lezioni di oggi, aggiornate dal vivo (ogni secondo per riga):
+/// - la **prossima** lezione (prima non annullata non ancora finita, anche se in corso) è in grassetto;
+/// - fra una lezione e l'altra (o prima della prima) la barra "Ora HH:MM" sta sopra la prossima lezione;
+/// - durante una lezione, sul bordo sinistro della riga, una traccia verticale con un pallino che scorre in tempo reale
+///   e pulsa (fermo con "Riduci movimento");
+/// - a fine giornata "Lezioni finite per oggi" in fondo.
+/// `oraSimulata` (solo per le preview) fa partire l'orologio da un'ora scelta, che poi avanza normalmente.
 struct LezioniOggiList: View {
     let lezioni: [Lezione]
-    let adesso: Date
     var mostraAzioni = true
+    private let sfasamento: TimeInterval
+
+    init(lezioni: [Lezione], oraSimulata: Date? = nil, mostraAzioni: Bool = true) {
+        self.lezioni = lezioni.sorted { $0.inizio < $1.inizio }
+        self.mostraAzioni = mostraAzioni
+        sfasamento = oraSimulata?.timeIntervalSinceNow ?? 0
+    }
 
     static func indiceProssima(_ lezioni: [Lezione], adesso: Date) -> Int? {
         lezioni.firstIndex { !$0.annullato && $0.fine > adesso }
@@ -148,14 +153,8 @@ struct LezioniOggiList: View {
     }
 
     var body: some View {
-        let ordinate = lezioni.sorted { $0.inizio < $1.inizio }
-        let prossima = Self.indiceProssima(ordinate, adesso: adesso)
-        ForEach(Array(ordinate.enumerated()), id: \.element.id) { i, l in
-            LezioneOggiRow(lezione: l, enfasi: i == prossima ? .prossima : (l.fine <= adesso ? .passata : .normale),
-                           mostraAzioni: mostraAzioni, adesso: adesso,
-                           barraSopra: i == prossima && !Self.inCorso(l, adesso) ? BarraOra(adesso: adesso) : nil,
-                           avanzamento: i == prossima && Self.inCorso(l, adesso) ? Self.frazione(l, adesso) : nil,
-                           barraSotto: prossima == nil && i == ordinate.count - 1 ? BarraOra(adesso: adesso, testo: "Lezioni finite per oggi") : nil)
+        ForEach(Array(lezioni.enumerated()), id: \.element.id) { i, _ in
+            LezioneOggiRow(lezioni: lezioni, indice: i, sfasamento: sfasamento, mostraAzioni: mostraAzioni)
         }
     }
 }
@@ -174,58 +173,84 @@ struct BarraOra: View {
             Circle().fill(.red).frame(width: 7, height: 7)
             Rectangle().fill(.red).frame(height: 1.5)
         }
-        .transaction { $0.animation = nil }
         .accessibilityLabel(testo ?? "Ora \(Formats.time(adesso))")
     }
 }
 
-/// Traccia verticale della lezione in corso: parte colorata fino al tempo trascorso e pallino "adesso".
+/// Traccia verticale della lezione in corso: parte colorata fino al tempo trascorso, pallino che scorre dal vivo
+/// con un alone pulsante e un bagliore che scende lungo la parte già trascorsa.
 private struct AvanzamentoLezione: View {
-    let frazione: Double
+    let lezione: Lezione
+    let sfasamento: TimeInterval
+    @Environment(\.accessibilityReduceMotion) private var riduciMovimento
 
     var body: some View {
-        GeometryReader { g in
-            let y = g.size.height * frazione
-            ZStack(alignment: .top) {
-                Capsule().fill(Color.red.opacity(0.18)).frame(width: 3)
-                Capsule().fill(Color.red).frame(width: 3, height: max(y, 3))
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2))
-                    .offset(y: min(max(y - 5, -2), g.size.height - 8))
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: riduciMovimento)) { ctx in
+            let t = ctx.date.addingTimeInterval(sfasamento)
+            let frazione = LezioniOggiList.frazione(lezione, t)
+            let secondi = ctx.date.timeIntervalSinceReferenceDate
+            let battito = riduciMovimento ? 0 : (secondi.truncatingRemainder(dividingBy: 1.6)) / 1.6     // 0…1
+            let scia = riduciMovimento ? -1 : (secondi.truncatingRemainder(dividingBy: 2.4)) / 2.4       // 0…1
+            GeometryReader { g in
+                let h = g.size.height
+                let y = h * frazione
+                ZStack(alignment: .top) {
+                    Capsule().fill(Color.red.opacity(0.15)).frame(width: 3)
+                    Capsule().fill(Color.red.opacity(0.85)).frame(width: 3, height: max(y, 3))
+                    if scia >= 0, y > 12 {
+                        Capsule()
+                            .fill(LinearGradient(colors: [.clear, .white.opacity(0.9), .clear], startPoint: .top, endPoint: .bottom))
+                            .frame(width: 3, height: 12)
+                            .offset(y: (y - 12) * scia)
+                    }
+                    ZStack {
+                        Circle()
+                            .fill(Color.red.opacity(0.45 * (1 - battito)))
+                            .frame(width: 10 + 14 * battito, height: 10 + 14 * battito)
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 10, height: 10)
+                            .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 2))
+                    }
+                    .frame(width: 24, height: 24)
+                    .offset(y: min(max(y - 12, -7), h - 17))
+                }
+                .frame(width: 24)
             }
-            .frame(width: 10)
+            .frame(width: 24)
+            .accessibilityElement()
+            .accessibilityLabel("Lezione in corso, \(Int(frazione * 100)) per cento trascorso")
         }
-        .frame(width: 10)
+        .frame(width: 24)
         .padding(.vertical, 2)
-        .transaction { $0.animation = nil }
-        .accessibilityElement()
-        .accessibilityLabel("Lezione in corso, \(Int(frazione * 100)) per cento trascorso")
     }
 }
 
-/// Lezione di oggi con le azioni rapide, visibili da 10 minuti prima dell'inizio fino alla fine:
+/// Lezione di oggi, ricalcolata ogni secondo. Azioni rapide da 10 minuti prima dell'inizio fino alla fine:
 /// "Conferma presenza" sparisce quando la presenza risulta registrata (server, altro dispositivo o risposta positiva).
 private struct LezioneOggiRow: View {
-    let lezione: Lezione
-    var enfasi: LezioneRow.Enfasi = .normale
+    let lezioni: [Lezione]
+    let indice: Int
+    let sfasamento: TimeInterval
     var mostraAzioni = true
-    var adesso: Date?
-    var barraSopra: BarraOra?
-    var avanzamento: Double?
-    var barraSotto: BarraOra?
     @Environment(AppModel.self) private var app
 
+    private var lezione: Lezione { lezioni[indice] }
+
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 15)) { ctx in
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let t = ctx.date.addingTimeInterval(sfasamento)
+            let prossima = LezioniOggiList.indiceProssima(lezioni, adesso: t)
+            let eProssima = indice == prossima
+            let inCorso = eProssima && LezioniOggiList.inCorso(lezione, t)
+            let enfasi: LezioneRow.Enfasi = eProssima ? .prossima : (lezione.fine <= t ? .passata : .normale)
             VStack(alignment: .leading, spacing: 8) {
-                if let barraSopra { barraSopra }
-                LezioneRow(lezione: lezione, enfasi: enfasi, adesso: adesso)
+                if eProssima && !inCorso { BarraOra(adesso: t) }
+                LezioneRow(lezione: lezione, enfasi: enfasi, adesso: t)
                     .overlay(alignment: .leading) {
-                        if let avanzamento { AvanzamentoLezione(frazione: avanzamento).offset(x: -13) }
+                        if inCorso { AvanzamentoLezione(lezione: lezione, sfasamento: sfasamento).offset(x: -20) }
                     }
-                if mostraAzioni, AppModel.inFinestraAzioni(lezione, now: ctx.date) {
+                if mostraAzioni, AppModel.inFinestraAzioni(lezione, now: t) {
                     HStack(spacing: 10) {
                         if app.presenzaConfermata(lezione) {
                             Label("Presenza registrata", systemImage: "checkmark.seal.fill")
@@ -248,7 +273,7 @@ private struct LezioneOggiRow: View {
                     .controlSize(.small)
                     .padding(.leading, 64)
                 }
-                if let barraSotto { barraSotto }
+                if prossima == nil, indice == lezioni.count - 1 { BarraOra(adesso: t, testo: "Lezioni finite per oggi") }
             }
         }
     }
@@ -327,17 +352,17 @@ extension Lezione {
 private func oraDiOggi(_ hhmm: String) -> Date { Formats.at(.now, hhmm) ?? .now }
 
 #Preview("Lezioni di oggi") {
-    // Cambia gli orari (e `adesso`) per vedere grassetto e barra spostarsi.
+    // Cambia gli orari e `adesso` (l'ora da cui parte l'orologio, che poi avanza dal vivo).
     let lezioni: [Lezione] = [
         .anteprima("08:30", "10:30", "Neuropsicologia clinica"),
         .anteprima("11:00", "13:00", "Psicometria", aula: "Aula 208"),
         .anteprima("14:30", "16:30", "Neuroscienze cognitive", aula: "Sala Conferenze", annullata: true),
         .anteprima("17:00", "18:30", "Laboratorio di valutazione", aula: "Aula K21", sede: "Noto"),
     ]
-    let adesso = oraDiOggi("19:30")   // oppure: Date.now
+    let adesso = oraDiOggi("11:31")   // oppure: Date.now
     return List {
         Section("Lezioni di oggi") {
-            LezioniOggiList(lezioni: lezioni, adesso: adesso, mostraAzioni: false)
+            LezioniOggiList(lezioni: lezioni, oraSimulata: adesso, mostraAzioni: false)
         }
     }
     .environment(AppModel())
