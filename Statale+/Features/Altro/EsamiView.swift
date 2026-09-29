@@ -47,6 +47,14 @@ struct EsamiView: View {
 
 private struct CalendarioAppelliView: View {
     @Environment(AppModel.self) private var app
+    @State private var showVaiA = false
+
+    /// Appelli raggruppati per settimana (lunedì–domenica).
+    private func settimane(_ appelli: [Appello]) -> [(inizio: Date, appelli: [Appello])] {
+        Dictionary(grouping: appelli) { Formats.inizioSettimana($0.inizio) }
+            .map { ($0.key, $0.value.sorted { $0.inizio < $1.inizio }) }
+            .sorted { $0.0 < $1.0 }
+    }
 
     var body: some View {
         List {
@@ -60,19 +68,54 @@ private struct CalendarioAppelliView: View {
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
+                    HStack {
+                        Button { showVaiA = true } label: { Label("Vai a data", systemImage: "calendar.badge.clock") }
+                        Spacer()
+                        if let da = app.appelliDa {
+                            Text("Dal \(da.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "it_IT"))))")
+                                .foregroundStyle(.secondary)
+                            Button("Oggi") { app.setAppelliDa(nil); Task { await app.loadAppelli() } }
+                        }
+                    }
+                    .font(.callout)
+                    .buttonStyle(.borderless)
                 } header: {
                     Text(a.corsoEsami.cdl.label).textCase(nil)
                 }
             }
-            LiveSection(title: "Prossimi appelli", live: app.appelli, retry: app.loadAppelli) { appelli in
-                let lista = appelli.filter { !$0.passato || $0.inizio > .now.addingTimeInterval(-6 * 3600) }
-                if lista.isEmpty { Text("Nessun appello in calendario").foregroundStyle(.secondary) }
-                ForEach(lista) { AppelloRow(appello: $0) }
+            if let error = app.appelli.error {
+                ErrorRow(message: error) { await app.loadAppelli() }
+            }
+            if let appelli = app.appelli.value {
+                // Da oggi: si nascondono gli appelli già passati; con "Vai a data" si mostra tutto dalla settimana scelta.
+                let lista = app.appelliDa == nil ? appelli.filter { !$0.passato || $0.inizio > .now.addingTimeInterval(-6 * 3600) } : appelli
+                let gruppi = settimane(lista)
+                if let da = app.appelliDa, gruppi.first?.inizio != da {
+                    Section(Formats.settimana(da)) {
+                        Text("Nessun appello in questa settimana").foregroundStyle(.secondary)
+                    }
+                }
+                if gruppi.isEmpty && app.appelliDa == nil {
+                    Text("Nessun appello in calendario").foregroundStyle(.secondary)
+                }
+                ForEach(gruppi, id: \.inizio) { g in
+                    Section(Formats.settimana(g.inizio)) {
+                        ForEach(g.appelli) { AppelloRow(appello: $0) }
+                    }
+                }
+            } else if app.appelli.error == nil {
+                HStack { Spacer(); ProgressView(); Spacer() }
             }
             UpdatedFooter(date: app.appelli.updatedAt).listRowBackground(Color.clear)
         }
         .refreshable { await app.loadAppelli() }
         .task { if app.appelli.updatedAt == nil { await app.loadAppelli() } }
+        .sheet(isPresented: $showVaiA) {
+            VaiADataSheet(iniziale: app.appelliDa ?? .now) { data in
+                app.setAppelliDa(data)
+                Task { await app.loadAppelli() }
+            }
+        }
     }
 }
 

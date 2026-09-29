@@ -65,6 +65,20 @@ nonisolated enum Formats {
         return "\(start)/\(String(start + 1).suffix(2))"
     }
 
+    /// Lunedì della settimana che contiene `d` (es. 7 ottobre 2026 → 5 ottobre 2026).
+    static func inizioSettimana(_ d: Date) -> Date {
+        calendar.dateInterval(of: .weekOfYear, for: d)?.start ?? calendar.startOfDay(for: d)
+    }
+
+    /// "5 – 11 ottobre 2026" / "28 settembre – 4 ottobre 2026".
+    static func settimana(_ start: Date) -> String {
+        let end = calendar.date(byAdding: .day, value: 6, to: start) ?? start
+        let it = Locale(identifier: "it_IT")
+        let stessoMese = calendar.isDate(start, equalTo: end, toGranularity: .month)
+        let a = stessoMese ? start.formatted(.dateTime.day().locale(it)) : start.formatted(.dateTime.day().month(.wide).locale(it))
+        return "\(a) – \(end.formatted(.dateTime.day().month(.wide).year().locale(it)))"
+    }
+
     static func time(_ d: Date) -> String { d.formatted(.dateTime.hour().minute().locale(Locale(identifier: "it_IT"))) }
 }
 

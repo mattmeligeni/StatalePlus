@@ -7,6 +7,7 @@ struct OrarioView: View {
     @State private var showCorsi = false
     @State private var showInsegnamenti = false
     @State private var selected: Lezione?
+    @State private var showVaiA = false
 
     private var weekStart: Date {
         let cal = Formats.calendar
@@ -96,7 +97,19 @@ struct OrarioView: View {
                             attuale: app.agenda?.corsoOrario, mio: app.agenda?.mioCorsoOrario) { cambiaCorso($0) }
             }
             .sheet(item: $selected) { LezioneDetail(lezione: $0).presentationDetents([.medium]) }
+            .sheet(isPresented: $showVaiA) {
+                VaiADataSheet(iniziale: weekStart) { vaiA($0) }
+            }
         }
+    }
+
+    /// Porta alla settimana della data; se la data cade in un altro periodo didattico, cambia anche periodo.
+    private func vaiA(_ data: Date) {
+        weekOffset = weeks(to: data)
+        guard let periodi = app.agenda?.corsoOrario.cdl.periodi,
+              let p = AgendaConfig.periodoAttuale(periodi, now: data), p != app.periodoOrario else { return }
+        app.setPeriodoOrario(p.id)
+        Task { await app.loadOrario() }
     }
 
     private func cambiaCorso(_ c: CorsoSelezionato) {
@@ -125,9 +138,13 @@ struct OrarioView: View {
         HStack {
             Button { weekOffset -= 1 } label: { Image(systemName: "chevron.left") }
             Spacer()
-            VStack {
+            VStack(spacing: 4) {
                 Text(weekTitle).font(.headline)
-                if weekOffset != 0 { Button("Torna a oggi") { weekOffset = 0 }.font(.caption) }
+                HStack(spacing: 14) {
+                    Button { showVaiA = true } label: { Label("Vai a data", systemImage: "calendar.badge.clock") }
+                    if weekOffset != 0 { Button("Torna a oggi") { weekOffset = 0 } }
+                }
+                .font(.caption)
             }
             Spacer()
             Button { weekOffset += 1 } label: { Image(systemName: "chevron.right") }

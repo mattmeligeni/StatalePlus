@@ -32,6 +32,13 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 
 ## Funzionalità
 
+### Accesso
+- Riservato agli **studenti immatricolati** con indirizzo `@studenti.unimi.it`.
+- Si può scrivere solo `nome.cognome`: il dominio viene aggiunto in automatico. Qualsiasi altro dominio
+  (es. `@unimi.it`, `@gmail.com`) o formato non valido viene rifiutato prima di contattare i server.
+- Credenziali salvate in Keychain solo dopo un login CAS riuscito; all'avvio, credenziali con dominio non ammesso
+  vengono scartate e si torna all'onboarding.
+
 ### Oggi
 - Saluto con foto profilo locale.
 - **Lezioni di oggi** del proprio corso (insegnamenti attivati), con etichette aggiornate ogni minuto:
@@ -46,6 +53,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 
 ### Orario
 - Settimana navigabile, lezioni raggruppate per giorno, dettaglio con aula, sede, docente e **Apri in Mappe**.
+- **Vai a data**: scelta una data (es. 7 ottobre 2026) porta alla sua settimana (5–11 ottobre); se la data cade in un
+  altro periodo didattico, cambia anche la pillola del periodo.
 - **Pillole dei periodi** lette dall'API (semestri, trimestri, quadrimestri, annuale); default: periodo in corso.
 - Menu: **Insegnamenti…** (attivazione per anno / singolo insegnamento), **Cambia corso…**
   (scuola → tipo di laurea → corso, con ricerca), **Torna al mio corso**.
@@ -61,14 +70,17 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - Registrazione vocale collegata a un insegnamento attivato (suggerito automaticamente se c'è una lezione in corso).
 - Timer, livello microfono, pausa/ripresa, **segnalibri**, annulla; continua a schermo bloccato e si mette in pausa
   durante le telefonate.
-- Archivio locale raggruppato per insegnamento, ricerca per titolo/insegnamento/note.
+- Archivio ordinato per insegnamento: la schermata principale elenca solo gli insegnamenti che hanno registrazioni
+  (numero, durata totale, data dell'ultima); toccandone uno si apre il suo elenco. La ricerca per titolo,
+  insegnamento o note mostra i risultati in un'unica lista.
 - Dettaglio: player (±15/30 s, velocità 0,75–2×, salto ai segnalibri), titolo, insegnamento, note, condivisione, eliminazione.
 
 ### Altro
 - **Carriera e libretto**: profilo, recapiti, libretto, esiti da accettare, PDF "prossimi appelli" del corso.
 - **Tasse e pagamenti**: righe della situazione amministrativa, totali, avvisi, link ai pagamenti SIFA.
 - **Esami**
-  - *Calendario*: appelli dalle API Agenda per corso e anno (pillole), corso modificabile dal menu.
+  - *Calendario*: appelli dalle API Agenda per corso e anno (pillole), raggruppati per settimana, corso modificabile
+    dal menu; **Vai a data** fa partire il calendario dalla settimana scelta (anche nel passato), *Oggi* torna al presente.
   - *Iscrizioni*: prenotazioni confermate, esiti da accettare, pulsante **Iscriviti a un appello** che apre la replica di
     "Esami del tuo corso di studio" (ricerca per descrizione, Codice / Descrizione / Crediti, pulsante *Iscrizione*).
 - **Aule**: sedi espandibili con le aule e lo stato attuale (libera / occupata fino alle…), ricerca sempre visibile per
@@ -263,8 +275,6 @@ Da completare:
 - [ ] Libretto, esiti da accettare e cartelle Ariel con file: parsing generico, da rifinire su casi popolati.
 - [ ] Piano di studi (SPA con XHR interne) non integrato.
 
-Da verificare dal vivo con un account: login CAS/Ariel, pagine SIFA, timbratura.
-
 ---
 
 ## Contribuire
@@ -278,6 +288,12 @@ Da verificare dal vivo con un account: login CAS/Ariel, pagine SIFA, timbratura.
 ---
 
 ## Changelog
+
+### 2026-09-29 (2)
+- Onboarding: accesso riservato agli indirizzi `@studenti.unimi.it`, completamento automatico da `nome.cognome`,
+  errore per ogni altro dominio.
+- Registrazioni raggruppate per insegnamento con navigazione all'elenco dedicato.
+- "Vai a data" nella vista settimanale di Orario ed Esami; appelli raggruppati per settimana.
 
 ### 2026-09-29
 - Prima versione dell'app: login unico (CAS + Ariel), tab Oggi, Orario, Ariel, Registrazioni, Altro.

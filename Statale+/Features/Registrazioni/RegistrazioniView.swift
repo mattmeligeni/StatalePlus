@@ -6,17 +6,21 @@ import SwiftUI
 struct RegistrazioniView: View {
     @Environment(AppModel.self) private var app
     @State private var query = ""
-    @State private var daEliminare: Registrazione?
 
-    private var gruppi: [(String, [Registrazione])] {
+    /// Insegnamenti con almeno una registrazione, dal più recente.
+    private var gruppi: [GruppoRegistrazioni] {
+        Dictionary(grouping: app.recordings.items) { $0.insegnamento ?? GruppoRegistrazioni.senza }
+            .map { GruppoRegistrazioni(nome: $0.key, items: $0.value.sorted { $0.creata > $1.creata }) }
+            .sorted { ($0.items.first?.creata ?? .distantPast) > ($1.items.first?.creata ?? .distantPast) }
+    }
+
+    private var risultati: [Registrazione] {
         let q = query.trimmed
-        let list = app.recordings.items.filter {
-            q.isEmpty || $0.titolo.localizedCaseInsensitiveContains(q) || ($0.insegnamento ?? "").localizedCaseInsensitiveContains(q)
+        return app.recordings.items.filter {
+            $0.titolo.localizedCaseInsensitiveContains(q) || ($0.insegnamento ?? "").localizedCaseInsensitiveContains(q)
                 || $0.note.localizedCaseInsensitiveContains(q)
         }
-        return Dictionary(grouping: list) { $0.insegnamento ?? "Senza insegnamento" }
-            .map { ($0.key, $0.value.sorted { $0.creata > $1.creata }) }
-            .sorted { ($0.1.first?.creata ?? .distantPast) > ($1.1.first?.creata ?? .distantPast) }
+        .sorted { $0.creata > $1.creata }
     }
 
     var body: some View {
@@ -27,34 +31,90 @@ struct RegistrazioniView: View {
                     ContentUnavailableView("Nessuna registrazione", systemImage: "waveform",
                                            description: Text("Scegli un insegnamento e avvia la registrazione durante la lezione."))
                         .listRowBackground(Color.clear)
-                }
-                ForEach(gruppi, id: \.0) { nome, items in
-                    Section(nome) {
-                        ForEach(items) { r in
-                            NavigationLink { RegistrazioneDetailView(id: r.id) } label: { RegistrazioneRow(r: r) }
-                                .swipeActions {
-                                    Button("Elimina", role: .destructive) { daEliminare = r }
-                                }
+                } else if query.trimmed.isEmpty {
+                    Section("Insegnamenti") {
+                        ForEach(gruppi) { g in
+                            NavigationLink { RegistrazioniInsegnamentoView(nome: g.nome) } label: { GruppoRow(gruppo: g) }
+                        }
+                    }
+                } else {
+                    Section("Risultati") {
+                        if risultati.isEmpty { Text("Nessuna registrazione trovata").foregroundStyle(.secondary) }
+                        ForEach(risultati) { r in
+                            NavigationLink { RegistrazioneDetailView(id: r.id) } label: { RegistrazioneRow(r: r, mostraInsegnamento: true) }
                         }
                     }
                 }
             }
             .navigationTitle("Registrazioni")
             .searchable(text: $query, prompt: "Titolo, insegnamento o note")
-            .confirmationDialog("Eliminare la registrazione?", isPresented: Binding(get: { daEliminare != nil }, set: { if !$0 { daEliminare = nil } }),
-                                titleVisibility: .visible) {
-                if let r = daEliminare { Button("Elimina", role: .destructive) { app.recordings.delete(r) } }
-            }
             .task { if app.lezioniUtente.updatedAt == nil { await app.loadLezioniUtente() } }
+        }
+    }
+}
+
+private struct GruppoRegistrazioni: Identifiable {
+    static let senza = "Senza insegnamento"
+    var id: String { nome }
+    let nome: String
+    let items: [Registrazione]
+}
+
+private struct GruppoRow: View {
+    let gruppo: GruppoRegistrazioni
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: gruppo.nome == GruppoRegistrazioni.senza ? "waveform" : "book.closed.fill")
+                .font(.title3).foregroundStyle(Color.accentColor).frame(width: 28)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(gruppo.nome).font(.subheadline.weight(.semibold)).lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(gruppo.items.count == 1 ? "1 registrazione" : "\(gruppo.items.count) registrazioni")
+                    Text("· \(durata(gruppo.items.reduce(0) { $0 + $1.durata }))")
+                    if let ultima = gruppo.items.first?.creata {
+                        Text("· \(ultima.formatted(date: .abbreviated, time: .omitted))")
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// Elenco delle registrazioni di un insegnamento.
+private struct RegistrazioniInsegnamentoView: View {
+    let nome: String
+    @Environment(AppModel.self) private var app
+    @State private var daEliminare: Registrazione?
+
+    private var items: [Registrazione] {
+        app.recordings.items.filter { ($0.insegnamento ?? GruppoRegistrazioni.senza) == nome }.sorted { $0.creata > $1.creata }
+    }
+
+    var body: some View {
+        List {
+            if items.isEmpty { Text("Nessuna registrazione").foregroundStyle(.secondary) }
+            ForEach(items) { r in
+                NavigationLink { RegistrazioneDetailView(id: r.id) } label: { RegistrazioneRow(r: r) }
+                    .swipeActions { Button("Elimina", role: .destructive) { daEliminare = r } }
+            }
+        }
+        .navigationTitle(nome)
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Eliminare la registrazione?", isPresented: Binding(get: { daEliminare != nil }, set: { if !$0 { daEliminare = nil } }),
+                            titleVisibility: .visible) {
+            if let r = daEliminare { Button("Elimina", role: .destructive) { app.recordings.delete(r) } }
         }
     }
 }
 
 private struct RegistrazioneRow: View {
     let r: Registrazione
+    var mostraInsegnamento = false
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(r.titolo).font(.subheadline.weight(.semibold)).lineLimit(2)
+            if mostraInsegnamento, let i = r.insegnamento { Text(i).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
             HStack(spacing: 8) {
                 Text(r.creata.formatted(date: .abbreviated, time: .shortened))
                 Text("· \(durata(r.durata))")

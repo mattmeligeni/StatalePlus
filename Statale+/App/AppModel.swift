@@ -41,6 +41,8 @@ final class AppModel {
     var presenzaTarget: Lezione?
     /// Insegnamento da registrare, impostato da "Inizia registrazione" in Oggi.
     var registrazioneRichiesta: InsegnamentoAgenda?
+    /// Inizio del calendario appelli scelto con "Vai a data" (nil = da oggi).
+    var appelliDa: Date?
     /// Lezioni per cui il server ha confermato la presenza in questa sessione.
     var presenzeConfermate: Set<String> = []
 
@@ -56,7 +58,12 @@ final class AppModel {
 
     func start() async {
         guard phase == .launching else { return }
-        guard KeychainStore.load() != nil else { phase = .onboarding; return }
+        // Credenziali salvate con un dominio non ammesso: si torna all'onboarding.
+        guard let saved = KeychainStore.load(), case .success = Credentials.normalizzaEmail(saved.email) else {
+            KeychainStore.delete()
+            phase = .onboarding
+            return
+        }
         if studente != nil, agenda != nil {
             phase = .ready
             await refreshStableIfNeeded()
@@ -68,7 +75,12 @@ final class AppModel {
     /// Le credenziali vanno in Keychain dopo un login CAS riuscito.
     func login(email: String, password: String) async {
         bootstrapError = nil
-        let creds = Credentials(email: email.trimmed.lowercased(), password: password)
+        let normalizzata: String
+        switch Credentials.normalizzaEmail(email) {
+        case .success(let e): normalizzata = e
+        case .failure(let err): bootstrapError = err.errorDescription; return
+        }
+        let creds = Credentials(email: normalizzata, password: password)
         phase = .bootstrapping("Accesso con le credenziali di Ateneo…")
         do {
             try await services.cas.ensureLoggedIn(with: creds)
@@ -198,7 +210,14 @@ final class AppModel {
 
     func loadAppelli() async {
         guard let a = agenda, let anno = annoEsami else { return }
-        await appelli.load { try await services.agenda.appelli(codiceCorso: a.corsoEsami.cdl.codiceLettera, anni: [anno.valore]) }
+        let da = appelliDa ?? .now
+        await appelli.load { try await services.agenda.appelli(codiceCorso: a.corsoEsami.cdl.codiceLettera, anni: [anno.valore], da: da) }
+    }
+
+    /// "Vai a data" negli esami: il calendario parte dal lunedì della settimana scelta (nil = da oggi).
+    func setAppelliDa(_ data: Date?) {
+        appelliDa = data.map(Formats.inizioSettimana)
+        appelli.reset()
     }
 
     func setCorsoEsami(_ c: CorsoSelezionato) {
