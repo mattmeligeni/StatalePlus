@@ -13,10 +13,12 @@ struct OggiView: View {
 
                 LiveSection(title: "Lezioni di oggi", live: app.lezioniUtente, retry: app.loadLezioniUtente) { lezioni in
                     let oggi = lezioni.filter { Formats.calendar.isDateInToday($0.inizio) }
+                    let futura = LezioniOggiList.prossimaNeiGiorniSuccessivi(lezioni)
                     if oggi.isEmpty {
                         Text("Nessuna lezione oggi").foregroundStyle(.secondary)
+                        if let futura { ProssimaLezioneNota(lezione: futura, adesso: .now) }
                     } else {
-                        LezioniOggiList(lezioni: oggi)
+                        LezioniOggiList(lezioni: oggi, prossimaFutura: futura)
                     }
                 }
 
@@ -132,12 +134,21 @@ struct OggiView: View {
 struct LezioniOggiList: View {
     let lezioni: [Lezione]
     var mostraAzioni = true
+    /// Prima lezione dei giorni successivi: mostrata solo quando le lezioni di oggi sono finite.
+    let prossimaFutura: Lezione?
     private let sfasamento: TimeInterval
 
-    init(lezioni: [Lezione], oraSimulata: Date? = nil, mostraAzioni: Bool = true) {
+    init(lezioni: [Lezione], prossimaFutura: Lezione? = nil, oraSimulata: Date? = nil, mostraAzioni: Bool = true) {
         self.lezioni = lezioni.sorted { $0.inizio < $1.inizio }
+        self.prossimaFutura = prossimaFutura
         self.mostraAzioni = mostraAzioni
         sfasamento = oraSimulata?.timeIntervalSinceNow ?? 0
+    }
+
+    /// Prima lezione non annullata da domani in poi.
+    static func prossimaNeiGiorniSuccessivi(_ tutte: [Lezione], oggi: Date = .now) -> Lezione? {
+        let domani = Formats.calendar.date(byAdding: .day, value: 1, to: Formats.calendar.startOfDay(for: oggi)) ?? oggi
+        return tutte.filter { !$0.annullato && $0.inizio >= domani }.min { $0.inizio < $1.inizio }
     }
 
     static func indiceProssima(_ lezioni: [Lezione], adesso: Date) -> Int? {
@@ -154,7 +165,8 @@ struct LezioniOggiList: View {
 
     var body: some View {
         ForEach(Array(lezioni.enumerated()), id: \.element.id) { i, _ in
-            LezioneOggiRow(lezioni: lezioni, indice: i, sfasamento: sfasamento, mostraAzioni: mostraAzioni)
+            LezioneOggiRow(lezioni: lezioni, indice: i, sfasamento: sfasamento, mostraAzioni: mostraAzioni,
+                           prossimaFutura: prossimaFutura)
         }
     }
 }
@@ -174,6 +186,34 @@ struct BarraOra: View {
             Rectangle().fill(.red).frame(height: 1.5)
         }
         .accessibilityLabel(testo ?? "Ora \(Formats.time(adesso))")
+    }
+}
+
+/// Nota "Prossima lezione" a lezioni del giorno terminate: giorno relativo, data, ora, materia e aula.
+struct ProssimaLezioneNota: View {
+    let lezione: Lezione
+    let adesso: Date
+
+    private var quando: String {
+        let cal = Formats.calendar
+        let giorni = cal.dateComponents([.day], from: cal.startOfDay(for: adesso), to: cal.startOfDay(for: lezione.inizio)).day ?? 0
+        let data = lezione.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "it_IT")))
+        let relativo = giorni <= 0 ? "Oggi" : giorni == 1 ? "Domani" : "Tra \(giorni) giorni"
+        return "\(relativo) · \(data), \(Formats.time(lezione.inizio))"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Prossima lezione").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+            Text(quando).font(.subheadline)
+            Text(lezione.insegnamento).font(.subheadline.weight(.semibold))
+            Label("\(lezione.aula) · \(lezione.sede)", systemImage: "mappin.and.ellipse")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -233,6 +273,7 @@ private struct LezioneOggiRow: View {
     let indice: Int
     let sfasamento: TimeInterval
     var mostraAzioni = true
+    var prossimaFutura: Lezione?
     @Environment(AppModel.self) private var app
 
     private var lezione: Lezione { lezioni[indice] }
@@ -245,10 +286,12 @@ private struct LezioneOggiRow: View {
             let inCorso = eProssima && LezioniOggiList.inCorso(lezione, t)
             let enfasi: LezioneRow.Enfasi = eProssima ? .prossima : (lezione.fine <= t ? .passata : .normale)
             VStack(alignment: .leading, spacing: 8) {
-                if eProssima && !inCorso { BarraOra(adesso: t) }
+                if eProssima && !inCorso { BarraOra(adesso: t).transition(.opacity) }
                 LezioneRow(lezione: lezione, enfasi: enfasi, adesso: t)
                     .overlay(alignment: .leading) {
-                        if inCorso { AvanzamentoLezione(lezione: lezione, sfasamento: sfasamento).offset(x: -20) }
+                        if inCorso {
+                            AvanzamentoLezione(lezione: lezione, sfasamento: sfasamento).offset(x: -20).transition(.opacity)
+                        }
                     }
                 if mostraAzioni, AppModel.inFinestraAzioni(lezione, now: t) {
                     HStack(spacing: 10) {
@@ -273,8 +316,13 @@ private struct LezioneOggiRow: View {
                     .controlSize(.small)
                     .padding(.leading, 64)
                 }
-                if prossima == nil, indice == lezioni.count - 1 { BarraOra(adesso: t, testo: "Lezioni finite per oggi") }
+                if prossima == nil, indice == lezioni.count - 1 {
+                    BarraOra(adesso: t, testo: "Lezioni finite per oggi").transition(.opacity)
+                    if let prossimaFutura { ProssimaLezioneNota(lezione: prossimaFutura, adesso: t).transition(.opacity) }
+                }
             }
+            .animation(.easeInOut(duration: 0.4), value: prossima)
+            .animation(.easeInOut(duration: 0.4), value: inCorso)
         }
     }
 }
@@ -340,8 +388,9 @@ struct AppelloRow: View {
 extension Lezione {
     /// Lezione finta di oggi per le preview: orari "HH:mm".
     static func anteprima(_ inizio: String, _ fine: String, _ nome: String,
-                          aula: String = "Aula 101", sede: String = "Festa del Perdono", annullata: Bool = false) -> Lezione {
-        let oggi = Date.now
+                          aula: String = "Aula 101", sede: String = "Festa del Perdono", annullata: Bool = false,
+                          giorniDaOggi: Int = 0) -> Lezione {
+        let oggi = Formats.calendar.date(byAdding: .day, value: giorniDaOggi, to: .now) ?? .now
         return Lezione(id: UUID().uuidString, codiceInsegnamento: "ABC-1", insegnamento: nome, docente: "Mario Bianchi",
                        inizio: Formats.at(oggi, inizio) ?? oggi, fine: Formats.at(oggi, fine) ?? oggi,
                        aula: aula, aulaCodice: "", sede: sede, annullato: annullata, tipo: "Lezione", note: "")
@@ -359,10 +408,12 @@ private func oraDiOggi(_ hhmm: String) -> Date { Formats.at(.now, hhmm) ?? .now 
         .anteprima("14:30", "16:30", "Neuroscienze cognitive", aula: "Sala Conferenze", annullata: true),
         .anteprima("17:00", "18:30", "Laboratorio di valutazione", aula: "Aula K21", sede: "Noto"),
     ]
-    let adesso = oraDiOggi("11:31")   // oppure: Date.now
+    // Prima lezione dei giorni successivi (es. lunedì se oggi è giovedì): compare a lezioni di oggi finite (es. "19:00").
+    let prossima = Lezione.anteprima("09:30", "11:30", "Psicometria", aula: "Aula 208", giorniDaOggi: 4)
+    let adesso = oraDiOggi("10:59")   // oppure: Date.now
     return List {
         Section("Lezioni di oggi") {
-            LezioniOggiList(lezioni: lezioni, oraSimulata: adesso, mostraAzioni: false)
+            LezioniOggiList(lezioni: lezioni, prossimaFutura: prossima, oraSimulata: adesso, mostraAzioni: false)
         }
     }
     .environment(AppModel())

@@ -67,23 +67,34 @@ struct TimeStatusBadge: View {
         }
     }
 
-    @ViewBuilder
+    private enum Tipo: Equatable { case annullata, inCorso, iniziaTra }
+
+    /// Cambio di stato in dissolvenza (con leggero ridimensionamento); i minuti del conto alla rovescia
+    /// cambiano con l'animazione numerica.
     private func etichetta(at now: Date) -> some View {
-        if let s = status(at: now) {
-            Text(s.text)
-                .font(.caption2.bold())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(s.color, in: Capsule())
+        let s = status(at: now)
+        return ZStack(alignment: .leading) {
+            if let s {
+                Text(s.text)
+                    .font(.caption2.bold().monospacedDigit())
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText(countsDown: true))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(s.color, in: Capsule())
+                    .id(s.tipo)
+                    .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .leading)))
+            }
         }
+        .animation(.easeInOut(duration: 0.4), value: s?.tipo)
+        .animation(.snappy, value: s?.text)
     }
 
-    private func status(at now: Date) -> (text: String, color: Color)? {
-        if annullato { return ("ANNULLATA", .red) }
+    private func status(at now: Date) -> (text: String, color: Color, tipo: Tipo)? {
+        if annullato { return ("ANNULLATA", .red, .annullata) }
         let end = fine ?? inizio.addingTimeInterval(2 * 3600)
-        if now >= inizio && now < end { return ("IN CORSO", .purple) }
+        if now >= inizio && now < end { return ("IN CORSO", .purple, .inCorso) }
         let minuti = Int((inizio.timeIntervalSince(now) / 60).rounded(.up))
-        if minuti > 0 && minuti <= 60 { return ("INIZIA TRA \(minuti) MIN", .orange) }
+        if minuti > 0 && minuti <= 60 { return ("INIZIA TRA \(minuti) MIN", .orange, .iniziaTra) }
         return nil
     }
 }
