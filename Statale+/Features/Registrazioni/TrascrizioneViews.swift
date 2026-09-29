@@ -18,18 +18,20 @@ struct TrascrizioneSection: View {
                 NavigationLink { TrascrizioneView(id: id) } label: {
                     Label("Leggi e modifica la trascrizione", systemImage: "text.alignleft")
                 }
+            } else if let motivo = LimitiElaborazione.bloccoTrascrizione(registrazione) {
+                Label(motivo, systemImage: "clock.badge.exclamationmark").font(.callout).foregroundStyle(.secondary)
             } else {
                 Button { app.elaborazioni.trascrivi(registrazione, in: app.recordings) } label: {
                     Label("Trascrivi registrazione", systemImage: "waveform.badge.magnifyingglass")
                 }
             }
-            if let e = app.elaborazioni.errori[id], app.elaborazioni.stato(.trascrizione, id) == nil {
+            if let e = app.elaborazioni.errori[id], app.elaborazioni.stato(.trascrizione, id) == nil, registrazione.trascrittaIl == nil {
                 Label(e, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
             }
         } header: {
             Text("Trascrizione")
         } footer: {
-            if registrazione.trascrittaIl == nil {
+            if registrazione.trascrittaIl == nil, LimitiElaborazione.bloccoTrascrizione(registrazione) == nil {
                 Text("Riconoscimento vocale di Apple in italiano, sul dispositivo quando supportato. Puoi uscire da questa schermata durante la trascrizione.")
             }
         }
@@ -44,9 +46,11 @@ struct RiassuntoSection: View {
     let registrazione: Registrazione
     @Environment(AppModel.self) private var app
     @State private var testo: String?
+    @State private var trascrizione: String?
 
     var body: some View {
         let id = registrazione.id
+        let blocco = LimitiElaborazione.bloccoRiassunto(registrazione, trascrizione: trascrizione)
         Section {
             switch AppleIntelligence.stato {
             case .nonAttiva:
@@ -63,8 +67,8 @@ struct RiassuntoSection: View {
                 } else if registrazione.riassuntoIl != nil, let testo {
                     MarkdownTesto(markdown: testo).lineLimit(8)
                     NavigationLink { RiassuntoView(id: id) } label: { Label("Apri riassunto", systemImage: "doc.text.magnifyingglass") }
-                } else if registrazione.trascrittaIl == nil {
-                    Text("Trascrivi prima la registrazione per poterla riassumere.").font(.callout).foregroundStyle(.secondary)
+                } else if let blocco {
+                    Label(blocco, systemImage: "clock.badge.exclamationmark").font(.callout).foregroundStyle(.secondary)
                 } else {
                     Button { app.elaborazioni.riassumi(registrazione, in: app.recordings) } label: {
                         Label("Genera riassunto", systemImage: "sparkles")
@@ -74,11 +78,15 @@ struct RiassuntoSection: View {
         } header: {
             Label("Riassunto", systemImage: "apple.intelligence")
         } footer: {
-            if AppleIntelligence.stato == .disponibile, registrazione.riassuntoIl == nil, registrazione.trascrittaIl != nil {
-                Text("Generato sul dispositivo: riassunto, punti chiave e domande di ripasso.")
+            if AppleIntelligence.stato == .disponibile, registrazione.riassuntoIl == nil, blocco == nil {
+                Text("Generato sul dispositivo solo dal testo trascritto: riassunto, punti chiave e domande di ripasso.")
+            }
+            if let e = app.elaborazioni.errori[id], app.elaborazioni.stato(.riassunto, id) == nil, registrazione.trascrittaIl != nil {
+                Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
         }
         .task(id: registrazione.riassuntoIl) { testo = app.recordings.riassunto(id) }
+        .task(id: registrazione.trascrittaIl) { trascrizione = app.recordings.trascrizione(id) }
     }
 }
 

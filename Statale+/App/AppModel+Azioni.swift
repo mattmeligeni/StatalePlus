@@ -1,7 +1,7 @@
 import Foundation
 
 enum AppTab: Hashable { case oggi, orario, ariel, registrazioni, altro }
-enum AltroRoute: Hashable { case carriera, tasse, esami, aule, presenze, impostazioni }
+enum AltroRoute: Hashable { case carriera, tasse, esami, aule, presenze, impostazioni, crediti }
 
 extension AppModel {
     // MARK: Presenze

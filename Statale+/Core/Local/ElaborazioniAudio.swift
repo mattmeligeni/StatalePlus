@@ -20,6 +20,7 @@ final class ElaborazioniAudio {
 
     func trascrivi(_ r: Registrazione, in store: RecordingStore) {
         guard trascrizioni[r.id] == nil else { return }
+        if let motivo = LimitiElaborazione.bloccoTrascrizione(r) { errori[r.id] = motivo; return }
         errori[r.id] = nil
         trascrizioni[r.id] = Stato(progresso: 0, messaggio: "Preparazione…")
         let url = store.url(for: r)
@@ -40,14 +41,16 @@ final class ElaborazioniAudio {
     }
 
     func riassumi(_ r: Registrazione, in store: RecordingStore) {
-        guard riassunti[r.id] == nil, let testo = store.trascrizione(r.id) else { return }
+        guard riassunti[r.id] == nil else { return }
+        let testo = store.trascrizione(r.id)
+        if let motivo = LimitiElaborazione.bloccoRiassunto(r, trascrizione: testo) { errori[r.id] = motivo; return }
+        guard let testo else { return }
         errori[r.id] = nil
         riassunti[r.id] = Stato(progresso: 0, messaggio: "Preparazione…")
-        let titolo = r.insegnamento ?? r.titolo
         let id = r.id
         tasks["r\(id)"] = Task {
             do {
-                let md = try await AppleIntelligence.riassumi(testo, titolo: titolo) { p, m in
+                let md = try await AppleIntelligence.riassumi(testo) { p, m in
                     Task { @MainActor in self.riassunti[id]?.progresso = p; self.riassunti[id]?.messaggio = m }
                 }
                 store.salvaRiassunto(id, md)

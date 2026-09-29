@@ -103,6 +103,15 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   divisa in parti (il modello on-device ha un contesto di ~4K token), ogni parte diventa appunti e gli appunti diventano un
   riassunto in Markdown con _Riassunto_, _Punti chiave_ e _Da ripassare_ (domande di verifica). Visualizzazione formattata,
   modifica con Writing Tools, rigenerazione. Se Apple Intelligence è disattivata o in download l'app lo indica.
+- **Protezioni** contro elaborazioni inutili e riassunti inventati:
+  - trascrizione solo per registrazioni di almeno **1 minuto**, riassunto solo da **5 minuti** (controllo sia nell'interfaccia
+    sia nel gestore dei lavori, con il motivo mostrato al posto del pulsante);
+  - riassunto solo se la trascrizione ha almeno **150 parole** e **60 parole diverse** (il parlato di riempimento
+    ripetuto viene scartato);
+  - verifica preliminare con il modello ("il testo spiega argomenti di una lezione?"): saluti, attese, prove microfono
+    e chiacchiere vengono rifiutati;
+  - il nome della materia **non** entra nei prompt e il modello deve usare solo il testo trascritto, rispondendo con un
+    segnale dedicato quando non c'è materiale (convertito in errore, mai mostrato come riassunto).
 
 ### Altro
 
@@ -119,6 +128,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   percentuali di frequenza per corso e dettaglio degli slot.
 - **Impostazioni**: foto profilo, account, stato delle sessioni, dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
+- **Crediti** (sezione separata in fondo): servizi dell'Ateneo, piattaforme (Moodle, EasyStaff/EasyAcademy) e tecnologie
+  Apple usate, ciascuno con il proprio link. Sotto, nota di disclaimer e copyright con la versione dell'app.
 
 ### Mappe
 
@@ -317,6 +328,16 @@ Da completare:
 
 ---
 
+## Copyright
+
+© 2026 Mattia Meligeni. Tutti i diritti riservati.
+
+Statale+ è un'app indipendente e non ufficiale: non è affiliata, sponsorizzata né approvata dall'Università degli Studi
+di Milano. Nomi e marchi dei servizi citati appartengono ai rispettivi titolari. I dati sono letti dai servizi
+dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre il sito ufficiale.
+
+---
+
 ## Contribuire
 
 - Ogni modifica va accompagnata dall'aggiornamento di questo README (funzionalità, endpoint, formati, stato dei lavori)
@@ -328,6 +349,12 @@ Da completare:
 ---
 
 ## Changelog
+
+### 2026-09-29 (8)
+
+- Altro: sezione **Crediti** con i servizi usati e i relativi link; nota di disclaimer e copyright in fondo.
+- Registrazioni: soglie minime (trascrizione ≥ 1 min, riassunto ≥ 5 min e ≥ 150 parole / 60 diverse), verifica
+  preliminare del contenuto e prompt senza nome della materia, per evitare riassunti inventati su audio vuoti.
 
 ### 2026-09-29 (7)
 

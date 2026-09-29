@@ -10,13 +10,21 @@ struct AltroView: View {
         @Bindable var app = app
         NavigationStack(path: $app.altroPath) {
             List {
-                NavigationLink(value: AltroRoute.carriera) { Label("Carriera e libretto", systemImage: "graduationcap") }
-                NavigationLink(value: AltroRoute.tasse) { Label("Tasse e pagamenti", systemImage: "eurosign.circle") }
-                NavigationLink(value: AltroRoute.esami) { Label("Esami", systemImage: "pencil.and.list.clipboard") }
-                NavigationLink(value: AltroRoute.aule) { Label("Aule", systemImage: "building.2") }
-                NavigationLink(value: AltroRoute.presenze) { Label("Presenze", systemImage: "person.badge.clock") }
-                NavigationLink(value: AltroRoute.impostazioni) { Label("Impostazioni", systemImage: "gearshape") }
+                Section {
+                    NavigationLink(value: AltroRoute.carriera) { Label("Carriera e libretto", systemImage: "graduationcap") }
+                    NavigationLink(value: AltroRoute.tasse) { Label("Tasse e pagamenti", systemImage: "eurosign.circle") }
+                    NavigationLink(value: AltroRoute.esami) { Label("Esami", systemImage: "pencil.and.list.clipboard") }
+                    NavigationLink(value: AltroRoute.aule) { Label("Aule", systemImage: "building.2") }
+                    NavigationLink(value: AltroRoute.presenze) { Label("Presenze", systemImage: "person.badge.clock") }
+                    NavigationLink(value: AltroRoute.impostazioni) { Label("Impostazioni", systemImage: "gearshape") }
+                }
+                Section {
+                    NavigationLink(value: AltroRoute.crediti) { Label("Crediti", systemImage: "heart.text.square") }
+                } footer: {
+                    Disclaimer().padding(.top, 20)
+                }
             }
+            .listSectionSpacing(32)
             .navigationTitle("Altro")
             .navigationDestination(for: AltroRoute.self) { route in
                 switch route {
@@ -26,6 +34,7 @@ struct AltroView: View {
                 case .aule: AuleView()
                 case .presenze: PresenzeView()
                 case .impostazioni: ImpostazioniView()
+                case .crediti: CreditiView()
                 }
             }
         }
