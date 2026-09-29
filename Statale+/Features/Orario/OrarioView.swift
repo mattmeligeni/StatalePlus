@@ -9,6 +9,8 @@ struct OrarioView: View {
     @State private var selected: Lezione?
     @State private var showVaiA = false
     @State private var evidenziata: String?
+    @State private var evidenziaTask: Task<Void, Never>?
+    @State private var scorriA: String?
 
     private var weekStart: Date {
         let cal = Formats.calendar
@@ -22,6 +24,7 @@ struct OrarioView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             List {
                 if let a = app.agenda {
                     Section {
@@ -68,7 +71,8 @@ struct OrarioView: View {
                                     Button { selected = l } label: { LezioneRow(lezione: l) }
                                         .tint(.primary)
                                         .listRowBackground(evidenziata == chiave(l)
-                                                           ? Color.accentColor.opacity(0.18) : Color(.secondarySystemGroupedBackground))
+                                                           ? Color.accentColor.opacity(0.22) : Color(.secondarySystemGroupedBackground))
+                                        .id(chiave(l))
                                 }
                             } header: {
                                 Text(day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "it_IT"))))
@@ -78,6 +82,12 @@ struct OrarioView: View {
                     }
                 }
                 UpdatedFooter(date: app.orario.updatedAt).listRowBackground(Color.clear)
+            }
+            .onChange(of: scorriA) { _, id in
+                guard let id else { return }
+                withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(id, anchor: .center) }
+                scorriA = nil
+            }
             }
             .navigationTitle(app.isMioCorsoOrario ? "Orario" : (app.agenda?.corsoOrario.cdl.codiceLettera ?? "Orario"))
             .toolbar {
@@ -95,7 +105,8 @@ struct OrarioView: View {
             }
             .refreshable { app.segnaRefresh(); await app.loadOrario(refreshInsegnamenti: true) }
             .task { if app.orario.updatedAt == nil { await app.loadOrario() } }
-            .task(id: app.orarioRichiesta?.id) { await mostraRichiesta() }
+            .onAppear { consumaRichiesta() }
+            .onChange(of: app.orarioRichiesta?.id) { consumaRichiesta() }
             .sheet(isPresented: $showInsegnamenti) { InsegnamentiSheet() }
             .sheet(isPresented: $showCorsi) {
                 CorsoPicker(titolo: "Corso per l'orario", albero: app.alberoOrario, load: app.loadAlberoOrario,
@@ -103,29 +114,45 @@ struct OrarioView: View {
             }
             .sheet(item: $selected) { LezioneDetail(lezione: $0).presentationDetents([.medium]) }
             .sheet(isPresented: $showVaiA) {
-                VaiADataSheet(iniziale: weekStart) { vaiA($0) }
+                VaiADataSheet(iniziale: weekStart) { data in
+                    if vaiA(data) { Task { await app.loadOrario() } }
+                }
             }
         }
     }
 
     /// Porta alla settimana della data; se la data cade in un altro periodo didattico, cambia anche periodo.
-    private func vaiA(_ data: Date) {
+    /// Porta alla settimana della data; se la data cade in un altro periodo didattico cambia periodo
+    /// e restituisce true (l'orario va ricaricato).
+    @discardableResult
+    private func vaiA(_ data: Date) -> Bool {
         weekOffset = weeks(to: data)
         guard let periodi = app.agenda?.corsoOrario.cdl.periodi,
-              let p = AgendaConfig.periodoAttuale(periodi, now: data), p != app.periodoOrario else { return }
+              let p = AgendaConfig.periodoAttuale(periodi, now: data), p != app.periodoOrario else { return false }
         app.setPeriodoOrario(p.id)
-        Task { await app.loadOrario() }
+        return true
     }
 
-    /// Lezione richiesta da Oggi: settimana e periodo giusti, poi evidenziazione per qualche secondo.
-    private func mostraRichiesta() async {
+    /// Lezione richiesta da Oggi: consumata subito, poi mostrata in un task indipendente
+    /// (così azzerare la richiesta non annulla l'evidenziazione).
+    private func consumaRichiesta() {
         guard let l = app.orarioRichiesta else { return }
         app.orarioRichiesta = nil
-        vaiA(l.inizio)
-        if app.orario.value == nil { await app.loadOrario() }
-        withAnimation(.easeOut(duration: 0.25)) { evidenziata = chiave(l) }
+        evidenziaTask?.cancel()
+        evidenziaTask = Task { await mostra(l) }
+    }
+
+    /// Settimana e periodo giusti, scorrimento fino alla lezione ed evidenziazione per qualche secondo.
+    private func mostra(_ l: Lezione) async {
+        evidenziata = nil
+        if vaiA(l.inizio) || app.orario.value == nil { await app.loadOrario() }
+        guard !Task.isCancelled else { return }
+        try? await Task.sleep(for: .milliseconds(150))   // lascia comparire le righe della settimana
+        scorriA = chiave(l)
+        withAnimation(.easeOut(duration: 0.3)) { evidenziata = chiave(l) }
         try? await Task.sleep(for: .seconds(2.5))
-        withAnimation(.easeInOut(duration: 0.6)) { evidenziata = nil }
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeInOut(duration: 0.8)) { evidenziata = nil }
     }
 
     /// Stessa lezione anche se ricaricata (gli id XML sono stabili, ma si confrontano anche orario e insegnamento).

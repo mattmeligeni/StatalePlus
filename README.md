@@ -51,10 +51,10 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   - durante una lezione, sul bordo sinistro della riga, una traccia verticale con il pallino all'altezza del tempo
     trascorso che **scorre in tempo reale** e **pulsa**, con un bagliore che scende lungo la parte già trascorsa
     (animazione disattivata con _Riduci movimento_);
-  - a fine giornata "Lezioni finite per oggi" in fondo e, sotto, la nota **Prossima lezione** con giorno relativo
-    ("Domani", "Tra 4 giorni"), data, ora, materia e aula (mostrata solo a lezioni del giorno terminate o se oggi non ci
-    sono lezioni). Un tap apre _Orario_ sulla settimana di quella lezione (tornando al proprio corso se ne era scelto un
-    altro) e la evidenzia per qualche secondo. Le lezioni passate sono attenuate.
+  - a fine giornata "Lezioni finite per oggi" in fondo e, sotto, la nota **Prossima lezione** con la distanza relativa
+    ("Domani", "Tra 4 giorni") e la materia (mostrata solo a lezioni del giorno terminate o se oggi non ci sono lezioni).
+    Un tap apre _Orario_ sulla settimana di quella lezione (tornando al proprio corso se ne era scelto un altro), scorre
+    fino alla lezione e la evidenzia per qualche secondo. Le lezioni passate sono attenuate.
   - I passaggi fra `INIZIA TRA X MIN`, `IN CORSO` e `ANNULLATA` avvengono in dissolvenza; i minuti del conto alla
     rovescia cambiano con l'animazione numerica; barra e pallino si scambiano con una dissolvenza.
   In `OggiView.swift` c'è una preview (`#Preview("Lezioni di oggi")`) con orari modificabili e un'ora di partenza
@@ -328,6 +328,11 @@ Da completare:
 ---
 
 ## Changelog
+
+### 2026-09-29 (7)
+
+- Orario: la lezione aperta da "Prossima lezione" viene ora evidenziata davvero e la lista scorre fino a lei.
+- Nota "Prossima lezione" ridotta a distanza relativa e materia.
 
 ### 2026-09-29 (6)
 

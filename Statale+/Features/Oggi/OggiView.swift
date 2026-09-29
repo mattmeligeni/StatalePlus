@@ -189,19 +189,18 @@ struct BarraOra: View {
     }
 }
 
-/// Nota "Prossima lezione" a lezioni del giorno terminate: giorno relativo, data, ora, materia e aula.
+/// Nota "Prossima lezione" a lezioni del giorno terminate: distanza relativa e materia.
 /// Un tap apre Orario sulla settimana della lezione, evidenziandola.
 struct ProssimaLezioneNota: View {
     let lezione: Lezione
     let adesso: Date
     @Environment(AppModel.self) private var app
 
+    /// Solo la distanza relativa: data, ora e aula si vedono nell'orario con un tap.
     private var quando: String {
         let cal = Formats.calendar
         let giorni = cal.dateComponents([.day], from: cal.startOfDay(for: adesso), to: cal.startOfDay(for: lezione.inizio)).day ?? 0
-        let data = lezione.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "it_IT")))
-        let relativo = giorni <= 0 ? "Oggi" : giorni == 1 ? "Domani" : "Tra \(giorni) giorni"
-        return "\(relativo) · \(data), \(Formats.time(lezione.inizio))"
+        return giorni <= 0 ? "Oggi" : giorni == 1 ? "Domani" : "Tra \(giorni) giorni"
     }
 
     var body: some View {
@@ -211,8 +210,6 @@ struct ProssimaLezioneNota: View {
                     Text("Prossima lezione").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
                     Text(quando).font(.subheadline)
                     Text(lezione.insegnamento).font(.subheadline.weight(.semibold))
-                    Label("\(lezione.aula) · \(lezione.sede)", systemImage: "mappin.and.ellipse")
-                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
