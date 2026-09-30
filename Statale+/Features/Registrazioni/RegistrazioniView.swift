@@ -23,7 +23,10 @@ struct RegistrazioniView: View {
         .sorted { $0.creata > $1.creata }
     }
 
+    private var daVerificare: [Registrazione] { app.recordings.items.filter(\.richiedeVerifica) }
+
     var body: some View {
+        @Bindable var app = app
         NavigationStack {
             List {
                 Section { RecorderCard() }
@@ -45,8 +48,31 @@ struct RegistrazioniView: View {
                         }
                     }
                 }
+                if query.trimmed.isEmpty && !daVerificare.isEmpty {
+                    Section {
+                        NavigationLink { RegistrazioniDaVerificareView() } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Da verificare").font(.subheadline.weight(.semibold))
+                                    Text(daVerificare.count == 1 ? "1 registrazione recuperata dai file" : "\(daVerificare.count) registrazioni recuperate dai file")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                            }
+                        }
+                    } footer: {
+                        Text("Data, ora e insegnamento sono stati ricavati dal file audio e dall'orario: controllali e conferma.")
+                    }
+                }
+                if let errore = app.recordings.ultimoErrore {
+                    Section {
+                        Label(errore, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
+                    }
+                }
             }
             .navigationTitle("Registrazioni")
+            .navigationDestination(isPresented: $app.mostraRecuperate) { RegistrazioniDaVerificareView() }
             .searchable(text: $query, prompt: "Titolo, insegnamento o note")
             .task { if app.lezioniUtente.updatedAt == nil { await app.loadLezioniUtente() } }
         }
@@ -97,14 +123,53 @@ private struct RegistrazioniInsegnamentoView: View {
             if items.isEmpty { Text("Nessuna registrazione").foregroundStyle(.secondary) }
             ForEach(items) { r in
                 NavigationLink { RegistrazioneDetailView(id: r.id) } label: { RegistrazioneRow(r: r) }
-                    .swipeActions { Button("Elimina", role: .destructive) { daEliminare = r } }
+                    // Niente `role: .destructive`: toglierebbe la riga dalla lista prima della conferma.
+                    .swipeActions { Button("Elimina") { daEliminare = r }.tint(.red) }
             }
         }
         .navigationTitle(nome)
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Eliminare la registrazione?", isPresented: Binding(get: { daEliminare != nil }, set: { if !$0 { daEliminare = nil } }),
-                            titleVisibility: .visible) {
-            if let r = daEliminare { Button("Elimina", role: .destructive) { app.recordings.delete(r) } }
+        .confermaEliminazione($daEliminare) { app.eliminaRegistrazione($0) }
+    }
+}
+
+/// Registrazioni recuperate dai file, da controllare.
+private struct RegistrazioniDaVerificareView: View {
+    @Environment(AppModel.self) private var app
+
+    private var items: [Registrazione] { app.recordings.items.filter(\.richiedeVerifica).sorted { $0.creata > $1.creata } }
+
+    var body: some View {
+        List {
+            Section {
+                if items.isEmpty { Text("Tutte le registrazioni sono state verificate").foregroundStyle(.secondary) }
+                ForEach(items) { r in
+                    NavigationLink { RegistrazioneDetailView(id: r.id) } label: { RegistrazioneRow(r: r, mostraInsegnamento: true) }
+                }
+            } footer: {
+                Text("Queste registrazioni erano sul dispositivo ma non nell'elenco (salvate da una versione precedente dell'app o interrotte dalla chiusura dell'app). Sono state ripristinate in automatico: apri ognuna per ascoltarla e confermare data, ora e insegnamento, oppure eliminala.")
+            }
+            if !items.isEmpty {
+                Section {
+                    Button("Conferma tutte") { items.forEach { app.recordings.confermaVerifica($0.id) } }
+                }
+            }
+        }
+        .navigationTitle("Da verificare")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+extension View {
+    /// Conferma prima di eliminare: la registrazione sparisce insieme a trascrizione, riassunto e metadati.
+    func confermaEliminazione(_ registrazione: Binding<Registrazione?>, elimina: @escaping (Registrazione) -> Void) -> some View {
+        alert("Eliminare la registrazione?",
+              isPresented: Binding(get: { registrazione.wrappedValue != nil }, set: { if !$0 { registrazione.wrappedValue = nil } }),
+              presenting: registrazione.wrappedValue) { r in
+            Button("Elimina", role: .destructive) { elimina(r) }
+            Button("Annulla", role: .cancel) {}
+        } message: { r in
+            Text("«\(r.titolo)» verrà eliminata dal dispositivo insieme a trascrizione e riassunto, se presenti. L'operazione non si può annullare.")
         }
     }
 }
@@ -114,7 +179,10 @@ private struct RegistrazioneRow: View {
     var mostraInsegnamento = false
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(r.titolo).font(.subheadline.weight(.semibold)).lineLimit(2)
+            HStack(spacing: 6) {
+                if r.richiedeVerifica { Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange).font(.caption) }
+                Text(r.titolo).font(.subheadline.weight(.semibold)).lineLimit(2)
+            }
             if mostraInsegnamento, let i = r.insegnamento { Text(i).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
             HStack(spacing: 8) {
                 Text(r.creata.italiano(date: .abbreviated, time: .shortened))
@@ -222,7 +290,7 @@ private struct RecorderCard: View {
         }
         .onChange(of: app.lezioniUtente.updatedAt) { if scelto == nil { scelto = suggerito?.codice } }
         .confirmationDialog("Annullare la registrazione?", isPresented: $confermaAnnulla, titleVisibility: .visible) {
-            Button("Elimina registrazione", role: .destructive) { rec.discard() }
+            Button("Elimina registrazione", role: .destructive) { rec.discard(in: app.recordings) }
         }
     }
 }
@@ -293,6 +361,22 @@ struct RegistrazioneDetailView: View {
         Group {
             if let r = app.recordings.item(id) {
                 Form {
+                    if r.richiedeVerifica {
+                        Section {
+                            DatePicker("Inizio", selection: campo(\.creata, .now))
+                                .environment(\.locale, Formats.it)
+                            LabeledContent("Durata", value: durata(r.durata, precisa: true))
+                            Button {
+                                app.recordings.confermaVerifica(id)
+                            } label: {
+                                Label("I dati sono corretti", systemImage: "checkmark.circle")
+                            }
+                        } header: {
+                            Text("Da verificare")
+                        } footer: {
+                            Text("Registrazione recuperata dai file: ascoltala e controlla data, ora e insegnamento (ricavati dal file audio e dalla lezione in orario a quell'ora). Correggi se serve, poi conferma.")
+                        }
+                    }
                     Section {
                         TextField("Titolo", text: campo(\.titolo, ""), axis: .vertical)
                         Picker("Insegnamento", selection: insegnamento) {
@@ -304,7 +388,15 @@ struct RegistrazioneDetailView: View {
                         }
                         LabeledContent("Registrata", value: r.creata.italiano(date: .long, time: .shortened))
                     }
-                    Section { PlayerControls(player: player) }
+                    Section {
+                        if player.illeggibile {
+                            Label("Audio non leggibile: la registrazione è stata interrotta prima che il file venisse chiuso (ad esempio l'app è stata chiusa durante la registrazione).",
+                                  systemImage: "waveform.slash")
+                                .font(.callout).foregroundStyle(.secondary)
+                        } else {
+                            PlayerControls(player: player)
+                        }
+                    }
                     TrascrizioneSection(registrazione: r)
                     if AppleIntelligence.stato != .nonSupportata {
                         RiassuntoSection(registrazione: r)
@@ -335,14 +427,11 @@ struct RegistrazioneDetailView: View {
         }
         .onAppear { if let r = app.recordings.item(id) { player.load(app.recordings.url(for: r)) } }
         .onDisappear { player.stop() }
-        .confirmationDialog("Eliminare la registrazione?", isPresented: $confermaElimina, titleVisibility: .visible) {
-            Button("Elimina", role: .destructive) {
-                player.stop()
-                app.elaborazioni.annulla(.trascrizione, id)
-                app.elaborazioni.annulla(.riassunto, id)
-                if let r = app.recordings.item(id) { app.recordings.delete(r) }
-                dismiss()
-            }
+        .confermaEliminazione(Binding(get: { confermaElimina ? app.recordings.item(id) : nil },
+                                      set: { if $0 == nil { confermaElimina = false } })) { r in
+            player.stop()
+            app.eliminaRegistrazione(r)
+            dismiss()
         }
     }
 }

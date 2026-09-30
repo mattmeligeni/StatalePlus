@@ -1,21 +1,38 @@
 import AVFoundation
 import Observation
+import os
 
 // MARK: - Modello
 
-/// Registrazione vocale di una lezione. Indice in `Registrazioni/registrazioni.json`, audio `<id>.m4a` accanto.
+/// Registrazione vocale di una lezione. Per ogni registrazione, nella cartella `Registrazioni/`:
+/// - `<id>.m4a` audio;
+/// - `<id>.json` metadati (questa struttura), scritti all'avvio della registrazione e a ogni modifica;
+/// - `<id>.txt` trascrizione e `<id>.riassunto.md` riassunto, se presenti.
+/// `registrazioni.json` è l'indice di tutte; se si perde o non è allineato, all'avvio si ricostruisce dai file.
 nonisolated struct Registrazione: Codable, Sendable, Identifiable, Hashable {
     let id: UUID
     var titolo: String
     var codiceInsegnamento: String?   // "DBD-28_1"
     var insegnamento: String?         // "Colloquio e processo anamnestico in neuropsicologia"
-    let creata: Date
+    var creata: Date
     var durata: TimeInterval
     let file: String                  // "<id>.m4a"
     var segnalibri: [TimeInterval]
     var note: String
     var trascrittaIl: Date? = nil       // testo in `<id>.txt` (Speech, modificabile)
     var riassuntoIl: Date? = nil        // Markdown in `<id>.riassunto.md` (Apple Intelligence)
+    /// Metadati scritti all'avvio: la registrazione non è stata chiusa regolarmente (app chiusa durante la registrazione).
+    var inCorso: Bool? = nil
+    /// Ricostruita dai file durante la riconciliazione: data, ora e insegnamento vanno confermati dall'utente.
+    var daVerificare: Bool? = nil
+
+    var richiedeVerifica: Bool { daVerificare == true }
+
+    /// "Colloquio e processo anamnestico – 30 set 2026" oppure "Registrazione del 30 set 2026, 10:15".
+    static func titoloPredefinito(insegnamento: String?, creata: Date) -> String {
+        insegnamento.map { "\($0) – \(creata.italiano(date: .abbreviated, time: .omitted))" }
+            ?? "Registrazione del \(creata.italiano(date: .abbreviated, time: .shortened))"
+    }
 }
 
 // MARK: - Archivio
@@ -23,22 +40,57 @@ nonisolated struct Registrazione: Codable, Sendable, Identifiable, Hashable {
 @Observable
 final class RecordingStore {
     private(set) var items: [Registrazione] = []
+    /// Registrazioni recuperate dai file all'ultimo avvio (per l'avviso all'utente).
+    private(set) var recuperate: [UUID] = []
+    /// Ultimo errore di scrittura o eliminazione, mostrato in fondo alla schermata Registrazioni.
+    private(set) var ultimoErrore: String?
     let folder: URL
+    @ObservationIgnored private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Statale+", category: "registrazioni")
     private var db: URL { folder.appending(path: "registrazioni.json") }
+
+    /// Stesso formato in scrittura e in lettura. Le date si leggono sia come ISO 8601 sia come numero
+    /// (prima di questa versione l'indice era scritto in ISO 8601 ma letto come numero: all'avvio la lettura
+    /// falliva, la lista risultava vuota e il salvataggio successivo scriveva `[]`).
+    private static let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }()
+    private static let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .custom { dec in
+            let c = try dec.singleValueContainer()
+            if let n = try? c.decode(Double.self) { return Date(timeIntervalSinceReferenceDate: n) }
+            let s = try c.decode(String.self)
+            let f = ISO8601DateFormatter()
+            if let d = f.date(from: s) { return d }
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = f.date(from: s) { return d }
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "Data non valida: \(s)")
+        }
+        return d
+    }()
 
     init() {
         folder = URL.applicationSupportDirectory.appending(path: "Registrazioni", directoryHint: .isDirectory)
         // Accessibile a schermo bloccato dopo il primo sblocco: la registrazione continua in background.
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
                                                  attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
-        if let data = try? Data(contentsOf: db), let list = try? JSONDecoder().decode([Registrazione].self, from: data) {
-            items = list.filter { FileManager.default.fileExists(atPath: url(for: $0).path(percentEncoded: false)) }
+        if let data = try? Data(contentsOf: db) {
+            do { items = try Self.decoder.decode([Registrazione].self, from: data) } catch {
+                log.error("Indice registrazioni illeggibile: \(error.localizedDescription, privacy: .public)")
+            }
         }
+        riconcilia()
     }
 
     func url(for r: Registrazione) -> URL { folder.appending(path: r.file) }
+    private func audioURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).m4a") }
+    private func metadatiURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).json") }
     private func trascrizioneURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).txt") }
     private func riassuntoURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).riassunto.md") }
+    private func fileCollegati(_ id: UUID) -> [URL] { [audioURL(id), metadatiURL(id), trascrizioneURL(id), riassuntoURL(id)] }
 
     func item(_ id: UUID) -> Registrazione? { items.first { $0.id == id } }
 
@@ -47,64 +99,225 @@ final class RecordingStore {
     func trascrizione(_ id: UUID) -> String? { try? String(contentsOf: trascrizioneURL(id), encoding: .utf8) }
     func riassunto(_ id: UUID) -> String? { try? String(contentsOf: riassuntoURL(id), encoding: .utf8) }
 
+    /// Non scrive nulla se la registrazione nel frattempo è stata eliminata (elaborazione finita dopo l'eliminazione).
     func salvaTrascrizione(_ id: UUID, _ testo: String?) {
-        scrivi(testo, trascrizioneURL(id))
         guard var r = item(id) else { return }
+        scrivi(testo, trascrizioneURL(id))
         r.trascrittaIl = testo == nil ? nil : .now
         update(r)
     }
 
     func salvaRiassunto(_ id: UUID, _ testo: String?) {
-        scrivi(testo, riassuntoURL(id))
         guard var r = item(id) else { return }
+        scrivi(testo, riassuntoURL(id))
         r.riassuntoIl = testo == nil ? nil : .now
         update(r)
     }
 
     private func scrivi(_ testo: String?, _ url: URL) {
         if let testo {
-            try? Data(testo.utf8).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            scriviDati(Data(testo.utf8), url)
         } else {
-            try? FileManager.default.removeItem(at: url)
+            rimuovi(url)
         }
     }
 
-    func add(_ r: Registrazione) { items.insert(r, at: 0); save() }
+    // MARK: Modifiche
+
+    /// Metadati provvisori all'avvio della registrazione: se l'app viene chiusa prima dello stop,
+    /// al lancio successivo data, ora e insegnamento si recuperano da qui.
+    func iniziata(_ r: Registrazione) {
+        var provvisoria = r
+        provvisoria.inCorso = true
+        scriviMetadati(provvisoria)
+    }
+
+    func add(_ r: Registrazione) {
+        items.removeAll { $0.id == r.id }
+        items.insert(r, at: 0)
+        scriviMetadati(r)
+        save()
+    }
 
     func update(_ r: Registrazione) {
         guard let i = items.firstIndex(where: { $0.id == r.id }) else { return }
         items[i] = r
+        scriviMetadati(r)
         save()
     }
 
+    /// Conferma i dati di una registrazione ricostruita.
+    func confermaVerifica(_ id: UUID) {
+        guard var r = item(id) else { return }
+        r.daVerificare = nil
+        update(r)
+        recuperate.removeAll { $0 == id }
+    }
+
+    /// Elimina audio, metadati, trascrizione, riassunto e la voce dell'indice.
     func delete(_ r: Registrazione) {
-        try? FileManager.default.removeItem(at: url(for: r))
-        try? FileManager.default.removeItem(at: trascrizioneURL(r.id))
-        try? FileManager.default.removeItem(at: riassuntoURL(r.id))
+        fileCollegati(r.id).forEach(rimuovi)
+        if r.file != "\(r.id.uuidString).m4a" { rimuovi(url(for: r)) }
         items.removeAll { $0.id == r.id }
+        recuperate.removeAll { $0 == r.id }
         save()
+    }
+
+    /// Registrazione annullata dal registratore: via audio e metadati provvisori (non era nell'indice).
+    func scartata(_ id: UUID) {
+        fileCollegati(id).forEach(rimuovi)
     }
 
     /// Elimina tutte le registrazioni e l'indice.
     func deleteAll() {
-        (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?
-            .forEach { try? FileManager.default.removeItem(at: $0) }
+        (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil))?.forEach(rimuovi)
         items = []
+        recuperate = []
         save()
     }
 
     var spazioOccupato: Int64 {
-        items.reduce(0) { acc, r in
-            acc + ((try? FileManager.default.attributesOfItem(atPath: url(for: r).path(percentEncoded: false))[.size] as? Int64) ?? 0)
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        return files.reduce(0) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+    }
+
+    // MARK: Riconciliazione
+
+    /// Allinea indice e file:
+    /// - audio senza voce nell'indice → recuperato dai metadati `<id>.json` o, per le versioni precedenti che non li
+    ///   avevano, ricostruito dalle date del file (creazione = inizio, modifica = fine) e segnato "da verificare";
+    /// - voce nell'indice senza audio → rimossa;
+    /// - trascrizioni, riassunti e metadati rimasti senza audio → eliminati;
+    /// - metadati mancanti o non aggiornati → riscritti.
+    /// `escludi`: registrazione in corso, da non toccare.
+    func riconcilia(escludi: UUID? = nil) {
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.creationDateKey, .contentModificationDateKey]
+        let files = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys)) ?? []
+        let perId = Dictionary(grouping: files.compactMap { url -> (UUID, URL)? in
+            guard let id = UUID(uuidString: String(url.lastPathComponent.prefix(36))) else { return nil }
+            return (id, url)
+        }, by: \.0).mapValues { $0.map(\.1) }
+
+        var cambiato = false
+        var nuove: [UUID] = []
+
+        // Voci senza audio.
+        let senzaAudio = items.filter { $0.id != escludi && !fm.fileExists(atPath: url(for: $0).path(percentEncoded: false)) }
+        for r in senzaAudio {
+            log.notice("Voce senza audio rimossa dall'indice: \(r.id.uuidString, privacy: .public)")
+            fileCollegati(r.id).forEach(rimuovi)
+            items.removeAll { $0.id == r.id }
+            cambiato = true
+        }
+
+        for (id, urls) in perId where id != escludi {
+            let audio = audioURL(id)
+            guard urls.contains(where: { $0.lastPathComponent == audio.lastPathComponent }) else {
+                // File rimasti da un'eliminazione non completata.
+                log.notice("File senza audio eliminati: \(id.uuidString, privacy: .public)")
+                urls.forEach(rimuovi)
+                continue
+            }
+            var r: Registrazione
+            if let esistente = item(id) {
+                r = esistente
+            } else if let meta = leggiMetadati(id) {
+                r = meta
+                if r.inCorso == true {
+                    // Chiusa senza stop (app terminata durante la registrazione). Un m4a non chiuso di solito non
+                    // è leggibile: in quel caso la durata si stima dalle date e la registrazione va verificata.
+                    let letta = durataAudio(audio)
+                    r.durata = letta ?? max(0, dataModifica(audio).map { $0.timeIntervalSince(r.creata) } ?? 0)
+                    if letta == nil { r.daVerificare = true }
+                    r.inCorso = nil
+                }
+                nuove.append(id)
+            } else {
+                r = ricostruisci(id, audio: audio)
+                nuove.append(id)
+            }
+            // Trascrizione e riassunto: le date seguono la presenza dei file.
+            let tx = trascrizioneURL(id), md = riassuntoURL(id)
+            let haTx = fm.fileExists(atPath: tx.path(percentEncoded: false))
+            let haMd = fm.fileExists(atPath: md.path(percentEncoded: false))
+            if haTx != (r.trascrittaIl != nil) { r.trascrittaIl = haTx ? (dataModifica(tx) ?? .now) : nil }
+            if haMd != (r.riassuntoIl != nil) { r.riassuntoIl = haMd ? (dataModifica(md) ?? .now) : nil }
+
+            if let i = items.firstIndex(where: { $0.id == id }) {
+                if items[i] != r { items[i] = r; cambiato = true }
+            } else {
+                items.append(r)
+                cambiato = true
+            }
+            if leggiMetadati(id) != r { scriviMetadati(r) }
+        }
+
+        if !nuove.isEmpty {
+            log.notice("Registrazioni recuperate dai file: \(nuove.count, privacy: .public)")
+            recuperate = nuove
+        }
+        if cambiato {
+            items.sort { $0.creata > $1.creata }
+            save()
         }
     }
 
+    /// Registrazione senza metadati (versioni precedenti): data e durata dal file audio.
+    private func ricostruisci(_ id: UUID, audio: URL) -> Registrazione {
+        let fine = dataModifica(audio)
+        let durata = durataAudio(audio) ?? max(0, (fine ?? .now).timeIntervalSince(dataCreazione(audio) ?? fine ?? .now))
+        let creata = dataCreazione(audio) ?? fine.map { $0.addingTimeInterval(-durata) } ?? .now
+        return Registrazione(id: id, titolo: Registrazione.titoloPredefinito(insegnamento: nil, creata: creata),
+                             codiceInsegnamento: nil, insegnamento: nil, creata: creata, durata: durata,
+                             file: audio.lastPathComponent, segnalibri: [], note: "", daVerificare: true)
+    }
+
+    private func durataAudio(_ url: URL) -> TimeInterval? {
+        guard let f = try? AVAudioFile(forReading: url), f.fileFormat.sampleRate > 0 else { return nil }
+        let d = Double(f.length) / f.fileFormat.sampleRate
+        return d.isFinite && d > 0 ? d : nil
+    }
+
+    private func dataCreazione(_ url: URL) -> Date? { try? url.resourceValues(forKeys: [.creationDateKey]).creationDate }
+    private func dataModifica(_ url: URL) -> Date? { try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
+
+    // MARK: File
+
+    private func leggiMetadati(_ id: UUID) -> Registrazione? {
+        guard let data = try? Data(contentsOf: metadatiURL(id)) else { return nil }
+        return try? Self.decoder.decode(Registrazione.self, from: data)
+    }
+
+    private func scriviMetadati(_ r: Registrazione) {
+        do { scriviDati(try Self.encoder.encode(r), metadatiURL(r.id)) } catch {
+            segnala("Metadati non scritti per \(r.id.uuidString): \(error.localizedDescription)")
+        }
+    }
+
+    private func scriviDati(_ data: Data, _ url: URL) {
+        do { try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) } catch {
+            segnala("Scrittura di \(url.lastPathComponent) non riuscita: \(error.localizedDescription)")
+        }
+    }
+
+    /// Rimuove il file se esiste; ogni altro errore viene segnalato (non più ignorato).
+    private func rimuovi(_ url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return }
+        do { try FileManager.default.removeItem(at: url) } catch {
+            segnala("Eliminazione di \(url.lastPathComponent) non riuscita: \(error.localizedDescription)")
+        }
+    }
+
+    private func segnala(_ messaggio: String) {
+        log.error("\(messaggio, privacy: .public)")
+        ultimoErrore = messaggio
+    }
+
     private func save() {
-        let enc = JSONEncoder()
-        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        enc.dateEncodingStrategy = .iso8601
-        guard let data = try? enc.encode(items) else { return }
-        try? data.write(to: db, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        do { scriviDati(try Self.encoder.encode(items), db) } catch {
+            segnala("Indice registrazioni non scritto: \(error.localizedDescription)")
+        }
     }
 }
 
@@ -154,6 +367,7 @@ final class AudioRecorder {
             segnalibri = []
             elapsed = 0
             startedAt = .now
+            store.iniziata(bozza(durata: 0))
             state = .recording
             error = nil
             observeInterruptions()
@@ -178,16 +392,24 @@ final class AudioRecorder {
         let durata = r.currentTime
         r.stop()
         cleanup()
-        let titolo = insegnamento.map { "\($0.nome) – \(startedAt.italiano(date: .abbreviated, time: .omitted))" }
-            ?? "Registrazione del \(startedAt.italiano(date: .abbreviated, time: .shortened))"
-        return Registrazione(id: id, titolo: titolo, codiceInsegnamento: insegnamento?.codice, insegnamento: insegnamento?.nome,
-                             creata: startedAt, durata: durata, file: "\(id.uuidString).m4a", segnalibri: segnalibri, note: "")
+        return bozza(durata: durata)
     }
 
-    func discard() {
+    /// Id della registrazione in corso (esclusa dalla riconciliazione).
+    var idInCorso: UUID? { state == .idle ? nil : id }
+
+    private func bozza(durata: TimeInterval) -> Registrazione {
+        Registrazione(id: id, titolo: Registrazione.titoloPredefinito(insegnamento: insegnamento?.nome, creata: startedAt),
+                      codiceInsegnamento: insegnamento?.codice, insegnamento: insegnamento?.nome,
+                      creata: startedAt, durata: durata, file: "\(id.uuidString).m4a", segnalibri: segnalibri, note: "")
+    }
+
+    func discard(in store: RecordingStore) {
+        let scartata = idInCorso
         recorder?.stop()
         recorder?.deleteRecording()
         cleanup()
+        if let scartata { store.scartata(scartata) }
     }
 
     private func cleanup() {
@@ -236,6 +458,8 @@ final class AudioPlayer {
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
     private(set) var rate: Float = 1
+    /// File presente ma non apribile (es. registrazione interrotta prima della chiusura del file).
+    private(set) var illeggibile = false
     private var player: AVAudioPlayer?
     private var tick: Task<Void, Never>?
 
@@ -243,6 +467,7 @@ final class AudioPlayer {
         guard player?.url != url else { return }
         stop()
         player = try? AVAudioPlayer(contentsOf: url)
+        illeggibile = player == nil
         player?.enableRate = true
         player?.prepareToPlay()
         duration = player?.duration ?? 0

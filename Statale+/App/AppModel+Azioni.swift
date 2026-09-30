@@ -34,6 +34,33 @@ extension AppModel {
         return (f.soglia, .easyBadge)
     }
 
+    // MARK: Registrazioni
+
+    /// Eliminazione completa: ferma le elaborazioni in corso, poi audio, metadati, trascrizione, riassunto e indice.
+    func eliminaRegistrazione(_ r: Registrazione) {
+        elaborazioni.annulla(.trascrizione, r.id)
+        elaborazioni.annulla(.riassunto, r.id)
+        recordings.delete(r)
+    }
+
+    /// Registrazioni ricostruite senza insegnamento: si cerca nell'orario la lezione in corso a quell'ora
+    /// (da 15 minuti prima dell'inizio alla fine) e se ne prende l'insegnamento. Restano "da verificare".
+    func assegnaInsegnamentiRecuperati() {
+        guard let lezioni = lezioniUtente.value else { return }
+        let insegnamenti = agenda?.insegnamentiUtenteAttivati ?? []
+        for var r in recordings.items where r.richiedeVerifica && r.codiceInsegnamento == nil && r.insegnamento == nil {
+            guard let l = lezioni.first(where: {
+                !$0.annullato && $0.inizio.addingTimeInterval(-15 * 60) <= r.creata && r.creata <= $0.fine
+            }) else { continue }
+            let ins = insegnamenti.first { $0.nome.matchKey == l.insegnamento.matchKey || $0.codice.hasPrefix(l.codiceInsegnamento + "_") }
+            let titoloPredefinito = r.titolo == Registrazione.titoloPredefinito(insegnamento: nil, creata: r.creata)
+            r.codiceInsegnamento = ins?.codice ?? l.codiceInsegnamento
+            r.insegnamento = ins?.nome ?? l.insegnamento
+            if titoloPredefinito { r.titolo = Registrazione.titoloPredefinito(insegnamento: r.insegnamento, creata: r.creata) }
+            recordings.update(r)
+        }
+    }
+
     /// Finestra delle azioni in Oggi: lezione non annullata, da 10 minuti prima dell'inizio fino alla fine.
     static func inFinestraAzioni(_ l: Lezione, now: Date = .now) -> Bool {
         guard !l.annullato, now < l.fine else { return false }
@@ -131,7 +158,7 @@ extension AppModel {
     /// registrazioni, foto profilo, file scaricati e cache; altrimenti li conserva per un altro profilo.
     func logout(eliminaDatiLocali: Bool) {
         if recorder.state != .idle {
-            if eliminaDatiLocali { recorder.discard() } else if let r = recorder.stop() { recordings.add(r) }
+            if eliminaDatiLocali { recorder.discard(in: recordings) } else if let r = recorder.stop() { recordings.add(r) }
         }
         fermaAutoRefresh()
         KeychainStore.delete()

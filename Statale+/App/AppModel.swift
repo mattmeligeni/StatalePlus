@@ -21,6 +21,10 @@ final class AppModel {
     let recordings = RecordingStore()
     let recorder = AudioRecorder()
     let elaborazioni = ElaborazioniAudio()
+    /// Apre in Registrazioni l'elenco delle registrazioni recuperate (dall'avviso all'avvio).
+    var mostraRecuperate = false
+    /// L'avviso sulle registrazioni recuperate si mostra una volta per avvio.
+    var avvisoRecuperateMostrato = false
 
     // Dati live condivisi
     let lezioniUtente = Live<[Lezione]>()          // Oggi, Registrazioni: corso dell'utente, insegnamenti attivati
@@ -203,6 +207,7 @@ final class AppModel {
     func loadLezioniUtente() async {
         guard let list = agenda?.insegnamentiUtenteAttivati else { return }
         await lezioniUtente.load { try await services.agenda.lezioni(di: list) }
+        assegnaInsegnamentiRecuperati()
     }
 
     // MARK: Esami

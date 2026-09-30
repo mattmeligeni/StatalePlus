@@ -132,6 +132,7 @@ actor EasyBadgeService {
     /// Timbratura: restituisce `result`/`message` così come arrivano dal server.
     func timbra(_ request: TimbraturaRequest) async throws -> TimbraturaResult {
         let r = try await http.postJSON(URL(string: "\(publicBase)/easybadge-new/api/TimbratureApi.php")!, body: request)
+        print(request)
         if let parsed = try? EasyBadgeParser.esitoTimbratura(r.data) { return parsed }
         return TimbraturaResult(result: "HTTP \(r.status)", message: r.text.trimmed.isEmpty ? "Risposta vuota dal server." : r.text.trimmed)
     }

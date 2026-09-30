@@ -116,6 +116,15 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   (numero, durata totale, data dell'ultima); toccandone uno si apre il suo elenco. La ricerca per titolo,
   insegnamento o note mostra i risultati in un'unica lista.
 - Dettaglio: player (±15/30 s, velocità 0,75–2×, salto ai segnalibri), titolo, insegnamento, note, condivisione, eliminazione.
+- **Eliminazione** (dal dettaglio o con lo swipe) sempre con conferma: rimuove audio, metadati, trascrizione, riassunto e la
+  voce di `registrazioni.json`, e ferma trascrizioni o riassunti in corso per quella registrazione.
+- **Riconciliazione all'avvio** fra file e indice:
+  - audio senza voce nell'indice → ripristinato dal file di metadati `<id>.json`; se manca (registrazioni fatte con
+    versioni precedenti), data e durata si ricavano dal file audio e l'insegnamento dalla lezione in orario a quell'ora;
+  - registrazione interrotta dalla chiusura dell'app → ripristinata dai metadati provvisori scritti all'avvio;
+  - voce senza audio → rimossa; trascrizioni, riassunti e metadati rimasti senza audio → eliminati.
+  Un avviso all'avvio chiede se controllare subito o più tardi; le registrazioni ricostruite restano nella sezione
+  **Da verificare** in fondo a Registrazioni (ascolto, data e ora modificabili, insegnamento, "I dati sono corretti").
 - **Trascrizione** in italiano con il framework Speech di Apple:
   - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber` on-device, pensati per audio lunghi (il modello della lingua viene
     scaricato la prima volta);
@@ -339,10 +348,14 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 | Credenziali                                                                                                | Keychain (`WhenUnlockedThisDeviceOnly`)                                                                                   |
 | Profilo, configurazione Agenda (corso, periodi, insegnamenti attivati), offerta Ariel, schede insegnamento | `Application Support/stable.json` con scadenze (profilo 24 h, offerta 24 h, agenda e schede 7 giorni), esclusa dal backup |
 | Foto profilo                                                                                               | `Application Support/profilo.jpg`                                                                                         |
-| Registrazioni                                                                                              | `Application Support/Registrazioni/<id>.m4a` + indice `registrazioni.json` (AAC mono 64 kbps, ~29 MB/ora)                 |
+| Registrazioni                                                                                              | `Application Support/Registrazioni/<id>.m4a` (AAC mono 64 kbps, ~29 MB/ora) + metadati `<id>.json` + indice `registrazioni.json` |
 | Trascrizioni e riassunti                                                                                   | `Application Support/Registrazioni/<id>.txt` e `<id>.riassunto.md`, separati dall'indice                                  |
 | Cookie di sessione                                                                                         | `HTTPCookieStorage` di sistema                                                                                            |
 | Orario, appelli, tasse, presenze, aule, esiti, partecipanti                                                | solo in memoria                                                                                                           |
+
+**Registrazioni**: `<id>.json` contiene gli stessi campi della voce dell'indice (data e ora d'inizio, durata, insegnamento,
+titolo, segnalibri, note, date di trascrizione e riassunto) e viene scritto all'avvio della registrazione (`inCorso: true`)
+e a ogni modifica: l'indice si può sempre ricostruire dai file. Date in ISO 8601 sia in scrittura sia in lettura.
 
 **Uscita**: credenziali, cookie e dati dell'account vengono sempre rimossi; l'utente sceglie se eliminare anche
 registrazioni, foto profilo, file scaricati e cache o conservarli per un altro profilo.
@@ -407,6 +420,15 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (5)
+
+- **Registrazioni, persistenza**: `registrazioni.json` veniva scritto con le date in ISO 8601 ma letto con il formato
+  predefinito (numero): all'avvio la lettura falliva in silenzio, la lista partiva vuota e il primo salvataggio scriveva
+  `[]` (i file restavano sul disco senza voce). Ora lettura e scrittura usano lo stesso formato (con lettura tollerante),
+  e gli errori di scrittura ed eliminazione vengono registrati e mostrati invece di essere ignorati.
+- Quarto file per registrazione, `<id>.json` con i metadati; riconciliazione all'avvio con avviso e sezione "Da verificare".
+- Eliminazione con conferma che toglie anche trascrizione, riassunto, metadati e voce dell'indice.
 
 ### 2026-09-30 (4)
 

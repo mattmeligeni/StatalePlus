@@ -73,13 +73,12 @@ nonisolated struct SlotLezione: Decodable, Sendable, Hashable, Identifiable {
 // MARK: - Timbratura
 
 /// POST `/easybadge-new/api/TimbratureApi.php`. Chiavi e struttura identiche alla richiesta reale:
-/// `{"matricola_studente","codice_lezione","posto","lingua":"it","autenticazione":true,"action":"CreateFromJSON",
+/// `{"matricola_studente","codice_lezione","lingua":"it","autenticazione":true,"action":"CreateFromJSON",
 ///   "dati_addizionali":{"timestamp":<epoch ms>,"longitudine":0,"latitudine":0}}`.
 /// Le coordinate restano a 0 come nella richiesta osservata: la posizione non viene usata.
 nonisolated struct TimbraturaRequest: Encodable, Sendable {
     let matricola_studente: String
     let codice_lezione: String
-    let posto: String
     let lingua = "it"
     let autenticazione = true
     let action = "CreateFromJSON"
@@ -94,7 +93,6 @@ nonisolated struct TimbraturaRequest: Encodable, Sendable {
     init(matricola: String, codiceLezione: String, posto: String = "", timestamp: Date = .now) {
         matricola_studente = matricola
         codice_lezione = codiceLezione
-        self.posto = posto
         dati_addizionali = DatiAggiuntivi(timestamp: Int64((timestamp.timeIntervalSince1970 * 1000).rounded()))
     }
 }

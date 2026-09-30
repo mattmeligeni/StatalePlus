@@ -51,11 +51,41 @@ struct MainTabView: View {
                 .tabItem { Label("Altro", systemImage: "square.grid.2x2") }
                 .tag(AppTab.altro)
         }
+        .alert(titoloRecuperate, isPresented: Binding(
+            get: { !app.recordings.recuperate.isEmpty && !app.avvisoRecuperateMostrato },
+            set: { if !$0 { app.avvisoRecuperateMostrato = true } })) {
+            Button("Controlla ora") {
+                app.avvisoRecuperateMostrato = true
+                app.tab = .registrazioni
+                app.mostraRecuperate = true
+            }
+            Button("Più tardi", role: .cancel) { app.avvisoRecuperateMostrato = true }
+        } message: {
+            Text(messaggioRecuperate)
+        }
         .onAppear { app.segnaRefresh(); app.avviaAutoRefresh() }
         .onDisappear { app.fermaAutoRefresh() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { app.avviaAutoRefresh() } else if phase == .background { app.fermaAutoRefresh() }
         }
+    }
+}
+
+extension MainTabView {
+    private var titoloRecuperate: String {
+        app.recordings.recuperate.count == 1 ? "Registrazione recuperata" : "\(app.recordings.recuperate.count) registrazioni recuperate"
+    }
+
+    private var messaggioRecuperate: String {
+        let una = app.recordings.recuperate.count == 1
+        let daVerificare = app.recordings.recuperate.filter { app.recordings.item($0)?.richiedeVerifica == true }.count
+        if daVerificare == 0 {
+            return una ? "Una registrazione non era nell'elenco: è stata ripristinata dai suoi dati salvati."
+                       : "Alcune registrazioni non erano nell'elenco: sono state ripristinate dai loro dati salvati."
+        }
+        return (una ? "Una registrazione non era nell'elenco ed è stata ripristinata in automatico"
+                    : "Alcune registrazioni non erano nell'elenco e sono state ripristinate in automatico")
+            + ": data, ora e insegnamento sono stati ricavati dal file e dall'orario. Puoi controllarli ora o più tardi da Registrazioni › Da verificare."
     }
 }
 
