@@ -321,6 +321,30 @@ final class RecordingStore {
     }
 }
 
+// MARK: - Sessione audio
+
+/// Configurazione, attivazione e disattivazione di `AVAudioSession` sono chiamate bloccanti (possono durare centinaia
+/// di millisecondi): si fanno qui, fuori dal main thread, una alla volta e nell'ordine in cui vengono richieste.
+actor SessioneAudio {
+    static let shared = SessioneAudio()
+
+    func registrazione() throws {
+        let s = AVAudioSession.sharedInstance()
+        try s.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+        try s.setActive(true)
+    }
+
+    func riproduzione() throws {
+        let s = AVAudioSession.sharedInstance()
+        try s.setCategory(.playback, mode: .spokenAudio)
+        try s.setActive(true)
+    }
+
+    func riattiva() throws { try AVAudioSession.sharedInstance().setActive(true) }
+
+    func disattiva() { try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation) }
+}
+
 // MARK: - Registratore
 
 @Observable
@@ -347,9 +371,8 @@ final class AudioRecorder {
             return
         }
         do {
-            let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
-            try session.setActive(true)
+            try await SessioneAudio.shared.registrazione()
+            guard state == .idle else { return }
             id = UUID()
             let url = store.folder.appending(path: "\(id.uuidString).m4a")
             let settings: [String: Any] = [
@@ -380,8 +403,12 @@ final class AudioRecorder {
     func pause() { recorder?.pause(); state = .paused }
 
     func resume() {
-        try? AVAudioSession.sharedInstance().setActive(true)
-        if recorder?.record() == true { state = .recording }
+        guard let r = recorder else { return }
+        Task {
+            try? await SessioneAudio.shared.riattiva()
+            guard recorder === r, state == .paused else { return }
+            if r.record() { state = .recording }
+        }
     }
 
     func bookmark() { segnalibri.append(recorder?.currentTime ?? elapsed) }
@@ -419,7 +446,7 @@ final class AudioRecorder {
         recorder = nil
         state = .idle
         level = 0
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        Task { await SessioneAudio.shared.disattiva() }
     }
 
     private func startMeter() {
@@ -469,7 +496,7 @@ final class AudioPlayer {
         player = try? AVAudioPlayer(contentsOf: url)
         illeggibile = player == nil
         player?.enableRate = true
-        player?.prepareToPlay()
+        // Niente `prepareToPlay()`: attiverebbe la sessione audio sul main thread. Lo fa `play()` dopo l'attivazione.
         duration = player?.duration ?? 0
         currentTime = 0
     }
@@ -477,12 +504,19 @@ final class AudioPlayer {
     func toggle() { isPlaying ? pause() : play() }
 
     func play() {
-        guard let player else { return }
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-        try? AVAudioSession.sharedInstance().setActive(true)
-        player.rate = rate
-        player.play()
+        guard let player, !isPlaying else { return }
         isPlaying = true
+        Task {
+            try? await SessioneAudio.shared.riproduzione()
+            // Nel frattempo il player può essere stato fermato, messo in pausa o sostituito.
+            guard self.player === player, isPlaying else { return }
+            player.rate = rate
+            player.play()
+            avviaTick()
+        }
+    }
+
+    private func avviaTick() {
         tick?.cancel()
         tick = Task { [weak self] in
             while !Task.isCancelled {

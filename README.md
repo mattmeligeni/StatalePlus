@@ -421,6 +421,11 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 
 ## Changelog
 
+### 2026-09-30 (6)
+
+- Sessione audio configurata, attivata e disattivata fuori dal main thread (attore `SessioneAudio`), anche per il player
+  (tolto `prepareToPlay()`, che la attivava in modo sincrono): risolto l'avviso "AVAudioSession Hang Risk" di Xcode.
+
 ### 2026-09-30 (5)
 
 - **Registrazioni, persistenza**: `registrazioni.json` veniva scritto con le date in ISO 8601 ma letto con il formato
