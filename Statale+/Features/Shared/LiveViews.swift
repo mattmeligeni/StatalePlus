@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 
 /// Banner "aggiornato alle HH:MM", in una sezione propria: non si attacca mai alle righe sciolte che lo precedono.
@@ -272,5 +273,38 @@ struct LuogoLezione: View {
                 if !sede.isEmpty { Text(sede).font(.caption).foregroundStyle(.secondary) }
             }
         }
+    }
+}
+
+/// Riga che scarica un PDF pubblico dell'Ateneo e lo apre con Quick Look, senza uscire dall'app.
+struct DocumentoPDFRow: View {
+    let titolo: String
+    let simbolo: String
+    let url: URL
+    @Environment(AppModel.self) private var app
+    @State private var anteprima: URL?
+    @State private var inCorso = false
+    @State private var errore: String?
+
+    var body: some View {
+        Button {
+            Task {
+                inCorso = true
+                errore = nil
+                defer { inCorso = false }
+                do { anteprima = try await app.services.documenti.pdf(url) } catch { errore = app.message(error) }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label(titolo, systemImage: simbolo)
+                    Spacer()
+                    if inCorso { ProgressView() }
+                }
+                if let errore { Text(errore).font(.caption).foregroundStyle(.red) }
+            }
+        }
+        .disabled(inCorso)
+        .quickLookPreview($anteprima)
     }
 }

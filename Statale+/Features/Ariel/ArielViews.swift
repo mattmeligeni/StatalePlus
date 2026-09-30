@@ -223,9 +223,8 @@ private struct SchedaView: View {
         // Senza titolari (scheda vecchia o blocco diverso): email e CV restano qui.
         if titolari.isEmpty {
             if let e = scheda.emailDocente, let url = URL(string: "mailto:\(e)") { Link(destination: url) { Label(e, systemImage: "envelope") } }
-            if let u = scheda.cvDocenteURL { Link(destination: u) { Label("CV docente", systemImage: "person.text.rectangle") } }
+            if let u = scheda.cvDocenteURL { DocumentoPDFRow(titolo: "CV docente", simbolo: "person.text.rectangle", url: u) }
         }
-        if let u = scheda.programmaURL { Link(destination: u) { Label("Programma e organizzazione didattica", systemImage: "doc.text") } }
         Button { showCalendario = true } label: { Label("Calendario lezioni", systemImage: "calendar") }
             .sheet(isPresented: $showCalendario) { calendario }
             .sheet(item: $docente) { DocenteSheet(titolare: $0).presentationDetents([.medium, .large]) }
@@ -282,13 +281,7 @@ private struct DocenteSheet: View {
                     if let t = titolare.telefono, let url = URL(string: "tel:\(t.filter { $0.isNumber || $0 == "+" })") {
                         Link(destination: url) { Label(t, systemImage: "phone") }
                     }
-                    if let s = titolare.struttura {
-                        if let u = titolare.strutturaURL {
-                            Link(destination: u) { Label(s, systemImage: "building.columns") }
-                        } else {
-                            Label(s, systemImage: "building.columns")
-                        }
-                    }
+                    if let s = titolare.struttura { Label(s, systemImage: "building.columns") }
                     if let i = titolare.indirizzo {
                         Button { if let u = Maps.url(address: i) { openURL(u) } } label: {
                             Label(i, systemImage: "map")
@@ -298,11 +291,8 @@ private struct DocenteSheet: View {
                         Label(s, systemImage: "mappin.and.ellipse").foregroundStyle(.secondary)
                     }
                 }
-                if titolare.cvURL != nil || titolare.chiEDoveURL != nil {
-                    Section {
-                        if let u = titolare.cvURL { Link(destination: u) { Label("Curriculum", systemImage: "doc.text") } }
-                        if let u = titolare.chiEDoveURL { Link(destination: u) { Label("Pagina personale (Chi e dove)", systemImage: "person.text.rectangle") } }
-                    }
+                if let u = titolare.cvURL {
+                    Section { DocumentoPDFRow(titolo: "Curriculum", simbolo: "doc.text", url: u) }
                 }
             }
             .listSectionSpacing(.compact)

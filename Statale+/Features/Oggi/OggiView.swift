@@ -5,7 +5,6 @@ struct OggiView: View {
     @Environment(AppModel.self) private var app
     @State private var avvisi = Live<[AvvisoAriel]>()
     @State private var tasse = Live<SituazioneTasse>()
-    @State private var paginaAriel: URL?
 
     /// Consegne in ritardo e eventi dei prossimi 7 giorni.
     private var scadenzeVicine: [EventoMoodle] {
@@ -78,11 +77,7 @@ struct OggiView: View {
                 // Solo se c'è qualcosa: consegne in ritardo o eventi dei prossimi 7 giorni.
                 if !scadenzeVicine.isEmpty {
                     Section {
-                        ForEach(scadenzeVicine.prefix(5)) { e in
-                            Button { paginaAriel = e.url } label: { RigaEvento(evento: e, mostraGiorno: true) }
-                                .tint(.primary)
-                                .disabled(e.url == nil)
-                        }
+                        ForEach(scadenzeVicine.prefix(5)) { RigaEvento(evento: $0, mostraGiorno: true) }
                         if scadenzeVicine.count > 5 {
                             NavigationLink("Tutte le scadenze (\(scadenzeVicine.count))") { ScadenzeArielView() }
                                 .font(.subheadline)
@@ -115,7 +110,6 @@ struct OggiView: View {
             }
             .navigationTitle("Oggi")
             .refreshable { await loadAll() }
-            .sheet(item: $paginaAriel) { PaginaMyAriel(url: $0) }
             .task {
                 async let a: Void = app.lezioniUtente.updatedAt == nil ? app.loadLezioniUtente() : ()
                 async let b: Void = app.prenotazioni.updatedAt == nil ? app.loadPrenotazioni() : ()

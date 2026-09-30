@@ -103,15 +103,16 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   un gruppo richiudibile. Ogni riga: titolo, codice e titolari su una riga.
 - Dettaglio corso: titolo in alto, una sezione per ogni sezione Moodle con icone allineate; descrizioni e post con
   grassetto, corsivo ed elenchi puntati. Un tap sul nome del docente apre il suo **riepilogo** (dal blocco W4
-  "Titolare del sito"): ruolo, ricevimento e luogo, email, telefono, dipartimento con sito, indirizzo (Mappe), sede,
-  curriculum e pagina "Chi e dove". Email e CV non sono più ripetuti nella schermata del corso. Scheda insegnamento (obiettivi, periodo, lingua, docenti, link), **Calendario lezioni**
+  "Titolare del sito"): ruolo, ricevimento e luogo, email, telefono, dipartimento, indirizzo (Mappe), sede e
+  curriculum (PDF aperto nell'app con Quick Look). Email e CV non sono ripetuti nella schermata del corso. Scheda
+  insegnamento (obiettivi, periodo, lingua, docenti), **Calendario lezioni**
   (modal compatto con le sole lezioni della materia dalle API Agenda, raggruppate per mese), contenuti per sezione, moduli con descrizione,
   file (anteprima Quick Look), forum e discussioni, partecipanti, valutazioni.
 
 - **Scadenze ed eventi** (calendario myAriel, prossimi 21 giorni più le consegne in ritardo) e **Notifiche**
   (nuovi post nei forum seguiti, valutazioni, consegne; badge con le non lette) in cima alla lista dei corsi.
   Aprire una notifica la segna come letta come sul sito; quelle dei forum aprono la discussione nell'app, le altre
-  la pagina di myAriel dentro l'app (sessione già aperta, link di uscita bloccati).
+  mostrano il testo completo. Le scadenze sono solo informative (nome, corso, data, luogo, "in ritardo").
 - **Scarica tutti i materiali** nel dettaglio del corso: lo zip di "Scaricamento contenuti del corso" (esclusi i file
   oltre 50 MB), scritto direttamente su disco, da aprire con Quick Look o salvare in File.
 - In Oggi: sezione **Scadenze Ariel** (consegne in ritardo ed eventi dei prossimi 7 giorni, solo se ce ne sono) e riga
@@ -171,14 +172,14 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   20100 Milano (MI), Italia").
 - **Tasse e pagamenti**: righe della situazione amministrativa con voci leggibili ("CONTRIB. REGIONE LOMBARDIA" →
   "Contributo Regione Lombardia") e una riga per rata ("Rata 1 · pagata l'11 settembre 2026" con la spunta), totali,
-  prossima scadenza, avvisi con la grafia corretta ("E' … puo' … Pago PA" → "È … può … PagoPA"), link ai pagamenti SIFA.
+  prossima scadenza, avvisi con la grafia corretta ("E' … puo' … Pago PA" → "È … può … PagoPA").
 - **Esami**
   - _Calendario_: appelli dalle API Agenda per corso e anno (pillole), raggruppati per settimana, corso modificabile
     dal menu; **Vai a data** fa partire il calendario dalla settimana scelta (anche nel passato), _Oggi_ torna al presente.
   - _Iscrizioni_: prenotazioni confermate, esiti da accettare, pulsante **Iscriviti a un appello** che apre la replica di
     "Esami del tuo corso di studio" (ricerca per insegnamento, nomi leggibili, codice · CFU). Il pulsante **Iscriviti**
     fa come sul sito: apre _Selezione appello_ con gli appelli disponibili per quell'esame (data, orario e dettagli)
-    o "Nessun appello disponibile."; la conferma dell'iscrizione per ora resta sul sito ufficiale (link in fondo).
+    o "Nessun appello disponibile."; la conferma dell'iscrizione non è ancora nell'app.
   - Appelli con data compatta ("mer 30 settembre · 11:00"), messaggi vuoti riscritti ("Nessuna prenotazione confermata").
 - **Aule**: sedi espandibili toccando la riga intera, con le aule e lo stato attuale (libera / occupata fino alle…),
   "1 aula / 2 aule", indirizzo in formato italiano ("Via Celoria 2, 20133 Milano") e **Apri in Mappe**; ricerca sempre
@@ -192,7 +193,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   e lezioni future attenuate.
   - **Soglia di frequenza**: EasyBadge restituisce un proprio valore (`percentuale_conseguimento`, es. 0,7) che non
     coincide con il regolamento; l'app legge l'obbligo di frequenza dal **manifesto degli studi** del corso (es. "almeno
-    il 50% del monte ore"), con link al PDF. In _Impostazioni_ si può scegliere una soglia diversa.
+    il 50% del monte ore"); il PDF del manifesto si apre nell'app con Quick Look. In _Impostazioni_ si può scegliere
+    una soglia diversa.
 - **Impostazioni**: foto profilo, account (nome e corso leggibili), soglia di frequenza, stato delle sessioni (pallino
   verde / grigio), dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
@@ -213,6 +215,12 @@ Tutte le date e i numeri sono in italiano (`Formats.it`, `Date.italiano(date:tim
 indipendentemente dalla lingua del dispositivo; l'italiano è anche la lingua di sviluppo del progetto.
 
 ---
+
+### Nessun collegamento esterno
+
+L'app non apre siti web né il browser: ciò che non si può integrare non c'è. I PDF pubblici dell'Ateneo (curriculum
+dei docenti, manifesto degli studi) si scaricano e si mostrano con Quick Look (`DocumentiPubblici`, solo host
+`*.unimi.it`). Restano solo le app di sistema (Mail, Telefono, Mappe) e i link della sezione Crediti.
 
 ## Requisiti e build
 
@@ -460,6 +468,12 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (11)
+
+- Tolti tutti i collegamenti a siti esterni: pagina myAriel dentro l'app e Safari, programma dell'insegnamento, "Chi e
+  dove", sito del dipartimento, link a SIFA (iscrizione, esiti, pagamenti). Curriculum e manifesto degli studi ora
+  si aprono nell'app con Quick Look; notifiche non di forum mostrano il testo completo; scadenze solo informative.
 
 ### 2026-09-30 (10)
 

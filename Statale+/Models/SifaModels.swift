@@ -8,7 +8,6 @@ nonisolated enum SifaApp: String, Sendable, CaseIterable {
 
     var root: String { rawValue }
     var checkLogin: URL { URL(string: "https://studente.unimi.it/\(rawValue)/checkLogin.asp")! }
-    var officialURL: URL { URL(string: "https://studente.unimi.it/\(rawValue)/")! }
 }
 
 /// "Esami del tuo corso di studio" (`foIscrizioneEsami/esamiPack/EsamiNonSostenutiDelCorsoPage`):

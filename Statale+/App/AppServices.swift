@@ -13,6 +13,7 @@ nonisolated final class AppServices: Sendable {
     let easyRoom: EasyRoomService
     let easyBadge: EasyBadgeService
     let manifesti: ManifestoService
+    let documenti: DocumentiPubblici
 
     init() {
         let casHTTP = HTTPClient(profile: .authenticated, minInterval: .milliseconds(800))
@@ -27,5 +28,6 @@ nonisolated final class AppServices: Sendable {
         easyRoom = EasyRoomService(http: publicHTTP)
         easyBadge = EasyBadgeService(http: publicHTTP)
         manifesti = ManifestoService(http: publicHTTP)
+        documenti = DocumentiPubblici(http: publicHTTP)
     }
 }

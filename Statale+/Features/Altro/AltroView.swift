@@ -89,7 +89,6 @@ struct CarrieraView: View {
                 Label(e.inAttesa ? "Hai esiti in attesa di accettazione (entro 10 giorni)" : "Nessun esito in attesa",
                       systemImage: e.inAttesa ? "exclamationmark.circle" : "checkmark.circle")
                     .foregroundStyle(e.inAttesa ? .orange : .green)
-                if e.inAttesa { Link("Accetta o rifiuta sul sito ufficiale", destination: SifaApp.verbalizzazione.officialURL) }
             }
             Section("Documenti") {
                 Button { Task { await apriPDF() } } label: {
@@ -177,11 +176,6 @@ struct TasseView: View {
             }
             if let msgs = tasse.value?.messaggi, !msgs.isEmpty {
                 Section("Avvisi") { ForEach(msgs, id: \.self) { Text(Testo.tipografia($0)).font(.subheadline) } }
-            }
-            Section {
-                Link(destination: SifaApp.pagamenti.officialURL) {
-                    Label("Vai ai pagamenti (SIFA / PagoPA)", systemImage: "arrow.up.right.square")
-                }
             }
             UpdatedFooter(date: tasse.updatedAt).listRowBackground(Color.clear)
         }

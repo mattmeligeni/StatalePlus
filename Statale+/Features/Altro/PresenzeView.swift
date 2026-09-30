@@ -70,10 +70,13 @@ struct PresenzeView: View {
                 }
             }
             if let f = app.frequenze.value?.first {
+                let fonte = app.soglia(per: f, manuale: sogliaManuale).fonte
                 Section {
-                    EmptyView()
+                    if fonte == .manifesto, let url = app.obbligoFrequenza?.url {
+                        DocumentoPDFRow(titolo: "Manifesto degli studi", simbolo: "doc.text", url: url)
+                    }
                 } footer: {
-                    fonteSoglia(app.soglia(per: f, manuale: sogliaManuale).fonte)
+                    Text("Soglia di frequenza \(fonte.descrizione). Si può cambiare in Impostazioni.")
                 }
             }
             UpdatedFooter(date: app.frequenze.updatedAt).listRowBackground(Color.clear)
@@ -109,16 +112,6 @@ struct PresenzeView: View {
         }
     }
 
-    @ViewBuilder
-    private func fonteSoglia(_ fonte: FonteSoglia) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Soglia di frequenza \(fonte.descrizione). Si può cambiare in Impostazioni.")
-            if fonte == .manifesto, let url = app.obbligoFrequenza?.url {
-                Link("Apri il manifesto degli studi", destination: url)
-            }
-        }
-        .font(.footnote)
-    }
 
     private func invia() async {
         guard !inviando, let m = app.studente?.matricolaAPI, !codice.trimmed.isEmpty else { return }

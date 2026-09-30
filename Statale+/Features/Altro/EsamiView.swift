@@ -251,11 +251,8 @@ struct AppelliDisponibiliView: View {
                 }
             }
             Section {
-                Link(destination: SifaApp.iscrizioneEsami.officialURL) {
-                    Label("Completa l'iscrizione sul sito ufficiale", systemImage: "arrow.up.right.square")
-                }
             } footer: {
-                Text("La lista è quella di SIFA › Esami del tuo corso di studio › Iscrizione. La conferma dell'iscrizione si fa ancora sul sito.")
+                Text("La lista è quella di SIFA › Esami del tuo corso di studio › Iscrizione. La conferma dell'iscrizione non è ancora disponibile nell'app.")
             }
             UpdatedFooter(date: selezione.updatedAt)
         }
