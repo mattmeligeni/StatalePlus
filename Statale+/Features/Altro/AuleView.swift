@@ -79,7 +79,7 @@ struct AuleView: View {
             ForEach(hits.prefix(150)) { o in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(o.nome).font(.subheadline.weight(.semibold))
-                    Text("\(o.dalle.prefix(5))–\(o.alle.prefix(5)) · \(o.tipo)\(o.docente.isEmpty ? "" : " · \(o.docente)")").font(.caption)
+                    Text("\(o.dalle.prefix(5))–\(o.alle.prefix(5)) · \(o.tipo)\(o.docente.isEmpty ? "" : " · \(Testo.persona(o.docente))")").font(.caption)
                     if let a = aule[o.aulaId], let url = Maps.url(address: a.indirizzo) {
                         Button { openURL(url) } label: {
                             Label("\(a.nome) · \(a.sede)", systemImage: "mappin.and.ellipse").font(.caption)

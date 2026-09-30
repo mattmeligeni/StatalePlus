@@ -35,12 +35,12 @@ struct OrarioView: View {
                         }
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
-                        weekHeader
                     } header: {
                         if !app.isMioCorsoOrario {
-                            Text(a.corsoOrario.cdl.label).textCase(nil)
+                            Text(Testo.nomeCorso(a.corsoOrario.cdl.label)).textCase(nil)
                         }
                     }
+                    Section { weekHeader }
                 }
                 if app.orario.value == nil, app.orario.error == nil {
                     HStack { Spacer(); ProgressView(); Spacer() }
@@ -210,7 +210,7 @@ struct LezioneDetail: View {
     @State private var nomeEspanso = false
 
     /// Il nome completo sta nella sezione in alto: tap per espanderlo se è lungo.
-    private var nomeLungo: Bool { lezione.insegnamento.count > 45 }
+    private var nomeLungo: Bool { lezione.insegnamento.count > 70 }
 
     var body: some View {
         NavigationStack {
@@ -240,10 +240,15 @@ struct LezioneDetail: View {
                     .accessibilityHint(nomeLungo ? (nomeEspanso ? "Comprimi il nome" : "Mostra il nome completo") : "")
                 }
                 Section {
-                    LabeledContent("Quando", value: "\(lezione.inizio.italiano(date: .abbreviated, time: .shortened)) – \(Formats.time(lezione.fine))")
+                    LabeledContent("Quando") {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(lezione.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Formats.it)))
+                            Text("\(Formats.time(lezione.inizio)) – \(Formats.time(lezione.fine))").monospacedDigit()
+                        }
+                    }
                     LabeledContent("Aula", value: lezione.aula)
                     LabeledContent("Sede", value: lezione.sede)
-                    LabeledContent("Docente", value: lezione.docente)
+                    LabeledContent("Docente", value: Testo.persona(lezione.docente))
                     LabeledContent("Tipo", value: lezione.tipo)
                     TimeStatusBadge(inizio: lezione.inizio, fine: lezione.fine, annullato: lezione.annullato)
                     if !lezione.note.isEmpty { Text(lezione.note) }
@@ -252,9 +257,12 @@ struct LezioneDetail: View {
                     Label("Apri in Mappe", systemImage: "map")
                 }
             }
+            .listSectionSpacing(.compact)
+            .contentMargins(.top, 8, for: .scrollContent)
             .navigationTitle("Lezione")
             .navigationBarTitleDisplayMode(.inline)
         }
+        .presentationBackground(Color(.systemGroupedBackground))
     }
 }
 
@@ -294,7 +302,7 @@ struct InsegnamentiSheet: View {
                                 set: { on in if on { scelti.insert(ins.codice) } else { scelti.remove(ins.codice) } })) {
                                 VStack(alignment: .leading) {
                                     Text(ins.nome).font(.subheadline)
-                                    Text("\(ins.codice) · \(ins.crediti) CFU · \(ins.docente)").font(.caption).foregroundStyle(.secondary)
+                                    Text("\(ins.codice) · \(ins.crediti) CFU · \(Testo.persona(ins.docente))").font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -371,8 +379,8 @@ struct CorsoPicker: View {
         } label: {
             HStack {
                 VStack(alignment: .leading) {
-                    Text(c.cdl.label).foregroundStyle(.primary)
-                    Text(c.cdl.codiceLettera).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    Text(Testo.nomeCorso(c.cdl.label)).foregroundStyle(.primary)
+                    Text(c.cdl.codiceLettera).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if c.cdl.valore == attuale?.cdl.valore { Image(systemName: "checkmark").foregroundStyle(Color.accentColor) }

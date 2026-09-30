@@ -68,6 +68,10 @@ private struct CalendarioAppelliView: View {
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
+                } header: {
+                    Text(Testo.nomeCorso(a.corsoEsami.cdl.label)).textCase(nil)
+                }
+                Section {
                     HStack {
                         Button { showVaiA = true } label: { Label("Vai a data", systemImage: "calendar.badge.clock") }
                         Spacer()
@@ -79,8 +83,6 @@ private struct CalendarioAppelliView: View {
                     }
                     .font(.callout)
                     .buttonStyle(.borderless)
-                } header: {
-                    Text(a.corsoEsami.cdl.label).textCase(nil)
                 }
             }
             if let error = app.appelli.error {

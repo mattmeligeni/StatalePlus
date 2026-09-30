@@ -118,7 +118,7 @@ nonisolated enum ArielParser {
             let name = a.text
             files.append(FileMoodle(nome: name.isEmpty ? url.lastPathComponent.removingPercentEncoding ?? "file" : name, url: url))
         }
-        return ModuloDettaglio(descrizione: HTML.readableText(intro), file: files, discussioni: discussioni(doc))
+        return ModuloDettaglio(descrizione: HTML.readableMarkdown(intro), file: files, discussioni: discussioni(doc))
     }
 
     private static func discussioni(_ doc: HTMLNode) -> [DiscussioneForum] {
@@ -141,7 +141,7 @@ nonisolated enum ArielParser {
                       oggetto: HTML.text(p.first("[data-region-content=forum-post-core-subject]")),
                       autore: HTML.text(p.first("header a[href*=/user/view.php]")),
                       data: p.first("time[datetime]").flatMap { Formats.isoDate($0.attr("datetime")) },
-                      testo: HTML.readableText(p.first(".post-content-container")))
+                      testo: HTML.readableMarkdown(p.first(".post-content-container")))
         }
     }
 

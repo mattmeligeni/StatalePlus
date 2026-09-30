@@ -56,21 +56,21 @@ struct CarrieraView: View {
         List {
             if let s = app.studente {
                 Section("Studente") {
-                    LabeledContent("Nome", value: s.nome.capitalized)
+                    LabeledContent("Nome", value: Testo.persona(s.nome))
                     LabeledContent("Matricola", value: s.matricola)
-                    LabeledContent("Corso", value: s.corso)
+                    LabeledContent("Corso", value: Testo.nomeCorso(s.corso))
                     LabeledContent("Codice corso", value: s.codiceCorso)
-                    LabeledContent("Tipo", value: s.tipoCorso)
+                    LabeledContent("Tipo", value: Testo.frase(s.tipoCorso))
                     LabeledContent("Anno", value: "\(s.anno)°")
-                    LabeledContent("Iscrizione", value: s.statoIscrizione)
+                    LabeledContent("Iscrizione", value: Testo.frase(s.statoIscrizione))
                     LabeledContent("Ultimo a.a.", value: s.ultimoAnnoIscrizione)
                 }
             }
             LiveSection(title: "Recapiti", live: recapiti, retry: loadRecapiti) { r in
-                LabeledContent("Residenza", value: r.residenza.capitalized)
-                LabeledContent("Recapito", value: r.recapito.capitalized)
+                LabeledContent("Residenza", value: Testo.indirizzo(r.residenza))
+                LabeledContent("Recapito", value: Testo.indirizzo(r.recapito))
                 LabeledContent("Cellulare", value: r.cellulare)
-                LabeledContent("Email", value: r.email)
+                LabeledContent("Email", value: r.email.lowercased())
             }
             LiveSection(title: "Libretto", live: libretto, retry: loadLibretto) { l in
                 if l.vuoto {

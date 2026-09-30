@@ -22,17 +22,21 @@ struct OggiView: View {
                     }
                 }
 
-                LiveSection(title: "Prossimo appello prenotato", live: app.prenotazioni, retry: app.loadPrenotazioni) { _ in
-                    if let next = app.prossimoAppelloPrenotato {
-                        PrenotazioneRow(prenotazione: next.prenotazione, appello: next.appello)
-                    } else {
-                        Text("Nessun appello prenotato").foregroundStyle(.secondary)
+                // Sezioni vuote raccolte in un'unica riga discreta.
+                let appelloVuoto = app.prenotazioni.value != nil && app.prenotazioni.error == nil && app.prossimoAppelloPrenotato == nil
+                let avvisiVuoti = avvisi.value?.isEmpty == true && avvisi.error == nil
+                if !appelloVuoto {
+                    LiveSection(title: "Prossimo appello prenotato", live: app.prenotazioni, retry: app.loadPrenotazioni) { _ in
+                        if let next = app.prossimoAppelloPrenotato {
+                            PrenotazioneRow(prenotazione: next.prenotazione, appello: next.appello)
+                        }
                     }
                 }
 
+                if !avvisiVuoti {
                 LiveSection(title: "Avvisi Ariel (ultimi 7 giorni)", live: avvisi, retry: loadAvvisi) { list in
                     if list.isEmpty {
-                        Text("Nessun avviso recente").foregroundStyle(.secondary)
+                        EmptyView()
                     } else {
                         ForEach(list) { a in
                             NavigationLink { DiscussionView(discussione: a.discussione) } label: {
@@ -48,6 +52,16 @@ struct OggiView: View {
                     }
                 }
 
+                }
+
+                if appelloVuoto || avvisiVuoti {
+                    Section {
+                        Label(riepilogoVuoti(appello: appelloVuoto, avvisi: avvisiVuoti), systemImage: "tray")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 LiveSection(title: "Tasse", live: tasse, retry: loadTasse) { t in
                     if t.totaleDaPagare > 0 {
                         Label("Da pagare: \(Formats.euroString(t.totaleDaPagare))", systemImage: "eurosign.circle")
@@ -56,9 +70,13 @@ struct OggiView: View {
                         Label("Tasse in regola", systemImage: "checkmark.seal").foregroundStyle(.green)
                     }
                     if let s = t.prossimaScadenza {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Label(s.descrizione, systemImage: "calendar").font(.subheadline)
-                            if let nota = s.nota { Text(nota).font(.caption).foregroundStyle(.secondary).padding(.leading, 30) }
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(s.descrizione).font(.subheadline)
+                                if let nota = s.nota { Text(nota).font(.caption).foregroundStyle(.secondary) }
+                            }
+                        } icon: {
+                            Image(systemName: "calendar")
                         }
                     }
                 }
@@ -90,6 +108,14 @@ struct OggiView: View {
         }
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+    }
+
+    private func riepilogoVuoti(appello: Bool, avvisi: Bool) -> String {
+        switch (appello, avvisi) {
+        case (true, true): "Nessun appello prenotato e nessun avviso Ariel negli ultimi 7 giorni."
+        case (true, false): "Nessun appello prenotato."
+        default: "Nessun avviso Ariel negli ultimi 7 giorni."
+        }
     }
 
     private var saluto: String {
@@ -289,6 +315,32 @@ private struct LezioneOggiRow: View {
 
     private var lezione: Lezione { lezioni[indice] }
 
+    @ViewBuilder
+    private func azioni(_ lezione: Lezione) -> some View {
+        if app.presenzaConfermata(lezione) {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                Text("Presenza registrata")
+            }
+            .foregroundStyle(.green)
+            .lineLimit(1)
+            .fixedSize()
+        } else {
+            Button("Conferma presenza") { app.apriConfermaPresenza(lezione) }
+                .buttonStyle(.borderedProminent)
+                .tint(.purple)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        Button(app.recorder.state == .idle ? "Inizia registrazione" : "Registrazione in corso") {
+            app.avviaRegistrazione(lezione)
+        }
+        .buttonStyle(.bordered)
+        .tint(.red)
+        .lineLimit(1)
+        .fixedSize()
+    }
+
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             let t = ctx.date.addingTimeInterval(sfasamento)
@@ -305,20 +357,10 @@ private struct LezioneOggiRow: View {
                         }
                     }
                 if mostraAzioni, AppModel.inFinestraAzioni(lezione, now: t) {
-                    HStack(spacing: 10) {
-                        if app.presenzaConfermata(lezione) {
-                            Label("Presenza registrata", systemImage: "checkmark.seal.fill")
-                                .font(.caption.bold()).foregroundStyle(.green)
-                        } else {
-                            Button("Conferma presenza") { app.apriConfermaPresenza(lezione) }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.purple)
-                        }
-                        Button(app.recorder.state == .idle ? "Inizia registrazione" : "Registrazione in corso") {
-                            app.avviaRegistrazione(lezione)
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
+                    // Su una riga se c'è spazio, altrimenti uno sotto l'altro: mai testo a capo nei pulsanti.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { azioni(lezione) }
+                        VStack(alignment: .leading, spacing: 8) { azioni(lezione) }
                     }
                     .font(.caption.weight(.semibold))
                     .controlSize(.small)
@@ -329,6 +371,7 @@ private struct LezioneOggiRow: View {
                     if let prossimaFutura { ProssimaLezioneNota(lezione: prossimaFutura, adesso: t).transition(.opacity) }
                 }
             }
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
             .animation(.easeInOut(duration: 0.4), value: prossima)
             .animation(.easeInOut(duration: 0.4), value: inCorso)
         }
@@ -353,8 +396,8 @@ struct PrenotazioneRow: View {
             Text((appello?.inizio ?? prenotazione.data).formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Formats.it)))
                 .font(.caption)
             if let appello {
-                HStack {
-                    Label("\(appello.aula) · \(appello.sede)", systemImage: "mappin.and.ellipse").font(.caption).foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline) {
+                    LuogoLezione(aula: appello.aula, sede: appello.sede)
                     Spacer()
                     MapsButton(aula: appello.aula, sede: appello.sede, codici: appello.aulaCodici) { Text("Mappa") }
                         .font(.caption).buttonStyle(.borderless)
@@ -374,15 +417,14 @@ struct AppelloRow: View {
             Text(appello.insegnamento).font(.subheadline.weight(.semibold)).strikethrough(appello.annullato)
             Text(appello.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Formats.it)))
                 .font(.caption)
-            HStack {
-                Label("\(appello.aula) · \(appello.sede)", systemImage: "mappin.and.ellipse")
-                    .font(.caption).foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                LuogoLezione(aula: appello.aula, sede: appello.sede)
                 Spacer()
                 MapsButton(aula: appello.aula, sede: appello.sede, codici: appello.aulaCodici) { Text("Mappa") }
                     .font(.caption).buttonStyle(.borderless)
             }
             if !appello.docenti.isEmpty {
-                Text(appello.docenti.joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary)
+                Text(appello.docenti.map(Testo.persona).joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary)
             }
             TimeStatusBadge(inizio: appello.inizio, fine: appello.fine, annullato: appello.annullato)
             if !appello.note.isEmpty { Text(appello.note).font(.caption).foregroundStyle(.orange) }

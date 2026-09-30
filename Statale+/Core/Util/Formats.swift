@@ -85,6 +85,63 @@ nonisolated enum Formats {
     static func time(_ d: Date) -> String { d.formatted(.dateTime.hour().minute().locale(Locale(identifier: "it_IT"))) }
 }
 
+// MARK: - Testi mostrati
+
+nonisolated enum Testo {
+    /// Markdown inline (grassetto, corsivo) conservando gli a capo.
+    static func markdown(_ s: String) -> AttributedString {
+        (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
+    }
+
+    /// "NEUROPSICOLOGIA CLINICA" → "Neuropsicologia clinica" (solo se il testo è tutto maiuscolo).
+    static func frase(_ s: String) -> String {
+        guard s == s.uppercased(), s != s.lowercased() else { return s }
+        let l = s.lowercased()
+        return l.prefix(1).uppercased() + l.dropFirst()
+    }
+
+    /// "DBD - NEUROPSICOLOGIA CLINICA E SPERIMENTALE (Classe LM-51 R) (CDS MAGISTRALE)"
+    /// e "Neuropsicologia clinica e sperimentale (classe lm-51 r)" → "Neuropsicologia clinica e sperimentale · LM-51 R".
+    static func nomeCorso(_ label: String) -> String {
+        var s = label.collapsed
+        s = s.replacingOccurrences(of: #"^[A-Z0-9]{2,6}\s+-\s+"#, with: "", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"\s*\((CDS|CORSO|MASTER|SEMESTRE)[^)]*\)\s*$"#, with: "", options: [.regularExpression, .caseInsensitive])
+        let classe = s.firstMatch(#"\(\s*classe\s+([^)]+)\)"#, options: .caseInsensitive)?.trimmed.uppercased()
+        s = s.replacingOccurrences(of: #"\s*\(\s*classe\s+[^)]+\)"#, with: "", options: [.regularExpression, .caseInsensitive]).trimmed
+        s = frase(s)
+        return classe.map { "\(s) · \($0)" } ?? s
+    }
+
+    /// "ROSSI MARIO" → "Rossi Mario"; anche liste "A B, C D". L'ordine dei nomi resta quello della fonte.
+    static func persona(_ s: String) -> String {
+        s.split(separator: ",").map { parte in
+            parte.split(separator: " ").map { String($0).lowercased().capitalized }.joined(separator: " ")
+        }
+        .joined(separator: ", ")
+    }
+
+    private static let particelle: Set<String> = ["di", "del", "della", "dei", "degli", "delle", "da", "dal", "dalla", "e", "in", "sul", "al", "alla", "ai"]
+
+    private static func titolo(_ s: String) -> String {
+        s.lowercased().split(separator: " ").enumerated().map { i, w in
+            let w = String(w)
+            return i > 0 && particelle.contains(w) ? w : w.capitalized
+        }
+        .joined(separator: " ")
+    }
+
+    /// "via mario rossi 10 20100 milano  MI italia" → "Via Mario Rossi 10, 20100 Milano (MI), Italia".
+    static func indirizzo(_ s: String) -> String {
+        let t = s.collapsed
+        guard let re = try? NSRegularExpression(pattern: #"^(.*?)\s+(\d{5})\s+(.+?)\s+([A-Za-z]{2})\s+([A-Za-z ]+)$"#),
+              let m = re.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)), m.numberOfRanges == 6 else {
+            return titolo(t)
+        }
+        func g(_ i: Int) -> String { Range(m.range(at: i), in: t).map { String(t[$0]) } ?? "" }
+        return "\(titolo(g(1))), \(g(2)) \(titolo(g(3))) (\(g(4).uppercased())), \(titolo(g(5)))"
+    }
+}
+
 nonisolated extension String {
     var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
     /// Collassa spazi/a capo multipli.

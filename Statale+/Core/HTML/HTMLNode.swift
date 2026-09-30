@@ -112,4 +112,56 @@ nonisolated final class HTMLNode {
             .joined(separator: "\n")
             .trimmed
     }
+
+    /// Come `readableText`, ma in Markdown inline: `**grassetto**` e `*corsivo*` da strong/b ed em/i, elenchi puntati
+    /// senza righe vuote fra un punto e l'altro. Da mostrare con `Testo.markdown(_:)`.
+    var readableMarkdown: String {
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: #"([\\*_\[\]`])"#, with: #"\\$1"#, options: .regularExpression)
+        }
+        func render(_ n: HTMLNode) -> String {
+            var out = ""
+            for c in n.children {
+                switch c.kind {
+                case .text:
+                    out += esc(c.textValue.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression))
+                case .element:
+                    switch c.tag {
+                    case "br": out += "\n"
+                    case "script", "style": break
+                    case "li": out += "\n• " + render(c).trimmed + "\n"
+                    case "strong", "b", "em", "i":
+                        let inner = render(c)
+                        let t = inner.trimmingCharacters(in: .whitespaces)
+                        if t.isEmpty || t.contains("\n") {
+                            out += inner
+                        } else {
+                            let m = (c.tag == "strong" || c.tag == "b") ? "**" : "*"
+                            let lead = inner.hasPrefix(" ") ? " " : ""
+                            let trail = inner.hasSuffix(" ") ? " " : ""
+                            out += lead + m + t + m + trail
+                        }
+                    default:
+                        let block = Self.blockTags.contains(c.tag)
+                        if block { out += "\n" }
+                        out += render(c)
+                        if block { out += "\n" }
+                    }
+                case .document: break
+                }
+            }
+            return out
+        }
+        let righe = render(self).components(separatedBy: "\n").map { $0.collapsed }
+        var risultato: [String] = []
+        for (i, riga) in righe.enumerated() {
+            if riga.isEmpty {
+                guard let ultima = risultato.last, !ultima.isEmpty else { continue }
+                let prossima = righe[(i + 1)...].first { !$0.isEmpty }
+                if ultima.hasPrefix("• "), prossima?.hasPrefix("• ") == true { continue }
+            }
+            risultato.append(riga)
+        }
+        return risultato.joined(separator: "\n").trimmed
+    }
 }

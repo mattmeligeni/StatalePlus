@@ -125,8 +125,7 @@ struct LezioneRow: View {
                     .font(enfasi == .prossima ? .headline : .subheadline.weight(enfasi == .normale ? .semibold : .regular))
                     .strikethrough(lezione.annullato)
                     .lineLimit(2)
-                Label("\(lezione.aula) · \(lezione.sede)", systemImage: "mappin.and.ellipse")
-                    .font(.caption).foregroundStyle(.secondary)
+                LuogoLezione(aula: lezione.aula, sede: lezione.sede)
                 TimeStatusBadge(inizio: lezione.inizio, fine: lezione.fine, annullato: lezione.annullato, adesso: adesso)
                 if !lezione.note.isEmpty {
                     Text(lezione.note).font(.caption).foregroundStyle(.orange)
@@ -208,5 +207,36 @@ struct ProfileAvatar: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
+    }
+}
+
+/// Riga con icona a larghezza fissa, così le etichette restano allineate anche con simboli larghi.
+struct RigaIcona: View {
+    let titolo: String
+    let simbolo: String
+    init(_ titolo: String, simbolo: String) { self.titolo = titolo; self.simbolo = simbolo }
+
+    var body: some View {
+        Label {
+            Text(titolo)
+        } icon: {
+            Image(systemName: simbolo).frame(width: 28)
+        }
+    }
+}
+
+/// Aula in evidenza e sede sulla riga sotto, invece di "Aula · Sede" che va a capo a metà.
+struct LuogoLezione: View {
+    let aula: String
+    let sede: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: "mappin.and.ellipse").font(.caption2).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(aula).font(.caption.weight(.medium))
+                if !sede.isEmpty { Text(sede).font(.caption).foregroundStyle(.secondary) }
+            }
+        }
     }
 }

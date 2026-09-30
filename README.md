@@ -66,8 +66,13 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   - **Conferma presenza** → apre _Altro › Presenze_ sulla lezione. Il pulsante scompare a lezione finita, se il server
     risulta già avere la presenza (anche confermata da un altro dispositivo o dal web) o dopo una risposta positiva.
   - **Inizia registrazione** → apre _Registrazioni_ e avvia subito la registrazione dell'insegnamento.
+  - I pulsanti stanno su una riga se c'è spazio, altrimenti uno sotto l'altro (mai testo a capo); a presenza
+    registrata compare l'etichetta compatta "Presenza registrata".
+- Aula e sede su due righe (aula in evidenza, sede in grigio) in lezioni, appelli e prenotazioni.
 - **Prossimo appello prenotato** (da SIFA), arricchito con aula e sede dal calendario Agenda e pulsante Mappe.
 - **Avvisi Ariel** degli ultimi 7 giorni (bacheche dei corsi attivi).
+- Sezioni vuote raccolte in una sola riga discreta ("Nessun appello prenotato e nessun avviso Ariel negli ultimi
+  7 giorni"); se ne manca solo una, la riga cita solo quella.
 - **Tasse**: importo da pagare oppure "Tasse in regola"; la prossima scadenza è spiegata a partire dagli avvisi UNIMIA
   (es. "Seconda rata non ancora emessa · scadenza 2 febbraio 2027 – Pagabile con PagoPA dal 2 gennaio 2027"): si ricava
   a quale rata si riferisce e se è già stata emessa (presente fra le righe della situazione amministrativa).
@@ -75,7 +80,12 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 ### Orario
 
 - Settimana navigabile, lezioni raggruppate per giorno, dettaglio con aula, sede, docente e **Apri in Mappe**; nel dettaglio
-  il nome completo dell'insegnamento è in alto e, se lungo, si espande con un tap.
+  il nome completo dell'insegnamento è in alto e, se lungo, si espande con un tap; "Quando" riporta il giorno della
+  settimana e, sotto, l'orario (es. "08:30 – 12:30").
+- Pillole dei periodi e intestazione della settimana in blocchi separati (lo stesso vale per anni e "Vai a data" negli
+  Esami).
+- Nomi dei corsi leggibili ovunque: "DBD - NEUROPSICOLOGIA CLINICA E SPERIMENTALE (Classe LM-51 R) (CDS MAGISTRALE)"
+  diventa "Neuropsicologia clinica e sperimentale · LM-51 R"; i docenti passano da "ROSSI MARIO" a "Rossi Mario".
 - **Vai a data**: scelta una data (es. 7 ottobre 2026) porta alla sua settimana (5–11 ottobre); se la data cade in un
   altro periodo didattico, cambia anche la pillola del periodo.
 - **Pillole dei periodi** lette dall'API (semestri, trimestri, quadrimestri, annuale); default: periodo in corso.
@@ -85,14 +95,17 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 
 ### Ariel
 
-- Offerta dell'anno accademico corrente: corsi con sito attivo in cima, gli altri in grigio.
-- Dettaglio corso: scheda insegnamento (obiettivi, periodo, lingua, docenti, link), **Calendario lezioni**
-  (modal con le sole lezioni della materia dalle API Agenda), contenuti per sezione, moduli con descrizione,
+- Offerta dell'anno accademico corrente: corsi con sito attivo in cima; quelli senza sito didattico sono raccolti in
+  un gruppo richiudibile. Ogni riga: titolo, codice e titolari su una riga.
+- Dettaglio corso: titolo in alto, una sezione per ogni sezione Moodle con icone allineate; descrizioni e post con
+  grassetto, corsivo ed elenchi puntati. Scheda insegnamento (obiettivi, periodo, lingua, docenti, link), **Calendario lezioni**
+  (modal compatto con le sole lezioni della materia dalle API Agenda, raggruppate per mese), contenuti per sezione, moduli con descrizione,
   file (anteprima Quick Look), forum e discussioni, partecipanti, valutazioni.
 
 ### Registrazioni
 
-- Registrazione vocale collegata a un insegnamento attivato (suggerito automaticamente se c'è una lezione in corso).
+- Registrazione vocale collegata a un insegnamento attivato (suggerito automaticamente se c'è una lezione in corso),
+  scelto da un selettore a tutta larghezza allineato a sinistra.
 - Timer, livello microfono, pausa/ripresa, **segnalibri**, annulla; continua a schermo bloccato e si mette in pausa
   durante le telefonate.
 - Archivio ordinato per insegnamento: la schermata principale elenca solo gli insegnamenti che hanno registrazioni
@@ -121,7 +134,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 
 ### Altro
 
-- **Carriera e libretto**: profilo, recapiti, libretto, esiti da accettare, PDF "prossimi appelli" del corso.
+- **Carriera e libretto**: profilo, recapiti, libretto, esiti da accettare, PDF "prossimi appelli" del corso. Nomi,
+  stato d'iscrizione e indirizzi sono normalizzati ("via mario rossi 10 20100 milano MI italia" → "Via Mario Rossi 10,
+  20100 Milano (MI), Italia").
 - **Tasse e pagamenti**: righe della situazione amministrativa, totali, avvisi, link ai pagamenti SIFA.
 - **Esami**
   - _Calendario_: appelli dalle API Agenda per corso e anno (pillole), raggruppati per settimana, corso modificabile
@@ -167,6 +182,10 @@ Da riga di comando (simulatore):
 ```bash
 xcodebuild -project Statale+.xcodeproj -scheme "Statale+" -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
 ```
+
+Per installare nel simulatore conviene la build firmata ("Sign to Run Locally", senza `CODE_SIGNING_ALLOWED=NO`):
+una build non firmata non ha l'`application-identifier` del team e quindi non vede le credenziali salvate nel
+Portachiavi dalla build di Xcode.
 
 Impostazioni di progetto rilevanti: `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
 `SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (solo `UIBackgroundModes = audio`).
@@ -362,6 +381,18 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (2)
+
+- Oggi: pulsanti rapidi mai a capo, "Presenza registrata" compatta, nota delle tasse allineata al testo, sezioni vuote
+  raccolte in una riga, aula e sede su due righe anche per appelli e prenotazioni.
+- Orario ed Esami: pillole e settimana in blocchi separati; nomi dei corsi e dei docenti leggibili anche nel selettore
+  dei corsi e negli insegnamenti.
+- Dettaglio lezione: giorno della settimana e orari "08:30", meno spazio in alto, sfondo pieno.
+- Ariel: corsi senza sito in un gruppo richiudibile, titolo del corso e sezioni Moodle, icone allineate, testo con
+  grassetto/corsivo/elenchi, calendario lezioni compatto per mese.
+- Carriera: corso, stato e indirizzi normalizzati.
+- Registrazioni: selettore dell'insegnamento allineato a sinistra.
 
 ### 2026-09-30
 

@@ -5,6 +5,7 @@ import QuickLook
 struct ArielCoursesView: View {
     @Environment(AppModel.self) private var app
     @State private var offerta = Live<[InsegnamentoOfferta]>()
+    @State private var mostraSenzaSito = false
 
     var body: some View {
         NavigationStack {
@@ -12,12 +13,20 @@ struct ArielCoursesView: View {
                 if let e = app.arielError, offerta.value == nil {
                     Section { ErrorRow(message: e, retry: reload) }
                 }
-                LiveSection(title: "Anno accademico \(Formats.currentAcademicYear())", live: offerta, retry: reload) { corsi in
-                    ForEach(corsi.sorted { ($0.attivo ? 0 : 1, $0.titolo) < ($1.attivo ? 0 : 1, $1.titolo) }) { corso in
-                        if corso.attivo {
-                            NavigationLink { CourseDetailView(corso: corso) } label: { CourseRow(corso: corso) }
-                        } else {
-                            CourseRow(corso: corso).foregroundStyle(.secondary)
+                LiveSection(title: "Con sito attivo · \(Formats.currentAcademicYear())", live: offerta, retry: reload) { corsi in
+                    let attivi = corsi.filter(\.attivo).sorted { $0.titolo < $1.titolo }
+                    if attivi.isEmpty { Text("Nessun corso con sito attivo").foregroundStyle(.secondary) }
+                    ForEach(attivi) { corso in
+                        NavigationLink { CourseDetailView(corso: corso) } label: { CourseRow(corso: corso) }
+                    }
+                }
+                if let corsi = offerta.value, corsi.contains(where: { !$0.attivo }) {
+                    let altri = corsi.filter { !$0.attivo }.sorted { $0.titolo < $1.titolo }
+                    Section {
+                        DisclosureGroup(isExpanded: $mostraSenzaSito) {
+                            ForEach(altri) { CourseRow(corso: $0).foregroundStyle(.secondary) }
+                        } label: {
+                            Text("Senza sito didattico (\(altri.count))").font(.subheadline)
                         }
                     }
                 }
@@ -50,12 +59,10 @@ private struct CourseRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(corso.titolo).font(.subheadline.weight(corso.attivo ? .semibold : .regular)).lineLimit(3)
-            HStack {
-                Text(corso.codice).font(.caption.monospaced())
-                if !corso.titolari.isEmpty { Text("· " + corso.titolari.map(\.capitalized).joined(separator: ", ")).font(.caption) }
-            }
-            .foregroundStyle(.secondary)
-            if !corso.attivo { Text("Nessun sito didattico attivato").font(.caption2).italic() }
+            Text(([corso.codice] + (corso.titolari.isEmpty ? [] : [corso.titolari.map { Testo.persona($0) }.joined(separator: ", ")]))
+                .joined(separator: " · "))
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -72,29 +79,42 @@ struct CourseDetailView: View {
 
     var body: some View {
         List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(corso.titolo).font(.title3.bold()).fixedSize(horizontal: false, vertical: true)
+                    Text(([corso.codice] + corso.titolari.map { Testo.persona($0) }).joined(separator: " · "))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
+            }
             LiveSection(title: "Scheda insegnamento", live: scheda, retry: { await loadScheda(force: true) }) { s in
                 if let s { SchedaView(scheda: s, corso: corso) } else { Text("Scheda non disponibile").foregroundStyle(.secondary) }
             }
-            LiveSection(title: "Contenuti", live: struttura, retry: loadStruttura) { state in
+            if let state = struttura.value {
+                // Una sezione della lista per ogni sezione Moodle.
                 ForEach(state.section.filter(\.visible)) { section in
                     let mods = state.modules(in: section).filter { $0.uservisible ?? $0.visible }
                     if !mods.isEmpty {
-                        Text(section.title).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-                        ForEach(mods) { m in
-                            NavigationLink { ModuleView(module: m) } label: {
-                                Label(m.name, systemImage: icon(for: m.module))
+                        Section(section.title) {
+                            ForEach(mods) { m in
+                                NavigationLink { ModuleView(module: m) } label: { RigaIcona(m.name, simbolo: icon(for: m.module)) }
                             }
                         }
                     }
                 }
+                if let e = struttura.error { Section { ErrorRow(message: e, retry: loadStruttura) } }
+            } else {
+                LiveSection(title: "Contenuti", live: struttura, retry: loadStruttura) { _ in EmptyView() }
             }
             Section("Corso") {
-                NavigationLink { ValutazioniView(courseId: courseId) } label: { Label("Valutazioni", systemImage: "checkmark.seal") }
-                NavigationLink { PartecipantiView(courseId: courseId) } label: { Label("Partecipanti", systemImage: "person.3") }
+                NavigationLink { ValutazioniView(courseId: courseId) } label: { RigaIcona("Valutazioni", simbolo: "checkmark.seal") }
+                NavigationLink { PartecipantiView(courseId: courseId) } label: { RigaIcona("Partecipanti", simbolo: "person.2") }
             }
             UpdatedFooter(date: struttura.updatedAt).listRowBackground(Color.clear)
         }
         .navigationTitle(corso.codice)
+        .navigationBarTitleDisplayMode(.inline)
         .refreshable {
             async let a: Void = loadStruttura()
             async let b: Void = loadScheda(force: true)
@@ -181,7 +201,7 @@ struct ModuleView: View {
         List {
             LiveSection(title: module.modname, live: dettaglio, retry: load) { d in
                 if !d.descrizione.isEmpty {
-                    Text(d.descrizione).font(.callout).textSelection(.enabled)
+                    Text(Testo.markdown(d.descrizione)).font(.callout).textSelection(.enabled)
                 } else if d.file.isEmpty && d.discussioni.isEmpty {
                     Text("Nessun contenuto testuale").foregroundStyle(.secondary)
                 }
@@ -242,7 +262,7 @@ struct DiscussionView: View {
                             if let d = p.data { Text("· " + d.italiano(date: .abbreviated, time: .shortened)) }
                         }
                         .font(.caption).foregroundStyle(.secondary)
-                        Text(p.testo).font(.callout).textSelection(.enabled)
+                        Text(Testo.markdown(p.testo)).font(.callout).textSelection(.enabled)
                     }
                     .padding(.vertical, 4)
                 }

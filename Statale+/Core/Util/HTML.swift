@@ -8,6 +8,8 @@ nonisolated enum HTML {
 
     static func readableText(_ el: HTMLNode?) -> String { el?.readableText ?? "" }
 
+    static func readableMarkdown(_ el: HTMLNode?) -> String { el?.readableMarkdown ?? "" }
+
     /// Coppie `<li><label>Chiave: </label>Valore</li>` (UNIMIA, blocchi #div_studente / #div_anagrafica).
     static func labelPairs(in container: HTMLNode?) -> [String: String] {
         guard let container else { return [:] }

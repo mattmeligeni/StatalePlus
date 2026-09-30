@@ -152,13 +152,24 @@ private struct RecorderCard: View {
             if rec.state == .idle {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Insegnamento").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
-                    Picker("Insegnamento", selection: $scelto) {
-                        Text("Nessun insegnamento").tag(String?.none)
-                        ForEach(insegnamenti) { Text($0.nome).tag(Optional($0.codice)) }
+                    Menu {
+                        Picker("Insegnamento", selection: $scelto) {
+                            Text("Nessun insegnamento").tag(String?.none)
+                            ForEach(insegnamenti) { Text($0.nome).tag(Optional($0.codice)) }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(insegnamenti.first { $0.codice == scelto }?.nome ?? "Nessun insegnamento")
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(2)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.up.chevron.down").font(.caption.weight(.semibold))
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 10)
+                        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
                     }
-                    .labelsHidden()
+                    .tint(.primary)
                 }
-                .pickerStyle(.menu)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
                     Task { await rec.start(in: app.recordings, insegnamento: insegnamenti.first { $0.codice == scelto }) }
