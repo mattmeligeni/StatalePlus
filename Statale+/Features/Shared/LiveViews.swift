@@ -1,14 +1,17 @@
 import SwiftUI
 
-/// Banner "aggiornato alle HH:MM".
+/// Banner "aggiornato alle HH:MM", in una sezione propria: non si attacca mai alle righe sciolte che lo precedono.
 struct UpdatedFooter: View {
     let date: Date?
     var body: some View {
         if let date {
-            Text("Aggiornato alle \(Formats.time(date))")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
+            Section {
+                Text("Aggiornato alle \(Formats.time(date))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+            }
         }
     }
 }
@@ -27,7 +30,7 @@ struct LiveSection<Value, Content: View>: View {
             } else if let error = live.error {
                 ErrorRow(message: error, retry: retry)
             } else {
-                HStack { Spacer(); ProgressView(); Spacer() }
+                RigaSegnaposto()
             }
             if live.value != nil, let error = live.error {
                 ErrorRow(message: error, retry: retry)
@@ -35,6 +38,23 @@ struct LiveSection<Value, Content: View>: View {
         } header: {
             Text(title)
         }
+    }
+}
+
+/// Riga sfumata mostrata durante il primo caricamento, al posto della rotellina.
+struct RigaSegnaposto: View {
+    @State private var attenuata = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Caricamento del contenuto in corso").font(.subheadline.weight(.semibold))
+            Text("Dettagli dell'elemento").font(.caption)
+        }
+        .redacted(reason: .placeholder)
+        .opacity(attenuata ? 0.4 : 1)
+        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: attenuata)
+        .onAppear { attenuata = true }
+        .accessibilityLabel("Caricamento")
     }
 }
 
@@ -166,25 +186,39 @@ struct PillPicker<Item: Identifiable & Hashable>: View {
     let items: [Item]
     let selected: Item?
     let title: (Item) -> String
+    /// Etichetta corta per quando le pillole non ci stanno (es. "Secondo trimestre" → "2° trimestre").
+    var titoloBreve: ((Item) -> String)? = nil
     let onSelect: (Item) -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(items) { item in
-                    let on = item == selected
-                    Button { onSelect(item) } label: {
-                        Text(title(item))
-                            .font(.subheadline.weight(on ? .semibold : .regular))
-                            .padding(.horizontal, 14).padding(.vertical, 7)
-                            .foregroundStyle(on ? Color.white : Color.primary)
-                            .background(on ? Color.accentColor : Color(.secondarySystemFill), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
+        // Centrate se ci stanno (anche in versione compatta, es. tre trimestri), altrimenti scorrevoli.
+        ViewThatFits(in: .horizontal) {
+            pillole(compatte: false).padding(.horizontal).frame(maxWidth: .infinity)
+            pillole(compatte: true).padding(.horizontal).frame(maxWidth: .infinity)
+            if titoloBreve != nil {
+                pillole(compatte: true, brevi: true).padding(.horizontal).frame(maxWidth: .infinity)
             }
-            .padding(.horizontal)
+            ScrollView(.horizontal, showsIndicators: false) {
+                pillole(compatte: true, brevi: titoloBreve != nil).padding(.horizontal)
+            }
         }
+    }
+
+    private func pillole(compatte: Bool, brevi: Bool = false) -> some View {
+        HStack(spacing: compatte ? 6 : 8) {
+            ForEach(items) { item in
+                let on = item == selected
+                Button { onSelect(item) } label: {
+                    Text(brevi ? (titoloBreve?(item) ?? title(item)) : title(item))
+                        .font((compatte ? Font.footnote : .subheadline).weight(on ? .semibold : .regular))
+                        .padding(.horizontal, compatte ? 10 : 14).padding(.vertical, 7)
+                        .foregroundStyle(on ? Color.white : Color.primary)
+                        .background(on ? Color.accentColor : Color(.secondarySystemFill), in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .fixedSize()
     }
 }
 

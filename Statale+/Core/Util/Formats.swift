@@ -82,6 +82,11 @@ nonisolated enum Formats {
         return "\(a) – \(end.formatted(.dateTime.day().month(.wide).year().locale(it)))"
     }
 
+    /// "mer 30 settembre · 11:00"
+    static func giornoEOra(_ d: Date) -> String {
+        "\(d.formatted(.dateTime.weekday(.abbreviated).day().month(.wide).locale(it))) · \(time(d))"
+    }
+
     static func time(_ d: Date) -> String { d.formatted(.dateTime.hour().minute().locale(Locale(identifier: "it_IT"))) }
 }
 
@@ -91,6 +96,19 @@ nonisolated enum Testo {
     /// Markdown inline (grassetto, corsivo) conservando gli a capo.
     static func markdown(_ s: String) -> AttributedString {
         (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
+    }
+
+    /// "mercoledì 30 settembre" → "Mercoledì 30 settembre" (solo la prima lettera).
+    static func maiuscolaIniziale(_ s: String) -> String {
+        s.prefix(1).uppercased() + s.dropFirst()
+    }
+
+    /// "secondo trimestre" → "2° trimestre" (etichette dei periodi quando lo spazio è poco).
+    static func periodoBreve(_ s: String) -> String {
+        let ordinali = ["primo": "1°", "secondo": "2°", "terzo": "3°", "quarto": "4°"]
+        let parti = s.lowercased().split(separator: " ", maxSplits: 1).map(String.init)
+        guard parti.count == 2, let n = ordinali[parti[0]] else { return maiuscolaIniziale(s.lowercased()) }
+        return "\(n) \(parti[1])"
     }
 
     /// "NEUROPSICOLOGIA CLINICA" → "Neuropsicologia clinica" (solo se il testo è tutto maiuscolo).
@@ -128,6 +146,34 @@ nonisolated enum Testo {
             return i > 0 && particelle.contains(w) ? w : w.capitalized
         }
         .joined(separator: " ")
+    }
+
+    /// "CONTRIB. REGIONE LOMBARDIA" → "Contributo Regione Lombardia",
+    /// "IMP. DI BOLLO - RIMBORSO SPESE" → "Imposta di Bollo – Rimborso Spese".
+    static func voceTassa(_ s: String) -> String {
+        guard s == s.uppercased() else { return s }
+        let estese = s.collapsed
+            .replacingOccurrences(of: #"\bCONTRIB\."#, with: "CONTRIBUTO", options: .regularExpression)
+            .replacingOccurrences(of: #"\bIMP\."#, with: "IMPOSTA", options: .regularExpression)
+            .replacingOccurrences(of: " - ", with: " – ")
+        return titolo(estese)
+    }
+
+    /// Grafia dei testi dei siti d'Ateneo: "E' possibile", "si puo' pagare", "Pago PA" → "È possibile", "si può pagare", "PagoPA".
+    static func tipografia(_ s: String) -> String {
+        var t = s.replacingOccurrences(of: #"\bE'(?=\s)"#, with: "È", options: .regularExpression)
+        let accenti: [(String, String)] = [("che", "ché"), ("a", "à"), ("e", "è"), ("i", "ì"), ("o", "ò"), ("u", "ù")]
+        for (da, a) in accenti {
+            t = t.replacingOccurrences(of: "(?<!')\\b(\\p{L}*)\(da)'(?![\\p{L}])", with: "$1\(a)", options: .regularExpression)
+        }
+        return t.replacingOccurrences(of: #"\bPago\s?PA\b"#, with: "PagoPA", options: .regularExpression)
+    }
+
+    /// EasyRoom: "Via Celoria, 2, Milano, 20133" → "Via Celoria 2, 20133 Milano".
+    static func indirizzoSede(_ s: String) -> String {
+        let p = s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard p.count == 4, p[3].count == 5, p[3].allSatisfy(\.isNumber) else { return s }
+        return "\(p[0]) \(p[1]), \(p[3]) \(p[2])"
     }
 
     /// "via mario rossi 10 20100 milano  MI italia" → "Via Mario Rossi 10, 20100 Milano (MI), Italia".

@@ -11,6 +11,27 @@ extension AppModel {
         await frequenze.load { try await services.easyBadge.frequenze(matricolaAPI: m) }
         let codici = (frequenze.value ?? []).map(\.codice)
         await slotPresenze.load { try await services.easyBadge.slot(matricolaAPI: m, codici: codici) }
+        await loadObbligoFrequenza()
+    }
+
+    /// Percentuale di frequenza richiesta dal manifesto del proprio corso; si riscarica solo se cambia
+    /// l'anno accademico o il corso. In caso di errore resta quella di EasyBadge (o quella scelta in Impostazioni).
+    func loadObbligoFrequenza() async {
+        guard let s = studente else { return }
+        let inizio = Int(Formats.currentAcademicYear().prefix(4)) ?? 0
+        let chiave = "\(s.codiceCorso)|\(s.anno)|\(inizio)"
+        guard Preferenze.chiaveObbligoFrequenza != chiave || obbligoFrequenza == nil else { return }
+        guard let o = try? await services.manifesti.obbligoFrequenza(codiceCorso: s.codiceCorso, annoCorso: s.anno,
+                                                                      inizioAnnoAccademico: inizio) else { return }
+        obbligoFrequenza = o
+        Preferenze.chiaveObbligoFrequenza = chiave
+    }
+
+    /// Soglia effettiva per un corso: scelta dall'utente, altrimenti manifesto, altrimenti EasyBadge.
+    func soglia(per f: Frequenza, manuale: Int = Preferenze.sogliaManuale) -> (valore: Double, fonte: FonteSoglia) {
+        if manuale > 0 { return (Double(manuale) / 100, .utente) }
+        if let o = obbligoFrequenza { return (o.soglia, .manifesto) }
+        return (f.soglia, .easyBadge)
     }
 
     /// Finestra delle azioni in Oggi: lezione non annullata, da 10 minuti prima dell'inizio fino alla fine.
@@ -118,6 +139,8 @@ extension AppModel {
         store.wipe()
         resetLive()
         aule.reset(); alberoOrario.reset(); alberoEsami.reset()
+        Preferenze.azzera()
+        obbligoFrequenza = nil
         if eliminaDatiLocali {
             elaborazioni.annullaTutto()
             recordings.deleteAll()

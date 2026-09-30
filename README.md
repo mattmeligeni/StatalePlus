@@ -66,24 +66,27 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   - **Conferma presenza** → apre _Altro › Presenze_ sulla lezione. Il pulsante scompare a lezione finita, se il server
     risulta già avere la presenza (anche confermata da un altro dispositivo o dal web) o dopo una risposta positiva.
   - **Inizia registrazione** → apre _Registrazioni_ e avvia subito la registrazione dell'insegnamento.
-  - I pulsanti stanno su una riga se c'è spazio, altrimenti uno sotto l'altro (mai testo a capo); a presenza
-    registrata compare l'etichetta compatta "Presenza registrata".
+  - I due pulsanti sono affiancati, con il testo su due righe se serve; a presenza registrata il primo diventa
+    l'etichetta verde "Presenza registrata" con il sigillo pieno (lo stesso simbolo di "Tasse in regola").
 - Aula e sede su due righe (aula in evidenza, sede in grigio) in lezioni, appelli e prenotazioni.
 - **Prossimo appello prenotato** (da SIFA), arricchito con aula e sede dal calendario Agenda e pulsante Mappe.
 - **Avvisi Ariel** degli ultimi 7 giorni (bacheche dei corsi attivi).
-- Sezioni vuote raccolte in una sola riga discreta ("Nessun appello prenotato e nessun avviso Ariel negli ultimi
-  7 giorni"); se ne manca solo una, la riga cita solo quella.
+- Se appello prenotato e avvisi sono **entrambi** vuoti, una sola riga discreta ("Nessun appello prenotato e nessun
+  avviso Ariel negli ultimi 7 giorni"); se almeno uno ha elementi, le due sezioni restano separate.
+- Durante il primo caricamento ogni sezione mostra una riga segnaposto sfumata al posto della rotellina.
 - **Tasse**: importo da pagare oppure "Tasse in regola"; la prossima scadenza è spiegata a partire dagli avvisi UNIMIA
-  (es. "Seconda rata non ancora emessa · scadenza 2 febbraio 2027 – Pagabile con PagoPA dal 2 gennaio 2027"): si ricava
-  a quale rata si riferisce e se è già stata emessa (presente fra le righe della situazione amministrativa).
+  (es. "Seconda rata non ancora emessa · scadenza 2 febbraio 2027 – Pagabile con PagoPA da un mese prima della
+  scadenza"): si ricava a quale rata si riferisce e se è già stata emessa (presente fra le righe della situazione
+  amministrativa). La nota riporta solo ciò che dice l'avviso, senza date calcolate.
 
 ### Orario
 
 - Settimana navigabile, lezioni raggruppate per giorno, dettaglio con aula, sede, docente e **Apri in Mappe**; nel dettaglio
   il nome completo dell'insegnamento è in alto e, se lungo, si espande con un tap; "Quando" riporta il giorno della
   settimana e, sotto, l'orario (es. "08:30 – 12:30").
-- Pillole dei periodi e intestazione della settimana in blocchi separati (lo stesso vale per anni e "Vai a data" negli
-  Esami).
+- Pillole dei periodi **centrate** sopra l'intestazione della settimana; se non ci stanno passano a una versione
+  compatta e poi a etichette brevi ("1° trimestre", "2° trimestre", "3° trimestre"), e solo come ultima risorsa
+  scorrono. Lo stesso vale per gli anni negli Esami.
 - Nomi dei corsi leggibili ovunque: "DBD - NEUROPSICOLOGIA CLINICA E SPERIMENTALE (Classe LM-51 R) (CDS MAGISTRALE)"
   diventa "Neuropsicologia clinica e sperimentale · LM-51 R"; i docenti passano da "ROSSI MARIO" a "Rossi Mario".
 - **Vai a data**: scelta una data (es. 7 ottobre 2026) porta alla sua settimana (5–11 ottobre); se la data cade in un
@@ -137,20 +140,29 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - **Carriera e libretto**: profilo, recapiti, libretto, esiti da accettare, PDF "prossimi appelli" del corso. Nomi,
   stato d'iscrizione e indirizzi sono normalizzati ("via mario rossi 10 20100 milano MI italia" → "Via Mario Rossi 10,
   20100 Milano (MI), Italia").
-- **Tasse e pagamenti**: righe della situazione amministrativa, totali, avvisi, link ai pagamenti SIFA.
+- **Tasse e pagamenti**: righe della situazione amministrativa con voci leggibili ("CONTRIB. REGIONE LOMBARDIA" →
+  "Contributo Regione Lombardia") e una riga per rata ("Rata 1 · pagata l'11 settembre 2026" con la spunta), totali,
+  prossima scadenza, avvisi con la grafia corretta ("E' … puo' … Pago PA" → "È … può … PagoPA"), link ai pagamenti SIFA.
 - **Esami**
   - _Calendario_: appelli dalle API Agenda per corso e anno (pillole), raggruppati per settimana, corso modificabile
     dal menu; **Vai a data** fa partire il calendario dalla settimana scelta (anche nel passato), _Oggi_ torna al presente.
   - _Iscrizioni_: prenotazioni confermate, esiti da accettare, pulsante **Iscriviti a un appello** che apre la replica di
-    "Esami del tuo corso di studio" (ricerca per descrizione, Codice / Descrizione / Crediti, pulsante _Iscrizione_).
-- **Aule**: sedi espandibili con le aule e lo stato attuale (libera / occupata fino alle…), ricerca sempre visibile per
-  sede, aula o indirizzo, indirizzo cliccabile; _Dove si tiene_ cerca le attività della giornata odierna.
+    "Esami del tuo corso di studio" (ricerca per insegnamento, nomi leggibili, codice · CFU, pulsante _Iscrizione_).
+  - Appelli con data compatta ("mer 30 settembre · 11:00"), messaggi vuoti riscritti ("Nessuna prenotazione confermata").
+- **Aule**: sedi espandibili toccando la riga intera, con le aule e lo stato attuale (libera / occupata fino alle…),
+  "1 aula / 2 aule", indirizzo in formato italiano ("Via Celoria 2, 20133 Milano") e **Apri in Mappe**; ricerca sempre
+  visibile per sede, aula o indirizzo; _Dove si tiene_ cerca le attività della giornata odierna.
 - **Presenze**: registrazione presenza con codice lezione (digitato o da **QR**), risposta del server mostrata così com'è;
-  percentuali di frequenza per corso e dettaglio degli slot.
-- **Impostazioni**: foto profilo, account, stato delle sessioni, dati salvati, aggiornamento profilo, uscita
+  frequenza per corso con barra e **tacca sulla soglia**, dettaglio con riepilogo ("mancano 18 h per la soglia del 50%")
+  e lezioni future attenuate.
+  - **Soglia di frequenza**: EasyBadge restituisce un proprio valore (`percentuale_conseguimento`, es. 0,7) che non
+    coincide con il regolamento; l'app legge l'obbligo di frequenza dal **manifesto degli studi** del corso (es. "almeno
+    il 50% del monte ore"), con link al PDF. In _Impostazioni_ si può scegliere una soglia diversa.
+- **Impostazioni**: foto profilo, account (nome e corso leggibili), soglia di frequenza, stato delle sessioni (pallino
+  verde / grigio), dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
 - **Crediti** (sezione separata in fondo): servizi dell'Ateneo, piattaforme (Moodle, EasyStaff/EasyAcademy) e tecnologie
-  Apple usate, ciascuno con il proprio link. Sotto, nota di disclaimer e copyright con la versione dell'app.
+  Apple usate, ciascuno con il proprio link. Disclaimer e copyright con la versione dell'app stanno in fondo ad _Altro_.
 
 ### Mappe
 
@@ -282,6 +294,14 @@ CAS riuscito. Re-login trasparente quando una sessione scade.
 | Slot lezione              | `POST /easybadge-new/api/timbrature.php` `{"Matricola":"12345a","Corsi":[{"codice":"XXX-1_1"}]}`                                                                                                                                                                   |
 | Timbratura                | `POST /easybadge-new/api/TimbratureApi.php` `{"matricola_studente","codice_lezione","posto":"","lingua":"it","autenticazione":true,"action":"CreateFromJSON","dati_addizionali":{"timestamp":<epoch ms>,"longitudine":0,"latitudine":0}}` → `{"result","message"}` |
 
+### Manifesti degli studi — `https://apps.unimi.it/files/manifesti/`
+
+PDF pubblici, nessun cookie: `ita_manifesto_{CODICE}of{N}_{anno di fine a.a.}.pdf` (es. `ita_manifesto_DBDof2_2027.pdf`
+per l'a.a. 2026/27). Nello stesso anno ogni `ofN` è una **coorte** diversa (`of1` = immatricolati 2025/26, `of2` =
+immatricolati 2026/27, riga "Immatricolati nell'Anno Accademico …"): l'app prova gli indici in ordine e sceglie quello
+della coorte dello studente (anno di corso da UNIMIA). Dal testo (PDFKit) legge "È richiesta una frequenza di almeno
+il **50%** del monte ore…". Il risultato è salvato e riletto solo quando cambiano corso, anno di corso o anno accademico.
+
 ---
 
 ## Formati e particolarità dei dati
@@ -297,7 +317,8 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 - **Moodle**: la risposta AJAX contiene il JSON **come stringa** (doppia decodifica); il tipo modulo è `module`
   (`forum`), `modname` è l'etichetta localizzata (`Forum`).
 - **EasyBadge**: i campi `Frequentate`, `OreFatte`, `OreDaFare`, `OreLimite` sono **minuti**; `OreDaFare` è il residuo
-  (totale = fatte + da fare; soglia = `percentuale_conseguimento` × totale).
+  (totale = fatte + da fare; soglia EasyBadge = `percentuale_conseguimento` × totale, sostituita in app da quella del
+  manifesto).
 - **EasyRoom**: `<office>` non ha `id`; la sede di un'occupazione si ricava da `class@room` → `<room>` → `<office>`.
   Le occupazioni valgono per il giorno della richiesta.
 - **Codici insegnamento** diversi fra sistemi: SIFA `DBD0A0`, Agenda `DBD-28_1` (XML `CodiceGenerale` `DBD-28`,
@@ -381,6 +402,21 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (3)
+
+- Oggi: pulsanti di nuovo affiancati con testo su due righe, sigillo pieno per "Presenza registrata"; appello e avvisi
+  uniti in una riga solo se entrambi vuoti; data con il mese minuscolo; righe segnaposto durante il caricamento.
+- Orario ed Esami: pillole centrate insieme all'intestazione della settimana / "Vai a data" (versione compatta ed
+  etichette brevi per tre trimestri); spazio fra selettore Calendario/Iscrizioni e nome del corso, niente fascia bianca.
+- Presenze: soglia di frequenza dal manifesto degli studi (50% invece del 70% di EasyBadge) o scelta in Impostazioni;
+  tacca sulla barra, riepilogo nel dettaglio, matricola in maiuscolo.
+- Tasse: nota PagoPA fedele all'avviso (nessuna data calcolata), voci e date leggibili, avvisi con accenti corretti,
+  titolo "Tasse e pagamenti".
+- Esami › Iscrizioni: nomi leggibili, ricerca "Cerca insegnamento", pulsante leggero, messaggi vuoti riscritti.
+- Aule: riga intera toccabile, "1 aula", indirizzo in formato italiano, Apri in Mappe.
+- Impostazioni: nome e corso leggibili, sessioni con pallino; Crediti senza disclaimer doppio, sezione "Ateneo".
+- "Aggiornato alle…" sempre in una sezione propria (non taglia più gli angoli della riga sopra).
 
 ### 2026-09-30 (2)
 

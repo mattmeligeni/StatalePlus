@@ -136,25 +136,27 @@ struct TasseView: View {
 
     var body: some View {
         List {
-            LiveSection(title: "Anno accademico \(tasse.value?.annoAccademico ?? "")", live: tasse, retry: load) { t in
+            LiveSection(title: "Anno accademico \(tasse.value?.annoAccademico.replacingOccurrences(of: " - ", with: "/") ?? "")", live: tasse, retry: load) { t in
                 ForEach(t.righe) { r in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(r.causale).font(.subheadline.weight(.semibold))
-                        HStack {
-                            Text("Rata \(r.rata)")
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(Testo.voceTassa(r.causale)).font(.subheadline.weight(.semibold))
                             Spacer()
-                            Text("Dovuto \(Formats.euroString(r.dovuto))")
+                            Text(Formats.euroString(r.dovuto)).font(.subheadline).monospacedDigit()
                         }
-                        .font(.caption)
-                        HStack {
+                        HStack(spacing: 4) {
                             if let d = r.dataPagamento {
-                                Label("Pagato \(Formats.euroString(r.pagato)) il \(d.italiano(date: .numeric, time: .omitted))", systemImage: "checkmark.circle")
-                                    .foregroundStyle(.green)
+                                Text("Rata \(r.rata) · pagata il \(d.formatted(.dateTime.day().month(.wide).year().locale(Formats.it)))")
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                            } else {
+                                Text("Rata \(r.rata)")
+                                Spacer()
+                                if r.daPagare > 0 { Text("Da pagare \(Formats.euroString(r.daPagare))").foregroundStyle(.red) }
                             }
-                            Spacer()
-                            if r.daPagare > 0 { Text("Da pagare \(Formats.euroString(r.daPagare))").foregroundStyle(.red) }
                         }
                         .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 }
                 LabeledContent("Totale dovuto", value: Formats.euroString(t.totaleDovuto))
@@ -163,12 +165,18 @@ struct TasseView: View {
             }
             if let s = tasse.value?.prossimaScadenza {
                 Section("Prossima scadenza") {
-                    Label(s.descrizione, systemImage: "calendar")
-                    if let nota = s.nota { Text(nota).font(.callout).foregroundStyle(.secondary) }
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(s.descrizione)
+                            if let nota = s.nota { Text(nota).font(.caption).foregroundStyle(.secondary) }
+                        }
+                    } icon: {
+                        Image(systemName: "calendar")
+                    }
                 }
             }
             if let msgs = tasse.value?.messaggi, !msgs.isEmpty {
-                Section("Avvisi") { ForEach(msgs, id: \.self) { Text($0).font(.callout) } }
+                Section("Avvisi") { ForEach(msgs, id: \.self) { Text(Testo.tipografia($0)).font(.subheadline) } }
             }
             Section {
                 Link(destination: SifaApp.pagamenti.officialURL) {
@@ -177,7 +185,7 @@ struct TasseView: View {
             }
             UpdatedFooter(date: tasse.updatedAt).listRowBackground(Color.clear)
         }
-        .navigationTitle("Tasse")
+        .navigationTitle("Tasse e pagamenti")
         .refreshable { await load() }
         .task { await tasse.loadIfNeeded { try await app.services.unimia.tasse() } }
     }
@@ -187,12 +195,26 @@ struct TasseView: View {
 
 // MARK: - Impostazioni
 
+private struct StatoSessione: View {
+    let nome: String
+    let attiva: Bool
+    var body: some View {
+        LabeledContent(nome) {
+            HStack(spacing: 6) {
+                Circle().fill(attiva ? Color.green : Color(.systemGray3)).frame(width: 8, height: 8)
+                Text(attiva ? "Attiva" : "Non attiva")
+            }
+        }
+    }
+}
+
 struct ImpostazioniView: View {
     @Environment(AppModel.self) private var app
     @State private var confirmLogout = false
     @State private var refreshing = false
     @State private var refreshError: String?
     @State private var fotoItem: PhotosPickerItem?
+    @AppStorage("sogliaFrequenzaManuale") private var sogliaManuale = 0
 
     var body: some View {
         List {
@@ -211,16 +233,33 @@ struct ImpostazioniView: View {
                 .padding(.vertical, 4)
             }
             Section("Account") {
-                if let s = app.studente { LabeledContent("Nome", value: s.nome.capitalized) }
+                if let s = app.studente { LabeledContent("Nome", value: Testo.persona(s.nome)) }
                 LabeledContent("Email", value: app.email ?? "—")
                 if let s = app.studente {
-                    LabeledContent("Matricola", value: s.matricola)
-                    LabeledContent("Corso", value: s.codiceCorso)
+                    LabeledContent("Matricola", value: s.matricola.uppercased())
+                    LabeledContent("Corso", value: "\(Testo.nomeCorso(s.corso)) (\(s.codiceCorso))")
                 }
             }
-            Section("Sessioni") {
-                LabeledContent("CAS (UNIMIA, SIFA)", value: CookieJar.has("CASTGC") ? "Attiva" : "Si riattiva alla prossima richiesta")
-                LabeledContent("Ariel", value: CookieJar.has("arielauth") ? "Attiva" : (app.arielError ?? "Si riattiva alla prossima richiesta"))
+            Section {
+                Picker("Soglia di frequenza", selection: $sogliaManuale) {
+                    Text(app.obbligoFrequenza.map { "Automatica (\($0.percentuale)%)" } ?? "Automatica").tag(0)
+                    ForEach([30, 40, 50, 60, 66, 70, 75, 80], id: \.self) { Text("\($0)%").tag($0) }
+                }
+            } header: {
+                Text("Presenze")
+            } footer: {
+                Text(app.obbligoFrequenza != nil
+                     ? "In automatico vale la percentuale del manifesto degli studi del tuo corso. Scegline una se per un insegnamento vale una regola diversa."
+                     : "In automatico vale la percentuale indicata dal sistema presenze, finché non si trova il manifesto degli studi del tuo corso.")
+            }
+            Section {
+                StatoSessione(nome: "CAS (UNIMIA, SIFA)", attiva: CookieJar.has("CASTGC"))
+                StatoSessione(nome: "Ariel", attiva: CookieJar.has("arielauth"))
+                if let e = app.arielError { Text(e).font(.caption).foregroundStyle(.secondary) }
+            } header: {
+                Text("Sessioni")
+            } footer: {
+                Text("Una sessione non attiva si riapre da sola alla prossima richiesta.")
             }
             Section("Dati salvati") {
                 if let d = app.store.snapshot.profiloAggiornato { LabeledContent("Profilo", value: d.italiano(date: .abbreviated, time: .shortened)) }

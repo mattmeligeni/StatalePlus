@@ -36,7 +36,7 @@ struct CreditiView: View {
     }
 
     private let sezioni: [(titolo: String, voci: [Voce])] = [
-        ("Università degli Studi di Milano", [
+        ("Ateneo", [
             Voce(nome: "Università degli Studi di Milano", descrizione: "Ateneo", link: "https://www.unimi.it"),
             Voce(nome: "UNIMIA", descrizione: "Portale studenti: profilo, carriera, tasse", link: "https://unimia.unimi.it"),
             Voce(nome: "SIFA online", descrizione: "Servizi di segreteria: esami, verbalizzazione, pagamenti", link: "https://studente.unimi.it"),
@@ -79,10 +79,6 @@ struct CreditiView: View {
                     }
                 }
             }
-            Section {
-                Disclaimer()
-            }
-            .listRowBackground(Color.clear)
         }
         .navigationTitle("Crediti")
     }

@@ -34,6 +34,10 @@ final class AppModel {
     let alberoEsami = Live<[AgendaScuola]>()
     let frequenze = Live<[Frequenza]>()            // Presenze
     let slotPresenze = Live<[SlotLezione]>()       // Presenze, pulsante "Conferma presenza" in Oggi
+    /// Obbligo di frequenza dal manifesto degli studi (salvato: cambia al massimo una volta l'anno).
+    var obbligoFrequenza: ObbligoFrequenza? = Preferenze.obbligoFrequenza {
+        didSet { Preferenze.obbligoFrequenza = obbligoFrequenza }
+    }
 
     // Navigazione
     var tab: AppTab = .oggi

@@ -28,7 +28,8 @@ struct OrarioView: View {
             List {
                 if let a = app.agenda {
                     Section {
-                        PillPicker(items: a.corsoOrario.cdl.periodi, selected: app.periodoOrario, title: { $0.label.capitalized }) { p in
+                        PillPicker(items: a.corsoOrario.cdl.periodi, selected: app.periodoOrario, title: { Testo.maiuscolaIniziale($0.label.lowercased()) },
+                                   titoloBreve: { Testo.periodoBreve($0.label) }) { p in
                             app.setPeriodoOrario(p.id)
                             weekOffset = 0
                             Task { await app.loadOrario(); jumpToFirstWeekIfNeeded() }
@@ -40,10 +41,11 @@ struct OrarioView: View {
                             Text(Testo.nomeCorso(a.corsoOrario.cdl.label)).textCase(nil)
                         }
                     }
+                    .listSectionSpacing(6)
                     Section { weekHeader }
                 }
                 if app.orario.value == nil, app.orario.error == nil {
-                    HStack { Spacer(); ProgressView(); Spacer() }
+                    RigaSegnaposto()
                 }
                 if let error = app.orario.error {
                     ErrorRow(message: error) { await app.loadOrario() }
@@ -309,7 +311,7 @@ struct InsegnamentiSheet: View {
                     }
                 }
             }
-            .navigationTitle(app.periodoOrario?.label.capitalized ?? "Insegnamenti")
+            .navigationTitle(app.periodoOrario.map { Testo.maiuscolaIniziale($0.label.lowercased()) } ?? "Insegnamenti")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }

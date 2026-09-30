@@ -14,11 +14,13 @@ struct EsamiView: View {
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
+            .padding(.bottom, 12)
             switch tab {
             case .calendario: CalendarioAppelliView()
             case .iscrizioni: IscrizioniSifaView()
             }
         }
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("Esami")
         .toolbar {
             if tab == .calendario {
@@ -71,6 +73,7 @@ private struct CalendarioAppelliView: View {
                 } header: {
                     Text(Testo.nomeCorso(a.corsoEsami.cdl.label)).textCase(nil)
                 }
+                .listSectionSpacing(6)
                 Section {
                     HStack {
                         Button { showVaiA = true } label: { Label("Vai a data", systemImage: "calendar.badge.clock") }
@@ -98,7 +101,7 @@ private struct CalendarioAppelliView: View {
                     }
                 }
                 if gruppi.isEmpty && app.appelliDa == nil {
-                    Text("Nessun appello in calendario").foregroundStyle(.secondary)
+                    Section { Text("Nessun appello in calendario").foregroundStyle(.secondary) }
                 }
                 ForEach(gruppi, id: \.inizio) { g in
                     Section(Formats.settimana(g.inizio)) {
@@ -106,7 +109,7 @@ private struct CalendarioAppelliView: View {
                     }
                 }
             } else if app.appelli.error == nil {
-                HStack { Spacer(); ProgressView(); Spacer() }
+                RigaSegnaposto()
             }
             UpdatedFooter(date: app.appelli.updatedAt).listRowBackground(Color.clear)
         }
@@ -143,10 +146,10 @@ private struct IscrizioniSifaView: View {
                         PrenotazioneRow(prenotazione: p, appello: match)
                     }
                 } else {
-                    TabellaSifaRows(tabella: tab)
+                    TabellaSifaRows(tabella: tab, vuoto: "Nessuna prenotazione confermata")
                 }
             }
-            LiveSection(title: "Esiti da accettare", live: esiti, retry: loadEsiti) { TabellaSifaRows(tabella: $0) }
+            LiveSection(title: "Esiti da accettare", live: esiti, retry: loadEsiti) { TabellaSifaRows(tabella: $0, vuoto: "Nessun esito da accettare") }
         }
         .refreshable {
             async let a: Void = app.loadPrenotazioni()
@@ -193,12 +196,10 @@ struct IscrizioneAppelloSheet: View {
                     ForEach(rows) { e in
                         HStack(alignment: .center, spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(e.descrizione).font(.subheadline)
-                                HStack {
-                                    Text(e.codice).font(.caption.monospaced())
-                                    Text("· \(e.crediti) CFU").font(.caption)
-                                }
-                                .foregroundStyle(.secondary)
+                                Text(Testo.frase(e.descrizione)).font(.subheadline)
+                                Text("\(e.codice.trimmed) · \(e.crediti) CFU")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button {
@@ -206,20 +207,20 @@ struct IscrizioneAppelloSheet: View {
                             } label: {
                                 if inCorso == e.codice { ProgressView().controlSize(.small) } else { Text("Iscrizione") }
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.bordered)
                             .controlSize(.small)
                             .disabled(inCorso != nil)
                         }
                     }
                 }
             }
-            .searchable(text: $descrizione, placement: .navigationBarDrawer(displayMode: .always), prompt: "Descrizione")
+            .searchable(text: $descrizione, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca insegnamento")
             .navigationTitle("Iscrizione agli appelli")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } } }
             .refreshable { await load() }
             .task { await esami.loadIfNeeded { try await app.services.sifa.esamiIscrivibili() } }
-            .confirmationDialog(conferma.map { "Iscriversi a \($0.descrizione.capitalized)?" } ?? "",
+            .confirmationDialog(conferma.map { "Iscriversi a \(Testo.frase($0.descrizione))?" } ?? "",
                                 isPresented: Binding(get: { conferma != nil }, set: { if !$0 { conferma = nil } }),
                                 titleVisibility: .visible) {
                 if let e = conferma {
@@ -245,9 +246,11 @@ struct IscrizioneAppelloSheet: View {
 
 struct TabellaSifaRows: View {
     let tabella: TabellaSifa
+    /// Messaggio quando la tabella è vuota (al posto del testo di SIFA, es. "Nessun esame presente").
+    var vuoto: String? = nil
     var body: some View {
         if tabella.vuota {
-            Text(tabella.messaggio ?? "Nessun elemento").foregroundStyle(.secondary)
+            Text(vuoto ?? tabella.messaggio ?? "Nessun elemento").foregroundStyle(.secondary)
         } else {
             ForEach(Array(tabella.righe.enumerated()), id: \.offset) { _, riga in
                 VStack(alignment: .leading) {

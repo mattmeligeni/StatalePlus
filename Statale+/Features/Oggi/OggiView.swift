@@ -22,43 +22,40 @@ struct OggiView: View {
                     }
                 }
 
-                // Sezioni vuote raccolte in un'unica riga discreta.
+                // Entrambe vuote (e caricate): una sola riga discreta. Altrimenti due sezioni separate.
                 let appelloVuoto = app.prenotazioni.value != nil && app.prenotazioni.error == nil && app.prossimoAppelloPrenotato == nil
                 let avvisiVuoti = avvisi.value?.isEmpty == true && avvisi.error == nil
-                if !appelloVuoto {
+                if appelloVuoto && avvisiVuoti {
+                    Section {
+                        Label("Nessun appello prenotato e nessun avviso Ariel negli ultimi 7 giorni.", systemImage: "tray")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
                     LiveSection(title: "Prossimo appello prenotato", live: app.prenotazioni, retry: app.loadPrenotazioni) { _ in
                         if let next = app.prossimoAppelloPrenotato {
                             PrenotazioneRow(prenotazione: next.prenotazione, appello: next.appello)
+                        } else {
+                            Text("Nessun appello prenotato").foregroundStyle(.secondary)
                         }
                     }
-                }
 
-                if !avvisiVuoti {
-                LiveSection(title: "Avvisi Ariel (ultimi 7 giorni)", live: avvisi, retry: loadAvvisi) { list in
-                    if list.isEmpty {
-                        EmptyView()
-                    } else {
-                        ForEach(list) { a in
-                            NavigationLink { DiscussionView(discussione: a.discussione) } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(a.discussione.titolo).font(.subheadline.weight(.semibold))
-                                    Text(a.corso).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                    if let d = a.discussione.ultimaAttivita ?? a.discussione.creata {
-                                        Text(d.relativoItaliano).font(.caption2).foregroundStyle(.secondary)
+                    LiveSection(title: "Avvisi Ariel (ultimi 7 giorni)", live: avvisi, retry: loadAvvisi) { list in
+                        if list.isEmpty {
+                            Text("Nessun avviso recente").foregroundStyle(.secondary)
+                        } else {
+                            ForEach(list) { a in
+                                NavigationLink { DiscussionView(discussione: a.discussione) } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(a.discussione.titolo).font(.subheadline.weight(.semibold))
+                                        Text(a.corso).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                        if let d = a.discussione.ultimaAttivita ?? a.discussione.creata {
+                                            Text(d.relativoItaliano).font(.caption2).foregroundStyle(.secondary)
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                }
-
-                }
-
-                if appelloVuoto || avvisiVuoti {
-                    Section {
-                        Label(riepilogoVuoti(appello: appelloVuoto, avvisi: avvisiVuoti), systemImage: "tray")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -102,20 +99,12 @@ struct OggiView: View {
             ProfileAvatar(size: 56)
             VStack(alignment: .leading, spacing: 2) {
                 Text(saluto).font(.title2.bold())
-                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Formats.it)).capitalized)
+                Text(Testo.maiuscolaIniziale(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Formats.it))))
                     .font(.subheadline).foregroundStyle(.secondary)
             }
         }
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-    }
-
-    private func riepilogoVuoti(appello: Bool, avvisi: Bool) -> String {
-        switch (appello, avvisi) {
-        case (true, true): "Nessun appello prenotato e nessun avviso Ariel negli ultimi 7 giorni."
-        case (true, false): "Nessun appello prenotato."
-        default: "Nessun avviso Ariel negli ultimi 7 giorni."
-        }
     }
 
     private var saluto: String {
@@ -318,27 +307,22 @@ private struct LezioneOggiRow: View {
     @ViewBuilder
     private func azioni(_ lezione: Lezione) -> some View {
         if app.presenzaConfermata(lezione) {
-            HStack(spacing: 4) {
-                Image(systemName: "checkmark.circle.fill")
-                Text("Presenza registrata")
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.seal.fill").imageScale(.large)
+                Text("Presenza\nregistrata")
             }
             .foregroundStyle(.green)
-            .lineLimit(1)
-            .fixedSize()
+            .accessibilityElement(children: .combine)
         } else {
             Button("Conferma presenza") { app.apriConfermaPresenza(lezione) }
                 .buttonStyle(.borderedProminent)
                 .tint(.purple)
-                .lineLimit(1)
-                .fixedSize()
         }
         Button(app.recorder.state == .idle ? "Inizia registrazione" : "Registrazione in corso") {
             app.avviaRegistrazione(lezione)
         }
         .buttonStyle(.bordered)
         .tint(.red)
-        .lineLimit(1)
-        .fixedSize()
     }
 
     var body: some View {
@@ -357,14 +341,10 @@ private struct LezioneOggiRow: View {
                         }
                     }
                 if mostraAzioni, AppModel.inFinestraAzioni(lezione, now: t) {
-                    // Su una riga se c'è spazio, altrimenti uno sotto l'altro: mai testo a capo nei pulsanti.
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) { azioni(lezione) }
-                        VStack(alignment: .leading, spacing: 8) { azioni(lezione) }
-                    }
-                    .font(.caption.weight(.semibold))
-                    .controlSize(.small)
-                    .padding(.leading, 64)
+                    HStack(spacing: 10) { azioni(lezione) }
+                        .font(.caption.weight(.semibold))
+                        .controlSize(.small)
+                        .padding(.leading, 64)
                 }
                 if prossima == nil, indice == lezioni.count - 1 {
                     BarraOra(adesso: t, testo: "Lezioni finite per oggi").transition(.opacity)
@@ -391,9 +371,9 @@ struct PrenotazioneRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text((appello?.insegnamento ?? prenotazione.esame).capitalized(with: Formats.it))
+            Text(Testo.frase(appello?.insegnamento ?? prenotazione.esame))
                 .font(.subheadline.weight(.semibold))
-            Text((appello?.inizio ?? prenotazione.data).formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Formats.it)))
+            Text(Formats.giornoEOra(appello?.inizio ?? prenotazione.data))
                 .font(.caption)
             if let appello {
                 HStack(alignment: .firstTextBaseline) {
@@ -415,7 +395,7 @@ struct AppelloRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(appello.insegnamento).font(.subheadline.weight(.semibold)).strikethrough(appello.annullato)
-            Text(appello.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Formats.it)))
+            Text(Formats.giornoEOra(appello.inizio))
                 .font(.caption)
             HStack(alignment: .firstTextBaseline) {
                 LuogoLezione(aula: appello.aula, sede: appello.sede)

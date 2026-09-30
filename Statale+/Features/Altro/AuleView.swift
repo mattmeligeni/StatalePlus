@@ -44,19 +44,36 @@ struct AuleView: View {
         }
         if risultati.isEmpty { Text("Nessuna sede o aula trovata").foregroundStyle(.secondary) }
         ForEach(risultati, id: \.0.id) { sede, aule in
-            DisclosureGroup(isExpanded: Binding(
-                get: { espanse.contains(sede.id) || (!q.isEmpty && risultati.count <= 5) },
-                set: { if $0 { espanse.insert(sede.id) } else { espanse.remove(sede.id) } })) {
+            let aperta = espanse.contains(sede.id) || (!q.isEmpty && risultati.count <= 5)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if espanse.contains(sede.id) { espanse.remove(sede.id) } else { espanse.insert(sede.id) }
+                }
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(sede.nome).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                        Text("\(sede.aule.count) \(sede.aule.count == 1 ? "aula" : "aule") · \(Testo.indirizzoSede(sede.indirizzo))")
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(aperta ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if aperta {
                 if let url = Maps.url(address: sede.indirizzo) {
                     Button { openURL(url) } label: {
-                        Label(sede.indirizzo, systemImage: "map").font(.caption)
+                        Label("Apri in Mappe", systemImage: "map").font(.caption)
                     }
+                    .padding(.leading, 16)
                 }
-                ForEach(aule) { aula in AulaRow(aula: aula, occupazioni: perAula[aula.id] ?? [], giorno: occ.giorno) }
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(sede.nome).font(.subheadline.weight(.semibold))
-                    Text("\(sede.aule.count) aule · \(sede.indirizzo)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                ForEach(aule) { aula in
+                    AulaRow(aula: aula, occupazioni: perAula[aula.id] ?? [], giorno: occ.giorno).padding(.leading, 16)
                 }
             }
         }

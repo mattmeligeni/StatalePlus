@@ -50,9 +50,10 @@ nonisolated struct SituazioneTasse: Sendable {
                   d >= oggi else { return nil }
             let rata = msg.firstMatch(#"\b(prima|seconda|terza|quarta|unica)\s+rata\b"#, options: .caseInsensitive)?.lowercased()
             let emessa = rata.flatMap { numeri[$0] }.map { n in righe.contains { $0.rata == n } } ?? true
-            let pagabileDal = msg.range(of: "un mese prima", options: .caseInsensitive) != nil
-                ? Formats.calendar.date(byAdding: .month, value: -1, to: d) : nil
-            return ScadenzaTasse(data: d, rata: rata, emessa: emessa, pagabileDal: pagabileDal)
+            // Solo ciò che l'avviso dice: nessuna data calcolata.
+            let pagoPA = msg.range(of: #"pago\s?pa"#, options: [.regularExpression, .caseInsensitive]) != nil
+            let unMesePrima = msg.range(of: "un mese prima della scadenza", options: .caseInsensitive) != nil
+            return ScadenzaTasse(data: d, rata: rata, emessa: emessa, pagoPA: pagoPA, unMesePrima: unMesePrima)
         }
         .min { $0.data < $1.data }
     }
@@ -63,7 +64,8 @@ nonisolated struct ScadenzaTasse: Sendable, Hashable {
     let data: Date            // 02/02/2027
     let rata: String?         // "seconda"
     let emessa: Bool          // false se la rata non è ancora fra le righe
-    let pagabileDal: Date?    // "un mese prima della scadenza"
+    let pagoPA: Bool          // l'avviso cita PagoPA
+    let unMesePrima: Bool     // "…con PagoPA un mese prima della scadenza…"
 
     /// "Seconda rata non ancora emessa · scadenza 2 febbraio 2027"
     var descrizione: String {
@@ -72,9 +74,10 @@ nonisolated struct ScadenzaTasse: Sendable, Hashable {
         return emessa ? "\(nome) · scadenza \(giorno)" : "\(nome) non ancora emessa · scadenza \(giorno)"
     }
 
-    /// "Pagabile con PagoPA dal 2 gennaio 2027"
+    /// "Pagabile con PagoPA da un mese prima della scadenza", come scritto negli avvisi.
     var nota: String? {
-        pagabileDal.map { "Pagabile con PagoPA dal \($0.formatted(.dateTime.day().month(.wide).year().locale(Formats.it)))" }
+        guard pagoPA else { return nil }
+        return unMesePrima ? "Pagabile con PagoPA da un mese prima della scadenza" : "Pagabile con PagoPA"
     }
 }
 

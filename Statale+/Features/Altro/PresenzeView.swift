@@ -9,6 +9,7 @@ struct PresenzeView: View {
     @State private var risposta: TimbraturaResult?
     @State private var erroreInvio: String?
     @FocusState private var focus: Bool
+    @AppStorage("sogliaFrequenzaManuale") private var sogliaManuale = 0
 
     var body: some View {
         List {
@@ -51,15 +52,25 @@ struct PresenzeView: View {
             } header: {
                 Text("Registra presenza")
             } footer: {
-                if let m = app.studente?.matricolaAPI { Text("Matricola \(m)") }
+                if let m = app.studente?.matricola { Text("Matricola \(m.uppercased())") }
             }
 
             LiveSection(title: "Frequenza", live: app.frequenze, retry: load) { list in
                 if list.isEmpty { Text("Nessun corso con rilevazione presenze").foregroundStyle(.secondary) }
                 ForEach(list) { f in
-                    NavigationLink { SlotListView(frequenza: f, slot: (app.slotPresenze.value ?? []).filter { $0.codiceCorso == f.codice }) } label: {
-                        FrequenzaRow(f: f)
+                    let soglia = app.soglia(per: f, manuale: sogliaManuale).valore
+                    NavigationLink {
+                        SlotListView(frequenza: f, soglia: soglia, slot: (app.slotPresenze.value ?? []).filter { $0.codiceCorso == f.codice })
+                    } label: {
+                        FrequenzaRow(f: f, soglia: soglia)
                     }
+                }
+            }
+            if let f = app.frequenze.value?.first {
+                Section {
+                    EmptyView()
+                } footer: {
+                    fonteSoglia(app.soglia(per: f, manuale: sogliaManuale).fonte)
                 }
             }
             UpdatedFooter(date: app.frequenze.updatedAt).listRowBackground(Color.clear)
@@ -75,6 +86,17 @@ struct PresenzeView: View {
     }
 
     private func load() async { await app.loadPresenze() }
+
+    @ViewBuilder
+    private func fonteSoglia(_ fonte: FonteSoglia) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Soglia di frequenza \(fonte.descrizione). Si può cambiare in Impostazioni.")
+            if fonte == .manifesto, let url = app.obbligoFrequenza?.url {
+                Link("Apri il manifesto degli studi", destination: url)
+            }
+        }
+        .font(.footnote)
+    }
 
     private func invia() async {
         guard let m = app.studente?.matricolaAPI, !codice.trimmed.isEmpty else { return }
@@ -98,22 +120,49 @@ struct PresenzeView: View {
 
 private struct FrequenzaRow: View {
     let f: Frequenza
+    let soglia: Double
     var body: some View {
+        let minutiSoglia = f.minutiTotali * soglia
+        let raggiunta = minutiSoglia > 0 && f.minutiFatti >= minutiSoglia
         VStack(alignment: .leading, spacing: 6) {
             Text(f.nome).font(.subheadline.weight(.semibold))
             if f.nascondiConteggi {
                 Text("Conteggi non visibili per questo corso").font(.caption).foregroundStyle(.secondary)
             } else {
-                ProgressView(value: min(f.minutiFatti, f.minutiTotali), total: max(f.minutiTotali, 1))
-                    .tint(f.sogliaRaggiunta ? .green : .accentColor)
+                BarraFrequenza(frazione: f.minutiTotali > 0 ? f.minutiFatti / f.minutiTotali : 0, soglia: soglia, raggiunta: raggiunta)
                 HStack {
                     Text("\(ore(f.minutiFatti)) su \(ore(f.minutiTotali))")
                     Spacer()
-                    Text("soglia \(Int(f.soglia * 100))% = \(ore(f.minutiSoglia))")
+                    Text(raggiunta ? "soglia \(Int((soglia * 100).rounded()))% raggiunta"
+                                   : "soglia \(Int((soglia * 100).rounded()))% = \(ore(minutiSoglia))")
                 }
                 .font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// Barra di avanzamento con una tacca sulla soglia richiesta.
+private struct BarraFrequenza: View {
+    let frazione: Double
+    let soglia: Double
+    let raggiunta: Bool
+
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color(.systemFill))
+                Capsule().fill(raggiunta ? Color.green : Color.accentColor)
+                    .frame(width: g.size.width * min(max(frazione, 0), 1))
+                Rectangle().fill(Color.primary.opacity(0.55))
+                    .frame(width: 2, height: 10)
+                    .offset(x: g.size.width * min(max(soglia, 0), 1) - 1)
+            }
+        }
+        .frame(height: 6)
+        .padding(.vertical, 2)
+        .accessibilityElement()
+        .accessibilityLabel("Frequenza \(Int((frazione * 100).rounded())) per cento, soglia \(Int((soglia * 100).rounded())) per cento")
     }
 }
 
@@ -125,27 +174,53 @@ private func ore(_ minuti: Double) -> String {
 
 private struct SlotListView: View {
     let frequenza: Frequenza
+    let soglia: Double
     let slot: [SlotLezione]
+
     var body: some View {
-        List(slot) { s in
-            HStack {
-                VStack(alignment: .leading) {
-                    Text(s.inizio.formatted(.dateTime.weekday(.abbreviated).day().month().locale(Formats.it)))
-                    Text("\(Formats.time(s.inizio)) – \(Formats.time(s.fine))").font(.caption).foregroundStyle(.secondary)
-                    TimeStatusBadge(inizio: s.inizio, fine: s.fine)
-                }
-                Spacer()
-                if s.presenza {
-                    Label("Presente", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                } else if s.svolta || s.fine < .now {
-                    Label("Assente", systemImage: "xmark.circle").foregroundStyle(.secondary)
-                } else {
-                    Text("In programma").foregroundStyle(.secondary)
+        let minutiSoglia = frequenza.minutiTotali * soglia
+        let mancanti = max(minutiSoglia - frequenza.minutiFatti, 0)
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(frequenza.nome).font(.headline)
+                    if !frequenza.nascondiConteggi {
+                        BarraFrequenza(frazione: frequenza.minutiTotali > 0 ? frequenza.minutiFatti / frequenza.minutiTotali : 0,
+                                       soglia: soglia, raggiunta: mancanti == 0 && minutiSoglia > 0)
+                        Text(mancanti == 0
+                             ? "\(ore(frequenza.minutiFatti)) frequentate su \(ore(frequenza.minutiTotali)): soglia del \(Int((soglia * 100).rounded()))% raggiunta."
+                             : "\(ore(frequenza.minutiFatti)) frequentate su \(ore(frequenza.minutiTotali)): mancano \(ore(mancanti)) per la soglia del \(Int((soglia * 100).rounded()))%.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
-            .font(.subheadline)
+            Section("Lezioni") {
+                ForEach(slot) { s in
+                    let futura = s.inizio > .now
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(s.inizio.formatted(.dateTime.weekday(.abbreviated).day().month().locale(Formats.it)))
+                            Text("\(Formats.time(s.inizio)) – \(Formats.time(s.fine))").font(.caption).foregroundStyle(.secondary)
+                            TimeStatusBadge(inizio: s.inizio, fine: s.fine)
+                        }
+                        Spacer()
+                        if s.presenza {
+                            HStack(spacing: 4) { Image(systemName: "checkmark.circle.fill"); Text("Presente") }
+                                .foregroundStyle(.green)
+                        } else if s.svolta || s.fine < .now {
+                            HStack(spacing: 4) { Image(systemName: "xmark.circle"); Text("Assente") }
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("In programma").foregroundStyle(.tertiary)
+                        }
+                    }
+                    .font(.subheadline)
+                    .opacity(futura ? 0.6 : 1)
+                    .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
+                }
+            }
         }
-        .navigationTitle(frequenza.nome)
+        .navigationTitle("Frequenza")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
