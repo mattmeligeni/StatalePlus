@@ -164,3 +164,97 @@ nonisolated struct VoceValutazione: Sendable, Hashable, Identifiable {
     let percentuale: String   // "-"
     let feedback: String      // ""
 }
+
+// MARK: - Calendario e notifiche (AJAX Moodle, live)
+
+/// Evento del calendario Moodle: `core_calendar_get_calendar_upcoming_view` (prossimi ~21 giorni, tutti i corsi)
+/// e `core_calendar_get_action_events_by_timesort` (consegne e quiz da fare, anche scaduti). Schema di Moodle 4.5;
+/// al 30-09-2026 non c'erano eventi reali da osservare, quindi ogni campo tranne id e nome è opzionale.
+nonisolated struct EventoMoodle: Decodable, Sendable, Identifiable, Hashable {
+    let id: Int
+    let nome: String                  // name "Consegna relazione finale è in scadenza"
+    let inizio: Date                  // timesort (eventi d'azione) o timestart
+    let durata: TimeInterval          // timeduration (secondi)
+    let tipo: String?                 // eventtype "due", "course", "user", "site", "open", "close"
+    let modulo: String?               // modulename "assign", "quiz", "forum"
+    let luogo: String?                // location
+    let corso: String?                // course.fullname
+    let courseId: String?             // course.id
+    let url: URL?                     // url (pagina dell'attività su myAriel) o viewurl
+    let azione: String?               // action.name "Aggiungi consegna"
+    let scaduto: Bool                 // overdue
+
+    private enum K: String, CodingKey {
+        case id, name, timesort, timestart, timeduration, eventtype, modulename, location, course, url, viewurl, action, overdue
+    }
+    private enum CorsoK: String, CodingKey { case id, fullname }
+    private enum AzioneK: String, CodingKey { case name }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: K.self)
+        id = Int(c.string(.id)) ?? 0
+        nome = c.string(.name)
+        let t = c.double(.timesort) > 0 ? c.double(.timesort) : c.double(.timestart)
+        inizio = Date(timeIntervalSince1970: t)
+        durata = c.double(.timeduration)
+        tipo = c.string(.eventtype).nilSeVuota
+        modulo = c.string(.modulename).nilSeVuota
+        luogo = c.string(.location).nilSeVuota
+        let corsoC = try? c.nestedContainer(keyedBy: CorsoK.self, forKey: .course)
+        corso = corsoC?.string(.fullname).nilSeVuota
+        courseId = corsoC?.string(.id).nilSeVuota
+        // Prima la pagina dell'attività (consegna, quiz); la vista del giorno del calendario solo come ripiego.
+        url = (c.string(.url).nilSeVuota ?? c.string(.viewurl).nilSeVuota).flatMap(URL.init(string:))
+        azione = (try? c.nestedContainer(keyedBy: AzioneK.self, forKey: .action))?.string(.name).nilSeVuota
+        scaduto = c.flag(.overdue)
+    }
+}
+
+/// `message_popup_get_popup_notifications` (utente corrente con `useridto: 0`): `notifications[]` + `unreadcount`.
+nonisolated struct NotificheMoodle: Decodable, Sendable {
+    let notifiche: [NotificaMoodle]
+    let nonLette: Int
+    private enum K: String, CodingKey { case notifications, unreadcount }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: K.self)
+        notifiche = (try? c.decode([NotificaMoodle].self, forKey: .notifications)) ?? []
+        nonLette = Int(c.string(.unreadcount)) ?? notifiche.filter { !$0.letta }.count
+    }
+}
+
+nonisolated struct NotificaMoodle: Decodable, Sendable, Identifiable, Hashable {
+    let id: Int
+    let oggetto: String               // subject
+    let testo: String?                // smallmessage (o fullmessage)
+    let url: URL?                     // contexturl: pagina a cui si riferisce (post del forum, consegna…)
+    let etichettaURL: String?         // contexturlname "Titolo della discussione"
+    let creata: Date                  // timecreated
+    let letta: Bool                   // read
+    let componente: String?           // component "mod_forum", "mod_assign", "moodle"
+
+    private enum K: String, CodingKey {
+        case id, subject, smallmessage, fullmessage, contexturl, contexturlname, timecreated, read, component
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: K.self)
+        id = Int(c.string(.id)) ?? 0
+        oggetto = c.string(.subject)
+        testo = (c.string(.smallmessage).nilSeVuota ?? c.string(.fullmessage).nilSeVuota)?.trimmed
+        url = c.string(.contexturl).nilSeVuota.flatMap(URL.init(string:))
+        etichettaURL = c.string(.contexturlname).nilSeVuota
+        creata = Date(timeIntervalSince1970: c.double(.timecreated))
+        letta = c.flag(.read)
+        componente = c.string(.component).nilSeVuota
+    }
+
+    /// `…/mod/forum/discuss.php?d=91954` → discussione apribile nell'app.
+    var discussione: DiscussioneForum? {
+        guard let url, url.path().hasSuffix("/mod/forum/discuss.php") else { return nil }
+        return DiscussioneForum(id: url.query()?.firstMatch(#"d=(\d+)"#) ?? String(id), titolo: etichettaURL ?? oggetto,
+                                autore: "", creata: creata, ultimaAttivita: creata, url: url)
+    }
+}
+
+nonisolated extension String {
+    var nilSeVuota: String? { trimmed.isEmpty ? nil : self }
+}

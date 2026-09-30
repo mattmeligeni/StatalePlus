@@ -99,7 +99,8 @@ actor HTTPClient {
         cfg.urlCache = nil
         cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
         cfg.timeoutIntervalForRequest = 30
-        cfg.timeoutIntervalForResource = 90
+        // 30 s senza dati bastano a considerare morta una richiesta; il tetto totale è alto per gli zip dei corsi.
+        cfg.timeoutIntervalForResource = 900
         cfg.tlsMinimumSupportedProtocolVersion = .TLSv12
         cfg.httpAdditionalHeaders = [
             "User-Agent": AppHTTP.userAgent,
@@ -133,6 +134,25 @@ actor HTTPClient {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         headers.forEach { req.setValue($1, forHTTPHeaderField: $0) }
         return try await send(req)
+    }
+
+    /// POST di un form con risposta scritta su file (download grandi, niente dati in memoria). Il file restituito
+    /// è in una cartella temporanea dell'app e va spostato dal chiamante.
+    func downloadForm(_ url: URL, fields: [(String, String)]) async throws -> (URL, HTTPURLResponse) {
+        guard url.scheme == "https" else { throw NetError.insecureURL }
+        guard !AppHTTP.isLogout(url) else { throw NetError.blockedLogoutURL }
+        await throttle(host: url.host() ?? "")
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.httpBody = AppHTTP.formEncode(fields)
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 600
+        let (temp, response) = try await session.download(for: req, delegate: guardDelegate)
+        guard let http = response as? HTTPURLResponse else { throw NetError.unexpectedPage(url.host() ?? "") }
+        // Il file temporaneo di URLSession può sparire appena si torna: lo si sposta subito.
+        let copia = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.moveItem(at: temp, to: copia)
+        return (copia, http)
     }
 
     private func send(_ req: URLRequest) async throws -> HTTPResponse {

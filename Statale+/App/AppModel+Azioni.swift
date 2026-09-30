@@ -34,6 +34,22 @@ extension AppModel {
         return (f.soglia, .easyBadge)
     }
 
+    // MARK: myAriel: scadenze e notifiche
+
+    func loadScadenzeAriel(force: Bool) async {
+        if !force, let d = scadenzeAriel.updatedAt, Date.now.timeIntervalSince(d) < 300 { return }
+        await scadenzeAriel.load { try await services.ariel.scadenze() }
+    }
+
+    func loadNotificheAriel() async {
+        await notificheAriel.load { try await services.ariel.notifiche() }
+    }
+
+    func segnaNotificaLetta(_ n: NotificaMoodle) async {
+        await services.ariel.segnaLetta(n)
+        await loadNotificheAriel()
+    }
+
     // MARK: Registrazioni
 
     /// Salva una registrazione appena chiusa e, se attivo in Impostazioni, ne migliora l'audio.
@@ -137,7 +153,9 @@ extension AppModel {
         async let b: Void = loadPresenze()
         async let c: Void = orario.updatedAt != nil ? loadOrario() : ()
         async let d: Void = prenotazioni.updatedAt != nil ? loadPrenotazioni() : ()
-        _ = await (a, b, c, d)
+        async let e: Void = notificheAriel.updatedAt != nil ? loadNotificheAriel() : ()
+        async let f: Void = scadenzeAriel.updatedAt != nil ? loadScadenzeAriel(force: true) : ()
+        _ = await (a, b, c, d, e, f)
     }
 
     /// Ogni 5 minuti dall'ultimo refresh (manuale o automatico), finché l'app è in primo piano.
@@ -180,6 +198,8 @@ extension AppModel {
         aule.reset(); alberoOrario.reset(); alberoEsami.reset()
         Preferenze.azzera()
         obbligoFrequenza = nil
+        // Zip dei materiali dei corsi: dati dell'account.
+        try? FileManager.default.removeItem(at: URL.cachesDirectory.appending(path: "Materiali", directoryHint: .isDirectory))
         if eliminaDatiLocali {
             elaborazioni.annullaTutto()
             recordings.deleteAll()

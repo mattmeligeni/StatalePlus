@@ -13,6 +13,25 @@ struct ArielCoursesView: View {
                 if let e = app.arielError, offerta.value == nil {
                     Section { ErrorRow(message: e, retry: reload) }
                 }
+                Section {
+                    NavigationLink { ScadenzeArielView() } label: {
+                        HStack {
+                            RigaIcona("Scadenze ed eventi", simbolo: "calendar.badge.clock")
+                            Spacer()
+                            if let n = app.scadenzeAriel.value?.count, n > 0 { Text("\(n)").foregroundStyle(.secondary) }
+                        }
+                    }
+                    NavigationLink { NotificheArielView() } label: {
+                        HStack {
+                            RigaIcona("Notifiche", simbolo: "bell")
+                            Spacer()
+                            if let n = app.notificheAriel.value?.nonLette, n > 0 {
+                                Text("\(n)").font(.caption.bold()).foregroundStyle(.white)
+                                    .padding(.horizontal, 7).padding(.vertical, 2).background(.red, in: Capsule())
+                            }
+                        }
+                    }
+                }
                 LiveSection(title: "Con sito attivo · \(Formats.currentAcademicYear())", live: offerta, retry: reload) { corsi in
                     let attivi = corsi.filter(\.attivo).sorted { $0.titolo < $1.titolo }
                     if attivi.isEmpty { Text("Nessun corso con sito attivo").foregroundStyle(.secondary) }
@@ -33,7 +52,17 @@ struct ArielCoursesView: View {
                 UpdatedFooter(date: offerta.updatedAt ?? app.store.snapshot.offertaAggiornata).listRowBackground(Color.clear)
             }
             .navigationTitle("Ariel")
-            .refreshable { await reload() }
+            .refreshable {
+                async let a: Void = reload()
+                async let b: Void = app.loadScadenzeAriel(force: true)
+                async let c: Void = app.loadNotificheAriel()
+                _ = await (a, b, c)
+            }
+            .task {
+                async let b: Void = app.loadScadenzeAriel(force: false)
+                async let c: Void = app.notificheAriel.updatedAt == nil ? app.loadNotificheAriel() : ()
+                _ = await (b, c)
+            }
             .task {
                 if offerta.value == nil, let cached = app.store.snapshot.offerta,
                    !app.store.isStale(app.store.snapshot.offertaAggiornata, ttl: StableStore.ttlOfferta) {
@@ -107,6 +136,7 @@ struct CourseDetailView: View {
             } else {
                 LiveSection(title: "Contenuti", live: struttura, retry: loadStruttura) { _ in EmptyView() }
             }
+            if !courseId.isEmpty { MaterialiCorsoSection(courseId: courseId, titolo: corso.titolo) }
             Section("Corso") {
                 NavigationLink { ValutazioniView(courseId: courseId) } label: { RigaIcona("Valutazioni", simbolo: "checkmark.seal") }
                 NavigationLink { PartecipantiView(courseId: courseId) } label: { RigaIcona("Partecipanti", simbolo: "person.2") }

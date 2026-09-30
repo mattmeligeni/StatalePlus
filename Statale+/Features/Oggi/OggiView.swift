@@ -5,6 +5,15 @@ struct OggiView: View {
     @Environment(AppModel.self) private var app
     @State private var avvisi = Live<[AvvisoAriel]>()
     @State private var tasse = Live<SituazioneTasse>()
+    @State private var paginaAriel: URL?
+
+    /// Consegne in ritardo e eventi dei prossimi 7 giorni.
+    private var scadenzeVicine: [EventoMoodle] {
+        let limite = Date.now.addingTimeInterval(7 * 86_400)
+        return (app.scadenzeAriel.value ?? []).filter { $0.scaduto || ($0.inizio >= .now && $0.inizio <= limite) }
+    }
+
+    private var notificheNonLette: [NotificaMoodle] { (app.notificheAriel.value?.notifiche ?? []).filter { !$0.letta } }
 
     var body: some View {
         NavigationStack {
@@ -24,7 +33,7 @@ struct OggiView: View {
 
                 // Entrambe vuote (e caricate): una sola riga discreta. Altrimenti due sezioni separate.
                 let appelloVuoto = app.prenotazioni.value != nil && app.prenotazioni.error == nil && app.prossimoAppelloPrenotato == nil
-                let avvisiVuoti = avvisi.value?.isEmpty == true && avvisi.error == nil
+                let avvisiVuoti = avvisi.value?.isEmpty == true && avvisi.error == nil && notificheNonLette.isEmpty
                 if appelloVuoto && avvisiVuoti {
                     Section {
                         Label("Nessun appello prenotato e nessun avviso Ariel negli ultimi 7 giorni.", systemImage: "tray")
@@ -41,7 +50,14 @@ struct OggiView: View {
                     }
 
                     LiveSection(title: "Avvisi Ariel (ultimi 7 giorni)", live: avvisi, retry: loadAvvisi) { list in
-                        if list.isEmpty {
+                        if !notificheNonLette.isEmpty {
+                            NavigationLink { NotificheArielView() } label: {
+                                Label(notificheNonLette.count == 1 ? "1 notifica non letta su myAriel" : "\(notificheNonLette.count) notifiche non lette su myAriel",
+                                      systemImage: "bell.badge")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                        }
+                        if list.isEmpty && notificheNonLette.isEmpty {
                             Text("Nessun avviso recente").foregroundStyle(.secondary)
                         } else {
                             ForEach(list) { a in
@@ -56,6 +72,23 @@ struct OggiView: View {
                                 }
                             }
                         }
+                    }
+                }
+
+                // Solo se c'è qualcosa: consegne in ritardo o eventi dei prossimi 7 giorni.
+                if !scadenzeVicine.isEmpty {
+                    Section {
+                        ForEach(scadenzeVicine.prefix(5)) { e in
+                            Button { paginaAriel = e.url } label: { RigaEvento(evento: e, mostraGiorno: true) }
+                                .tint(.primary)
+                                .disabled(e.url == nil)
+                        }
+                        if scadenzeVicine.count > 5 {
+                            NavigationLink("Tutte le scadenze (\(scadenzeVicine.count))") { ScadenzeArielView() }
+                                .font(.subheadline)
+                        }
+                    } header: {
+                        Text("Scadenze Ariel")
                     }
                 }
 
@@ -82,6 +115,7 @@ struct OggiView: View {
             }
             .navigationTitle("Oggi")
             .refreshable { await loadAll() }
+            .sheet(item: $paginaAriel) { PaginaMyAriel(url: $0) }
             .task {
                 async let a: Void = app.lezioniUtente.updatedAt == nil ? app.loadLezioniUtente() : ()
                 async let b: Void = app.prenotazioni.updatedAt == nil ? app.loadPrenotazioni() : ()
@@ -89,7 +123,9 @@ struct OggiView: View {
                 async let d: Void = avvisi.loadIfNeeded { try await fetchAvvisi() }
                 async let e: Void = tasse.loadIfNeeded { try await app.services.unimia.tasse() }
                 async let f: Void = app.slotPresenze.updatedAt == nil ? app.loadPresenze() : ()
-                _ = await (a, b, c, d, e, f)
+                async let g: Void = app.loadScadenzeAriel(force: false)
+                async let h: Void = app.notificheAriel.updatedAt == nil ? app.loadNotificheAriel() : ()
+                _ = await (a, b, c, d, e, f, g, h)
             }
         }
     }
@@ -122,7 +158,9 @@ struct OggiView: View {
         async let c: Void = app.loadAppelliUtente()
         async let d: Void = loadAvvisi()
         async let e: Void = loadTasse()
-        _ = await (p, a, b, c, d, e)
+        async let f: Void = app.loadScadenzeAriel(force: true)
+        async let g: Void = app.loadNotificheAriel()
+        _ = await (p, a, b, c, d, e, f, g)
     }
 
     private func loadAvvisi() async { await avvisi.load { try await fetchAvvisi() } }

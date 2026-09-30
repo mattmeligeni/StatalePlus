@@ -108,6 +108,15 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   (modal compatto con le sole lezioni della materia dalle API Agenda, raggruppate per mese), contenuti per sezione, moduli con descrizione,
   file (anteprima Quick Look), forum e discussioni, partecipanti, valutazioni.
 
+- **Scadenze ed eventi** (calendario myAriel, prossimi 21 giorni più le consegne in ritardo) e **Notifiche**
+  (nuovi post nei forum seguiti, valutazioni, consegne; badge con le non lette) in cima alla lista dei corsi.
+  Aprire una notifica la segna come letta come sul sito; quelle dei forum aprono la discussione nell'app, le altre
+  la pagina di myAriel dentro l'app (sessione già aperta, link di uscita bloccati).
+- **Scarica tutti i materiali** nel dettaglio del corso: lo zip di "Scaricamento contenuti del corso" (esclusi i file
+  oltre 50 MB), scritto direttamente su disco, da aprire con Quick Look o salvare in File.
+- In Oggi: sezione **Scadenze Ariel** (consegne in ritardo ed eventi dei prossimi 7 giorni, solo se ce ne sono) e riga
+  con le notifiche non lette in cima agli avvisi.
+
 ### Registrazioni
 
 - Registrazione vocale collegata a un insegnamento attivato (suggerito automaticamente se c'è una lezione in corso),
@@ -348,6 +357,13 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
   può avere solo email, CV e "Chi e dove"): si riconoscono dall'icona Font Awesome (`fa-university`, `fa-map-marker`
   con link = indirizzo / senza link = sede, `fa-envelope-o`, `fa-phone`, `fa-file-text`, `fa-address-book`).
   `.div-ricevimento`: testo del ricevimento, poi "Luogo ricevimento" in grassetto e il luogo.
+- **myAriel AJAX** (`lib/ajax/service.php?sesskey=…`): `core_courseformat_get_state` risponde con il JSON **dentro
+  una stringa**, calendario e notifiche con un oggetto; `ArielSession.ajax` restituisce il campo `data` grezzo.
+  `core_calendar_get_calendar_upcoming_view` (`courseid: 1` = tutti i corsi), `core_calendar_get_action_events_by_timesort`,
+  `message_popup_get_popup_notifications` (`useridto: 0` = utente corrente; `unreadcount` incluso, mentre
+  `message_popup_get_unread_popup_notification_count` risponde "accessdenied"), `core_message_mark_notification_read`.
+- **Contenuti del corso**: `contextid` dal link `course/downloadcontent.php?contextid=…` della pagina del corso, poi
+  POST `contextid`, `download=1`, `sesskey` → `application/x-zip` (verificato: 12,5 MB per un corso con 2 cartelle).
 - **QR della lezione**: testo Base64 (`UVJfOXRwNG02YW4tMTc5MDc3MzY2MDAwMA==` → `QR_9tp4m6an-1790773660000`); il codice
   lezione è la parte prima del trattino, il numero è un istante in ms che cambia a ogni rotazione del QR e non serve
   (la richiesta usa l'ora attuale). Risposte della timbratura: `{"result":"ok"|"warning"|"failure","message":…}`.
@@ -444,6 +460,12 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (10)
+
+- Ariel: scadenze ed eventi del calendario, notifiche con badge e segna-come-letta, pagina myAriel dentro l'app,
+  scaricamento dello zip con tutti i materiali del corso; in Oggi scadenze vicine e notifiche non lette.
+- Timeout complessivo delle richieste portato a 15 minuti (resta il limite di 30 s senza dati) per i download grandi.
 
 ### 2026-09-30 (9)
 

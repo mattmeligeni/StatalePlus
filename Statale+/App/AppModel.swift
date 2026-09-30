@@ -34,6 +34,8 @@ final class AppModel {
     let appelliUtente = Live<[Appello]>()          // arricchisce le prenotazioni (aula/sede)
     let prenotazioni = Live<TabellaSifa>()
     let aule = Live<OccupazioneAule>()
+    let scadenzeAriel = Live<[EventoMoodle]>()     // Oggi (prossimi 7 giorni), Ariel › Scadenze
+    let notificheAriel = Live<NotificheMoodle>()   // Oggi (non lette), Ariel › Notifiche
     let alberoOrario = Live<[AgendaScuola]>()
     let alberoEsami = Live<[AgendaScuola]>()
     let frequenze = Live<[Frequenza]>()            // Presenze
@@ -292,6 +294,7 @@ final class AppModel {
     func resetLive() {
         lezioniUtente.reset(); orario.reset(); appelli.reset(); appelliUtente.reset()
         insegnamentiOrario.reset(); prenotazioni.reset(); frequenze.reset(); slotPresenze.reset()
+        scadenzeAriel.reset(); notificheAriel.reset()
         presenzeConfermate = []
     }
 

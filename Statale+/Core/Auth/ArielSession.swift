@@ -89,6 +89,59 @@ actor ArielSession {
         throw ArielError.noSesskey
     }
 
+    /// Chiamata AJAX generica (`lib/ajax/service.php`): restituisce il campo `data` come JSON, per le funzioni che
+    /// rispondono con un oggetto (calendario, notifiche) e non con una stringa come `core_courseformat_get_state`.
+    func ajax<Args: Encodable & Sendable>(_ metodo: String, args: Args) async throws -> Data {
+        for attempt in 0..<2 {
+            let key = try await sesskey()
+            let url = URL(string: "\(Self.moodle)/lib/ajax/service.php?sesskey=\(key)&info=\(metodo)")!
+            let r = try await http.postJSON(url, body: [ChiamataAjax(methodname: metodo, args: args)])
+            guard let lista = try? JSONSerialization.jsonObject(with: r.data) as? [[String: Any]], let primo = lista.first else {
+                throw ArielError.ajax("risposta non valida")
+            }
+            if primo["error"] as? Bool == true {
+                let ex = primo["exception"] as? [String: Any]
+                let codice = (ex?["errorcode"] as? String) ?? (ex?["message"] as? String) ?? "errore AJAX"
+                if attempt == 0 && (codice.contains("sesskey") || codice.contains("login")) {
+                    cachedSesskey = nil
+                    try await ensureLoggedIn()
+                    continue
+                }
+                throw ArielError.ajax(codice)
+            }
+            return try JSONSerialization.data(withJSONObject: primo["data"] ?? [:], options: [.fragmentsAllowed])
+        }
+        throw ArielError.noSesskey
+    }
+
+    /// "Scaricamento contenuti del corso": POST `course/downloadcontent.php` (contextid, download=1, sesskey) → zip,
+    /// scritto direttamente su disco (può superare le centinaia di MB). Restituisce il file salvato in `cartella`.
+    func scaricaContenuti(contextId: String, nome: String, in cartella: URL) async throws -> URL {
+        for attempt in 0..<2 {
+            let key = try await sesskey()
+            let url = URL(string: "\(Self.moodle)/course/downloadcontent.php")!
+            let (temp, risposta) = try await http.downloadForm(url, fields: [("contextid", contextId), ("download", "1"), ("sesskey", key)])
+            let tipo = risposta.value(forHTTPHeaderField: "Content-Type") ?? ""
+            if tipo.contains("html") {
+                try? FileManager.default.removeItem(at: temp)
+                guard attempt == 0 else { throw ArielError.messaggio("Scaricamento non riuscito: myAriel ha risposto con una pagina invece che con lo zip.") }
+                cachedSesskey = nil
+                try await ensureLoggedIn()
+                continue
+            }
+            guard risposta.statusCode == 200 else {
+                try? FileManager.default.removeItem(at: temp)
+                throw NetError.http(risposta.statusCode)
+            }
+            try FileManager.default.createDirectory(at: cartella, withIntermediateDirectories: true)
+            let dest = cartella.appending(path: nome)
+            try? FileManager.default.removeItem(at: dest)
+            try FileManager.default.moveItem(at: temp, to: dest)
+            return dest
+        }
+        throw ArielError.noSesskey
+    }
+
     /// Scarica un file `pluginfile.php` in una cartella temporanea (solo per l'anteprima, poi eliminabile).
     func download(_ file: FileMoodle) async throws -> URL {
         guard file.url.host() == "myariel.unimi.it" else { throw NetError.insecureURL }
@@ -101,4 +154,11 @@ actor ArielSession {
         try r.data.write(to: dest, options: [.atomic, .completeFileProtection])
         return dest
     }
+}
+
+/// Una chiamata del batch di `lib/ajax/service.php`.
+nonisolated private struct ChiamataAjax<Args: Encodable & Sendable>: Encodable, Sendable {
+    var index = 0
+    let methodname: String
+    let args: Args
 }

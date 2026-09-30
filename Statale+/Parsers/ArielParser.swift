@@ -218,13 +218,14 @@ nonisolated enum ArielParser {
 }
 
 nonisolated enum ArielError: LocalizedError {
-    case loginFormNotFound, invalidCredentials, noSesskey, ajax(String)
+    case loginFormNotFound, invalidCredentials, noSesskey, ajax(String), messaggio(String)
     var errorDescription: String? {
         switch self {
         case .loginFormNotFound: "Form di login Ariel non trovato."
         case .invalidCredentials: "Accesso ad Ariel non riuscito: controlla le credenziali."
         case .noSesskey: "Sessione Moodle non disponibile."
         case .ajax(let m): "Errore Moodle: \(m)"
+        case .messaggio(let m): m
         }
     }
 }
