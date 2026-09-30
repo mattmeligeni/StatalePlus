@@ -70,6 +70,7 @@ private struct CalendarioAppelliView: View {
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 } header: {
                     Text(Testo.nomeCorso(a.corsoEsami.cdl.label)).textCase(nil)
                 }
@@ -168,16 +169,14 @@ private struct IscrizioniSifaView: View {
     private func loadEsiti() async { await esiti.load { try await app.services.sifa.esitiFinali() } }
 }
 
-/// Replica "Esami del tuo corso di studio" di SIFA: ricerca per descrizione, tabella Codice/Descrizione/Crediti
-/// e pulsante "Iscrizione" per riga.
+/// Replica "Esami del tuo corso di studio" di SIFA: ricerca, Codice/Descrizione/Crediti e pulsante "Iscriviti",
+/// che come sul sito apre "Selezione appello" con gli appelli disponibili per quell'esame.
 struct IscrizioneAppelloSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var esami = Live<[EsameIscrivibile]>()
     @State private var descrizione = ""
-    @State private var conferma: EsameIscrivibile?
-    @State private var inCorso: String?
-    @State private var esito: String?
+    @State private var aperto: EsameIscrivibile?
 
     private func filtrati(_ list: [EsameIscrivibile]) -> [EsameIscrivibile] {
         let q = descrizione.trimmed
@@ -187,9 +186,6 @@ struct IscrizioneAppelloSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                if let esito {
-                    Section { Label(esito, systemImage: "info.circle").font(.callout) }
-                }
                 LiveSection(title: "Esami del tuo corso di studio", live: esami, retry: load) { list in
                     let rows = filtrati(list)
                     if rows.isEmpty { Text("Nessun esame trovato").foregroundStyle(.secondary) }
@@ -202,14 +198,9 @@ struct IscrizioneAppelloSheet: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Button {
-                                conferma = e
-                            } label: {
-                                if inCorso == e.codice { ProgressView().controlSize(.small) } else { Text("Iscrizione") }
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(inCorso != nil)
+                            Button("Iscriviti") { aperto = e }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
                         }
                     }
                 }
@@ -220,28 +211,61 @@ struct IscrizioneAppelloSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } } }
             .refreshable { await load() }
             .task { await esami.loadIfNeeded { try await app.services.sifa.esamiIscrivibili() } }
-            .confirmationDialog(conferma.map { "Iscriversi a \(Testo.frase($0.descrizione))?" } ?? "",
-                                isPresented: Binding(get: { conferma != nil }, set: { if !$0 { conferma = nil } }),
-                                titleVisibility: .visible) {
-                if let e = conferma {
-                    Button("Iscrizione") { Task { await iscrivi(e) } }
-                }
-            }
+            .navigationDestination(item: $aperto) { AppelliDisponibiliView(esame: $0) }
         }
     }
 
     private func load() async { await esami.load { try await app.services.sifa.esamiIscrivibili() } }
+}
 
-    private func iscrivi(_ e: EsameIscrivibile) async {
-        inCorso = e.codice
-        defer { inCorso = nil }
-        do {
-            esito = try await app.services.sifa.iscrivi(e)
-            await app.loadPrenotazioni()
-        } catch {
-            esito = app.message(error)
+/// "Selezione appello" di SIFA per un esame: appelli a cui ci si può iscrivere, con data e dettagli.
+/// La conferma dell'iscrizione (scelta dell'appello e invio) resta sul sito ufficiale finché il passo successivo
+/// non sarà osservato con appelli reali.
+struct AppelliDisponibiliView: View {
+    let esame: EsameIscrivibile
+    @Environment(AppModel.self) private var app
+    @State private var selezione = Live<SelezioneAppello>()
+
+    var body: some View {
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Testo.frase(esame.descrizione)).font(.headline)
+                    Text("\(esame.codice) · \(esame.crediti) CFU").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            LiveSection(title: "Appelli disponibili", live: selezione, retry: load) { s in
+                if s.appelli.isEmpty {
+                    Label(s.messaggio ?? "Nessun appello disponibile.", systemImage: "calendar.badge.exclamationmark")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(s.appelli) { a in
+                        VStack(alignment: .leading, spacing: 3) {
+                            if let d = a.data {
+                                Text(Testo.maiuscolaIniziale(Formats.giornoEOra(d))).font(.subheadline.weight(.semibold))
+                            }
+                            Text(Testo.tipografia(a.titolo)).font(a.data == nil ? .subheadline.weight(.semibold) : .subheadline)
+                            ForEach(a.dettagli, id: \.self) { Text(Testo.tipografia($0)).font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
+            }
+            Section {
+                Link(destination: SifaApp.iscrizioneEsami.officialURL) {
+                    Label("Completa l'iscrizione sul sito ufficiale", systemImage: "arrow.up.right.square")
+                }
+            } footer: {
+                Text("La lista è quella di SIFA › Esami del tuo corso di studio › Iscrizione. La conferma dell'iscrizione si fa ancora sul sito.")
+            }
+            UpdatedFooter(date: selezione.updatedAt)
         }
+        .navigationTitle("Selezione appello")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await load() }
+        .task { await selezione.loadIfNeeded { try await app.services.sifa.appelliDisponibili(esame) } }
     }
+
+    private func load() async { await selezione.load { try await app.services.sifa.appelliDisponibili(esame) } }
 }
 
 struct TabellaSifaRows: View {

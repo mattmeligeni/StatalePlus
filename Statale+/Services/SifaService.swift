@@ -11,6 +11,18 @@ actor SifaService {
         return try SifaParser.esamiNonSostenuti(html: r.text)
     }
 
+    /// Pulsante "Iscrizione" di "Esami del tuo corso di studio": ricarica la pagina (il link vale solo per la
+    /// versione appena generata, `?N`) e segue il link della riga → "Selezione appello". Solo lettura (GET).
+    func appelliDisponibili(_ esame: EsameIscrivibile) async throws -> SelezioneAppello {
+        let lista = try await cas.sifaPage(.iscrizioneEsami, path: "esamiPack/EsamiNonSostenutiDelCorsoPage")
+        guard let href = SifaParser.linkIscrizione(html: lista.text, codice: esame.codice),
+              let url = URL(string: href, relativeTo: lista.url)?.absoluteURL else {
+            throw SifaError.esameNonTrovato
+        }
+        let r = try await cas.sifaFollow(.iscrizioneEsami, url: url)
+        return try SifaParser.selezioneAppello(html: r.text)
+    }
+
     func prenotazioni() async throws -> TabellaSifa {
         let r = try await cas.sifaPage(.iscrizioneEsami, path: "esamiPack/EsamiIscrizioniConfermatePage")
         return try SifaParser.tabella(html: r.text, vuotoMarker: "Nessun esame presente")
@@ -20,16 +32,9 @@ actor SifaService {
         let r = try await cas.sifaPage(.verbalizzazione, path: "esitiFinali")
         return try SifaParser.tabella(html: r.text, vuotoMarker: "Non è presente nessun esito")
     }
-
-    /// Azione "Iscrizione" di una riga di "Esami del tuo corso di studio".
-    /// Flusso da completare: ricaricare `EsamiNonSostenutiDelCorsoPage` nella stessa sessione Wicket,
-    /// seguire l'`ILinkListener` della riga (relativo alla pagina viva), scegliere l'appello e confermare.
-    func iscrivi(_ esame: EsameIscrivibile) async throws -> String {
-        throw SifaError.iscrizioneNonDisponibile
-    }
 }
 
 nonisolated enum SifaError: LocalizedError {
-    case iscrizioneNonDisponibile
-    var errorDescription: String? { "L'iscrizione dall'app non è ancora attiva." }
+    case esameNonTrovato
+    var errorDescription: String? { "L'esame non compare più fra quelli del tuo corso su SIFA." }
 }

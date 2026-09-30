@@ -19,9 +19,31 @@ nonisolated struct EsameIscrivibile: Sendable, Hashable, Identifiable {
     let codice: String          // td[0] "F-001-" → "F-001"
     let descrizione: String     // td[1] "COLLOQUIO E PROCESSO ANAMNESTICO IN NEUROPSICOLOGIA"
     let crediti: Int            // td[2] "6"
-    /// td[3] `a[href]` "./EsamiNonSostenutiDelCorsoPage?11-1.ILinkListener-form-listEsamiPanel-table-body-rows-1-cells-4-cell-actionButton".
-    /// URL Wicket legato alla pagina viva (`?11`): è l'azione "Iscrizione" da seguire nella stessa sessione.
-    let iscrizioneListenerPath: String?
+    // td[3] "Iscrizione" → `../wicket/page?8-1.ILinkListener-…-actionButton`: vale solo per la versione di pagina
+    // appena generata, quindi non si salva; vedi `SifaService.appelliDisponibili`.
+}
+
+/// "Selezione appello" (`foIscrizioneEsami/iscrizioneAppelloPack/SelezioneAppelloPage`), aperta dal pulsante
+/// "Iscrizione" di una riga di "Esami del tuo corso di studio": `h4` con il nome dell'esame, `ul.nomarker` con gli
+/// appelli, "Nessun appello disponibile." se vuota (caso osservato su tutti gli esami a settembre 2026).
+nonisolated struct SelezioneAppello: Sendable {
+    let esame: String
+    let appelli: [AppelloIscrivibile]
+    let messaggio: String?        // "Nessun appello disponibile."
+}
+
+/// Un appello della lista. La struttura delle righe non è ancora stata vista con dati reali: si conservano le righe
+/// di testo così come sono e si ricavano data e ora per euristica, più l'eventuale scelta del modulo (radio/link).
+nonisolated struct AppelloIscrivibile: Sendable, Hashable, Identifiable {
+    let id: Int
+    let righe: [String]
+    let data: Date?
+    let campoScelta: String?      // `input[type=radio]@name`, se presente
+    let valoreScelta: String?     // `input[type=radio]@value`
+    let link: String?             // `a[href]` della riga, se presente
+
+    var titolo: String { righe.first ?? "Appello" }
+    var dettagli: [String] { Array(righe.dropFirst()) }
 }
 
 /// Tabella SIFA generica (prenotazioni confermate, esiti finali).

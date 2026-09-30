@@ -128,6 +128,15 @@ actor CASSession {
         return r
     }
 
+    /// Segue un link Wicket (`?N-…ILinkListener…`) di una pagina appena caricata, nella stessa sessione:
+    /// niente nuovo ingresso da `checkLogin`, che creerebbe una sessione diversa.
+    func sifaFollow(_ app: SifaApp, url: URL) async throws -> HTTPResponse {
+        guard url.host() == "studente.unimi.it", url.path().hasPrefix("/\(app.root)/") else { throw NetError.insecureURL }
+        let r = try await http.get(url)
+        guard SifaParser.isAuthenticated(html: r.text, finalURL: r.url, app: app) else { throw NetError.sessionExpired }
+        return r
+    }
+
     /// Download autenticato su studente.unimi.it (PDF prossimi appelli).
     func studenteDownload(_ url: URL) async throws -> HTTPResponse {
         try await ensureLoggedIn()

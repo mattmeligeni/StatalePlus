@@ -36,13 +36,13 @@ struct OrarioView: View {
                         }
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        weekHeader
                     } header: {
                         if !app.isMioCorsoOrario {
                             Text(Testo.nomeCorso(a.corsoOrario.cdl.label)).textCase(nil)
                         }
                     }
-                    .listSectionSpacing(6)
-                    Section { weekHeader }
                 }
                 if app.orario.value == nil, app.orario.error == nil {
                     RigaSegnaposto()

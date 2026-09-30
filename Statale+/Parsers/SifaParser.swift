@@ -30,9 +30,43 @@ nonisolated enum SifaParser {
             while codice.hasSuffix("-") { codice.removeLast() }
             return EsameIscrivibile(codice: codice.trimmed,
                                     descrizione: tds[iDesc].text,
-                                    crediti: Int(tds[iCred].text) ?? 0,
-                                    iscrizioneListenerPath: tr.first("a[href*=ILinkListener]")?.attr("href"))
+                                    crediti: Int(tds[iCred].text) ?? 0)
         }
+    }
+
+    /// `href` del pulsante "Iscrizione" della riga con quel codice ("../wicket/page?8-1.ILinkListener-…-actionButton").
+    static func linkIscrizione(html: String, codice: String) -> String? {
+        let doc = HTML.parse(html)
+        return doc.select("table tbody tr").first { tr in
+            var c = (tr.first("td[data-title=Codice]") ?? tr.first("td"))?.text.trimmed ?? ""
+            while c.hasSuffix("-") { c.removeLast() }
+            return c == codice
+        }?.first("a[href*=ILinkListener]")?.attr("href")
+    }
+
+    /// "Selezione appello": nome dell'esame, appelli in `ul.nomarker > li`, messaggio del caso vuoto.
+    static func selezioneAppello(html: String) throws -> SelezioneAppello {
+        let doc = HTML.parse(html)
+        let main = doc.first("[role=main]") ?? doc
+        guard main.text.localizedCaseInsensitiveContains("Selezione appello") || main.first("ul.nomarker") != nil else {
+            throw NetError.unexpectedPage("SIFA")
+        }
+        let esame = main.first("h4")?.text.trimmed ?? ""
+        let items = main.first("ul.nomarker")?.elementChildren.filter { $0.tag == "li" } ?? []
+        let appelli = items.enumerated().map { i, li in
+            let righe = li.readableText.components(separatedBy: .newlines).map(\.collapsed).filter { !$0.isEmpty }
+            let testo = righe.joined(separator: " ")
+            var data = testo.firstMatch(#"(\d{2}/\d{2}/\d{4})"#).flatMap(Formats.daySlash)
+            if let d = data, let ora = testo.firstMatch(#"\b(\d{1,2}[:.]\d{2})\b"#)?.replacingOccurrences(of: ".", with: ":") {
+                data = Formats.at(d, ora) ?? d
+            }
+            let radio = li.first("input[type=radio]")
+            return AppelloIscrivibile(id: i, righe: righe, data: data,
+                                      campoScelta: radio?.attr("name"), valoreScelta: radio?.attr("value"),
+                                      link: li.first("a[href]")?.attr("href"))
+        }
+        let messaggio = main.select("div").map(\.ownText).first { $0.localizedCaseInsensitiveContains("nessun appello") }
+        return SelezioneAppello(esame: esame, appelli: appelli, messaggio: appelli.isEmpty ? (messaggio ?? "Nessun appello disponibile.") : nil)
     }
 
     /// Prenotazioni confermate / esiti finali. `vuotoMarker` è il testo del caso vuoto.

@@ -84,7 +84,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - Settimana navigabile, lezioni raggruppate per giorno, dettaglio con aula, sede, docente e **Apri in Mappe**; nel dettaglio
   il nome completo dell'insegnamento è in alto e, se lungo, si espande con un tap; "Quando" riporta il giorno della
   settimana e, sotto, l'orario (es. "08:30 – 12:30").
-- Pillole dei periodi **centrate** sopra l'intestazione della settimana; se non ci stanno passano a una versione
+- Pillole dei periodi **centrate** nello stesso blocco dell'intestazione della settimana (riga con angoli superiori
+  squadrati, senza separatore); se non ci stanno passano a una versione
   compatta e poi a etichette brevi ("1° trimestre", "2° trimestre", "3° trimestre"), e solo come ultima risorsa
   scorrono. Lo stesso vale per gli anni negli Esami.
 - Nomi dei corsi leggibili ovunque: "DBD - NEUROPSICOLOGIA CLINICA E SPERIMENTALE (Classe LM-51 R) (CDS MAGISTRALE)"
@@ -147,7 +148,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   - _Calendario_: appelli dalle API Agenda per corso e anno (pillole), raggruppati per settimana, corso modificabile
     dal menu; **Vai a data** fa partire il calendario dalla settimana scelta (anche nel passato), _Oggi_ torna al presente.
   - _Iscrizioni_: prenotazioni confermate, esiti da accettare, pulsante **Iscriviti a un appello** che apre la replica di
-    "Esami del tuo corso di studio" (ricerca per insegnamento, nomi leggibili, codice · CFU, pulsante _Iscrizione_).
+    "Esami del tuo corso di studio" (ricerca per insegnamento, nomi leggibili, codice · CFU). Il pulsante **Iscriviti**
+    fa come sul sito: apre _Selezione appello_ con gli appelli disponibili per quell'esame (data, orario e dettagli)
+    o "Nessun appello disponibile."; la conferma dell'iscrizione per ora resta sul sito ufficiale (link in fondo).
   - Appelli con data compatta ("mer 30 settembre · 11:00"), messaggi vuoti riscritti ("Nessuna prenotazione confermata").
 - **Aule**: sedi espandibili toccando la riga intera, con le aule e lo stato attuale (libera / occupata fino alle…),
   "1 aula / 2 aule", indirizzo in formato italiano ("Via Celoria 2, 20133 Milano") e **Apri in Mappe**; ricerca sempre
@@ -266,6 +269,7 @@ CAS riuscito. Re-login trasparente quando una sessione scade.
 | Dato              | Pagina                                                                                                                                        |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Esami iscrivibili | `foIscrizioneEsami/esamiPack/EsamiNonSostenutiDelCorsoPage` (`table.smart-table`: Codice, Descrizione, Crediti, _Iscrizione_ `ILinkListener`) |
+| Selezione appello | GET del link _Iscrizione_ della riga (`../wicket/page?N-1.ILinkListener-form-listEsamiPanel-table-body-rows-K-cells-4-cell-actionButton`, valido solo per la pagina appena caricata) → `iscrizioneAppelloPack/SelezioneAppelloPage?M`: `h4` esame, `ul.nomarker` appelli, "Nessun appello disponibile.", form `esame/selezioneAppello?M-1.IFormSubmitListener-form` con pulsante _Indietro_ |
 | Prenotazioni      | `foIscrizioneEsami/esamiPack/EsamiIscrizioniConfermatePage` (vuoto: "Nessun esame presente")                                                  |
 | Esiti finali      | `foVerbalizzazione/esitiFinali`                                                                                                               |
 | Pagamenti         | `fo_pagamenti/` (solo link)                                                                                                                   |
@@ -369,8 +373,9 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 
 Da completare:
 
-- [ ] **Iscrizione agli appelli** da app: `SifaService.iscrivi(_:)` è predisposto (UI completa), manca il flusso Wicket
-      (seguire l'`ILinkListener` della riga nella stessa sessione, scelta appello, conferma).
+- [ ] **Iscrizione agli appelli** da app: la lista degli appelli disponibili (`SifaService.appelliDisponibili`) funziona;
+      mancano la scelta dell'appello e la conferma, da osservare quando ci saranno appelli aperti (struttura delle
+      righe di `ul.nomarker`, campo del modulo, pagina di conferma).
 - [ ] **Pagamenti SIFA**
 - [ ] **Formato del QR** del codice lezione: `QRLezione.codice(from:)` oggi usa il testo letto così com'è.
 - [ ] **Prenotazioni**: le colonne di una prenotazione reale non sono ancora state osservate; data ed esame sono
@@ -402,6 +407,12 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (4)
+
+- Esami › Iscrizioni: **Iscriviti** apre la lista degli appelli disponibili, come "Selezione appello" di SIFA
+  (verificato sul sito e nell'app: al momento nessun appello aperto per nessun esame del corso).
+- Orario: riga della settimana di nuovo attaccata alle pillole, con angoli superiori squadrati.
 
 ### 2026-09-30 (3)
 
