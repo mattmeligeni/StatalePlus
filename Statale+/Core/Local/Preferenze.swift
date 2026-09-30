@@ -40,7 +40,13 @@ nonisolated enum Preferenze {
         set { defaults.set(newValue, forKey: "obbligoFrequenzaChiave") }
     }
 
+    /// Discussioni dei forum Ariel lette nell'app: id → istante dell'ultima lettura (secondi dal 1970).
+    static var avvisiLetti: [String: Double] {
+        get { defaults.dictionary(forKey: "avvisiLetti") as? [String: Double] ?? [:] }
+        set { defaults.set(newValue, forKey: "avvisiLetti") }
+    }
+
     static func azzera() {
-        ["sogliaFrequenzaManuale", "obbligoFrequenza", "obbligoFrequenzaChiave"].forEach(defaults.removeObject(forKey:))
+        ["sogliaFrequenzaManuale", "obbligoFrequenza", "obbligoFrequenzaChiave", "avvisiLetti"].forEach(defaults.removeObject(forKey:))
     }
 }

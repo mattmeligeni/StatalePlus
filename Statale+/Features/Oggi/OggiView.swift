@@ -12,6 +12,15 @@ struct OggiView: View {
         return (app.scadenzeAriel.value ?? []).filter { $0.scaduto || ($0.inizio >= .now && $0.inizio <= limite) }
     }
 
+    /// Da leggere in cima (fino a 30 giorni), poi i letti degli ultimi 7 giorni; ciascun gruppo dal più recente.
+    private func avvisiVisibili(_ tutti: [AvvisoAriel]) -> [AvvisoAriel] {
+        let settimana = Date.now.addingTimeInterval(-7 * 86_400)
+        func data(_ a: AvvisoAriel) -> Date { a.discussione.ultimaAttivita ?? a.discussione.creata ?? .distantPast }
+        let daLeggere = tutti.filter { app.avvisoDaLeggere($0.discussione) }
+        let letti = tutti.filter { !app.avvisoDaLeggere($0.discussione) && data($0) >= settimana }
+        return daLeggere.sorted { data($0) > data($1) } + letti.sorted { data($0) > data($1) }
+    }
+
     private var notificheNonLette: [NotificaMoodle] { (app.notificheAriel.value?.notifiche ?? []).filter { !$0.letta } }
 
     var body: some View {
@@ -32,7 +41,7 @@ struct OggiView: View {
 
                 // Entrambe vuote (e caricate): una sola riga discreta. Altrimenti due sezioni separate.
                 let appelloVuoto = app.prenotazioni.value != nil && app.prenotazioni.error == nil && app.prossimoAppelloPrenotato == nil
-                let avvisiVuoti = avvisi.value?.isEmpty == true && avvisi.error == nil && notificheNonLette.isEmpty
+                let avvisiVuoti = avvisi.value.map { avvisiVisibili($0).isEmpty } == true && avvisi.error == nil && notificheNonLette.isEmpty
                 if appelloVuoto && avvisiVuoti {
                     Section {
                         Label("Nessun appello prenotato e nessun avviso Ariel negli ultimi 7 giorni.", systemImage: "tray")
@@ -48,7 +57,8 @@ struct OggiView: View {
                         }
                     }
 
-                    LiveSection(title: "Avvisi Ariel (ultimi 7 giorni)", live: avvisi, retry: loadAvvisi) { list in
+                    LiveSection(title: "Avvisi Ariel", live: avvisi, retry: loadAvvisi) { tutti in
+                        let list = avvisiVisibili(tutti)
                         if !notificheNonLette.isEmpty {
                             NavigationLink { NotificheArielView() } label: {
                                 Label(notificheNonLette.count == 1 ? "1 notifica non letta su myAriel" : "\(notificheNonLette.count) notifiche non lette su myAriel",
@@ -60,15 +70,23 @@ struct OggiView: View {
                             Text("Nessun avviso recente").foregroundStyle(.secondary)
                         } else {
                             ForEach(list) { a in
+                                let nuovo = app.avvisoDaLeggere(a.discussione)
                                 NavigationLink { DiscussionView(discussione: a.discussione) } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(a.discussione.titolo).font(.subheadline.weight(.semibold))
-                                        Text(a.corso).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                        if let d = a.discussione.ultimaAttivita ?? a.discussione.creata {
-                                            Text(d.relativoItaliano).font(.caption2).foregroundStyle(.secondary)
+                                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                        Circle().fill(nuovo ? Color.accentColor : .clear).frame(width: 8, height: 8)
+                                            .accessibilityHidden(true)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(a.discussione.titolo).font(.subheadline.weight(nuovo ? .semibold : .regular))
+                                            Text(a.corso).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                            if let d = a.discussione.ultimaAttivita ?? a.discussione.creata {
+                                                Text(d.relativoItaliano).font(.caption2).foregroundStyle(.secondary)
+                                            }
                                         }
                                     }
+                                    .accessibilityElement(children: .combine)
+                                    .accessibilityValue(nuovo ? "Da leggere" : "Letto")
                                 }
+                                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] + 18 }
                             }
                         }
                     }
@@ -168,8 +186,9 @@ struct OggiView: View {
             corsi = try await app.services.ariel.offerta()
             app.store.update { $0.offerta = corsi; $0.offertaAggiornata = .now }
         }
-        let since = Date.now.addingTimeInterval(-7 * 86_400)
-        return await app.services.ariel.avvisiRecenti(corsi: corsi.filter(\.attivo), since: since)
+        // 30 giorni: i non letti restano visibili più a lungo; i letti si filtrano a 7 in `avvisiVisibili`.
+        let since = Date.now.addingTimeInterval(-30 * 86_400)
+        return try await app.services.ariel.avvisiRecenti(corsi: corsi.filter(\.attivo), since: since)
             .map { AvvisoAriel(corso: $0.corso.titolo, discussione: $0.discussione) }
     }
 }

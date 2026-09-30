@@ -34,6 +34,10 @@ final class AppModel {
     let appelliUtente = Live<[Appello]>()          // arricchisce le prenotazioni (aula/sede)
     let prenotazioni = Live<TabellaSifa>()
     let aule = Live<OccupazioneAule>()
+    /// Letture degli avvisi dei forum (salvate sul dispositivo): una risposta successiva li rende di nuovo da leggere.
+    var avvisiLetti: [String: Date] = Preferenze.avvisiLetti.mapValues { Date(timeIntervalSince1970: $0) } {
+        didSet { Preferenze.avvisiLetti = avvisiLetti.mapValues(\.timeIntervalSince1970) }
+    }
     let scadenzeAriel = Live<[EventoMoodle]>()     // Oggi (prossimi 7 giorni), Ariel › Scadenze
     let notificheAriel = Live<NotificheMoodle>()   // Oggi (non lette), Ariel › Notifiche
     let alberoOrario = Live<[AgendaScuola]>()

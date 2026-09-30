@@ -389,6 +389,7 @@ struct DiscussionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await load() }
         .task { await posts.loadIfNeeded { try await app.services.ariel.discussione(discussione) } }
+        .onAppear { app.segnaAvvisoLetto(discussione) }
     }
 
     private func load() async { await posts.load { try await app.services.ariel.discussione(discussione) } }

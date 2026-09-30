@@ -34,6 +34,22 @@ extension AppModel {
         return (f.soglia, .easyBadge)
     }
 
+    // MARK: Avvisi dei forum Ariel
+
+    /// Da leggere se mai aperto nell'app o se c'è stata attività dopo l'ultima lettura.
+    func avvisoDaLeggere(_ d: DiscussioneForum) -> Bool {
+        guard let letto = avvisiLetti[d.id] else { return true }
+        return (d.ultimaAttivita ?? d.creata ?? .distantPast) > letto
+    }
+
+    /// Aprire una discussione (da Oggi o dal forum del corso) la segna come letta. Letture più vecchie di 60 giorni
+    /// si dimenticano: quegli avvisi non vengono più mostrati comunque.
+    func segnaAvvisoLetto(_ d: DiscussioneForum) {
+        var letti = avvisiLetti.filter { $0.value > Date.now.addingTimeInterval(-60 * 86_400) }
+        letti[d.id] = max(Date.now, d.ultimaAttivita ?? .distantPast)
+        avvisiLetti = letti
+    }
+
     // MARK: myAriel: scadenze e notifiche
 
     func loadScadenzeAriel(force: Bool) async {
@@ -198,6 +214,7 @@ extension AppModel {
         aule.reset(); alberoOrario.reset(); alberoEsami.reset()
         Preferenze.azzera()
         obbligoFrequenza = nil
+        avvisiLetti = [:]
         // Zip dei materiali dei corsi: dati dell'account.
         try? FileManager.default.removeItem(at: URL.cachesDirectory.appending(path: "Materiali", directoryHint: .isDirectory))
         if eliminaDatiLocali {

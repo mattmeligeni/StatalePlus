@@ -70,7 +70,11 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     l'etichetta verde "Presenza registrata" con il sigillo pieno (lo stesso simbolo di "Tasse in regola").
 - Aula e sede su due righe (aula in evidenza, sede in grigio) in lezioni, appelli e prenotazioni.
 - **Prossimo appello prenotato** (da SIFA), arricchito con aula e sede dal calendario Agenda e pulsante Mappe.
-- **Avvisi Ariel** degli ultimi 7 giorni (bacheche dei corsi attivi).
+- **Avvisi Ariel** (discussioni dei forum dei corsi attivi): pallino blu per quelli da leggere, in cima; una
+  discussione diventa letta quando la apri nell'app (da Oggi o dal forum del corso) e torna da leggere se arrivano
+  risposte dopo. I non letti restano visibili fino a 30 giorni, i letti per 7. Le letture sono salvate sul
+  dispositivo (Moodle non le espone) e cancellate all'uscita dall'account. Se Ariel non risponde compare l'errore con
+  "Riprova" invece di "Nessun avviso recente".
 - Se appello prenotato e avvisi sono **entrambi** vuoti, una sola riga discreta ("Nessun appello prenotato e nessun
   avviso Ariel negli ultimi 7 giorni"); se almeno uno ha elementi, le due sezioni restano separate.
 - Durante il primo caricamento ogni sezione mostra una riga segnaposto sfumata al posto della rotellina.
@@ -468,6 +472,12 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (12)
+
+- Avvisi Ariel in Oggi: pallino blu e ordinamento da leggere/letti, letture salvate sul dispositivo; i non letti
+  restano fino a 30 giorni. Prima sparivano perché uscivano dalla finestra di 7 giorni (in un primo momento era di
+  10 giorni per le prove) e gli errori di accesso ad Ariel venivano mostrati come "nessun avviso".
 
 ### 2026-09-30 (11)
 

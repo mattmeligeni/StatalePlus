@@ -93,10 +93,15 @@ actor ArielService {
     }
 
     /// Avvisi recenti per la tab Oggi: discussioni dei forum dei corsi attivi, più recenti di `since`.
-    func avvisiRecenti(corsi: [InsegnamentoOfferta], since: Date) async -> [(corso: InsegnamentoOfferta, discussione: DiscussioneForum)] {
+    /// Se nessun corso risponde (es. accesso ad Ariel non riuscito) l'errore sale: "nessun avviso" solo se è vero.
+    func avvisiRecenti(corsi: [InsegnamentoOfferta], since: Date) async throws -> [(corso: InsegnamentoOfferta, discussione: DiscussioneForum)] {
         var out: [(InsegnamentoOfferta, DiscussioneForum)] = []
+        var riusciti = 0
+        var ultimoErrore: Error?
         for corso in corsi {
-            guard let id = corso.courseId, let state = try? await struttura(courseId: id) else { continue }
+            guard let id = corso.courseId else { continue }
+            let state: CourseState
+            do { state = try await struttura(courseId: id); riusciti += 1 } catch { ultimoErrore = error; continue }
             for forum in state.cm where forum.module == "forum" && (forum.uservisible ?? forum.visible) {
                 guard let dettaglio = try? await modulo(forum) else { continue }
                 for d in dettaglio.discussioni where (d.ultimaAttivita ?? d.creata ?? .distantPast) >= since {
@@ -104,6 +109,7 @@ actor ArielService {
                 }
             }
         }
+        if riusciti == 0, let ultimoErrore { throw ultimoErrore }
         return out.sorted { ($0.1.ultimaAttivita ?? .distantPast) > ($1.1.ultimaAttivita ?? .distantPast) }
     }
 }
