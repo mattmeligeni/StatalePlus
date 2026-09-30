@@ -133,7 +133,9 @@ struct CourseDetailView: View {
 
     /// Scheda = info generale → cache persistita con TTL.
     private func loadScheda(force: Bool) async {
-        if !force, let c = app.store.snapshot.schede[courseId], !app.store.isStale(c.aggiornata, ttl: StableStore.ttlScheda) {
+        // Le schede in cache senza titolari (salvate prima che li leggessimo) si riscaricano.
+        if !force, let c = app.store.snapshot.schede[courseId], c.scheda.titolari != nil,
+           !app.store.isStale(c.aggiornata, ttl: StableStore.ttlScheda) {
             await scheda.load { c.scheda }
             return
         }
@@ -162,6 +164,14 @@ private struct SchedaView: View {
     let corso: InsegnamentoOfferta
     @State private var espanso = false
     @State private var showCalendario = false
+    @State private var docente: TitolareSito?
+
+    private var titolari: [TitolareSito] { scheda.titolari ?? [] }
+
+    /// Titolari del sito che non compaiono fra i docenti delle edizioni (es. coordinatore del corso).
+    private var altriTitolari: [TitolareSito] {
+        titolari.filter { t in !scheda.docenti.contains { t.corrisponde(a: $0) } }
+    }
 
     var body: some View {
         if let o = scheda.obiettivi {
@@ -172,18 +182,105 @@ private struct SchedaView: View {
         }
         if let p = scheda.periodo { LabeledContent("Periodo", value: p) }
         if let l = scheda.lingua { LabeledContent("Lingua", value: l) }
-        ForEach(scheda.docenti, id: \.self) { LabeledContent("Docente", value: $0) }
-        if let e = scheda.emailDocente, let url = URL(string: "mailto:\(e)") { Link(destination: url) { Label(e, systemImage: "envelope") } }
+        ForEach(scheda.docenti, id: \.self) { d in
+            if let t = titolari.first(where: { $0.corrisponde(a: d) }) {
+                rigaDocente("Docente", valore: d, titolare: t)
+            } else {
+                LabeledContent("Docente", value: d)
+            }
+        }
+        ForEach(altriTitolari) { rigaDocente("Titolare del sito", valore: $0.nome, titolare: $0) }
+        // Senza titolari (scheda vecchia o blocco diverso): email e CV restano qui.
+        if titolari.isEmpty {
+            if let e = scheda.emailDocente, let url = URL(string: "mailto:\(e)") { Link(destination: url) { Label(e, systemImage: "envelope") } }
+            if let u = scheda.cvDocenteURL { Link(destination: u) { Label("CV docente", systemImage: "person.text.rectangle") } }
+        }
         if let u = scheda.programmaURL { Link(destination: u) { Label("Programma e organizzazione didattica", systemImage: "doc.text") } }
         Button { showCalendario = true } label: { Label("Calendario lezioni", systemImage: "calendar") }
             .sheet(isPresented: $showCalendario) { calendario }
-        if let u = scheda.cvDocenteURL { Link(destination: u) { Label("CV docente", systemImage: "person.text.rectangle") } }
+            .sheet(item: $docente) { DocenteSheet(titolare: $0).presentationDetents([.medium, .large]) }
+    }
+
+    private func rigaDocente(_ etichetta: String, valore: String, titolare: TitolareSito) -> some View {
+        Button { docente = titolare } label: {
+            LabeledContent(etichetta) {
+                HStack(spacing: 4) {
+                    Text(valore).foregroundStyle(Color.accentColor)
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .tint(.primary)
+        .accessibilityHint("Mostra contatti e ricevimento")
     }
 
     private var calendario: some View {
         LezioniInsegnamentoSheet(titolo: corso.titolo,
                                  codiceAgenda: scheda.codiceAgenda ?? "\(corso.codice)_1",
                                  anno: scheda.annoAgenda ?? String(Formats.currentAcademicYear().prefix(4)))
+    }
+}
+
+/// Riepilogo del docente dalla scheda insegnamento: ruolo, contatti, sede e ricevimento.
+private struct DocenteSheet: View {
+    let titolare: TitolareSito
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(titolare.nome).font(.title3.bold())
+                        if let r = titolare.ruolo { Text(r).foregroundStyle(.secondary) }
+                    }
+                }
+                if titolare.ricevimento != nil || titolare.luogoRicevimento != nil {
+                    Section("Ricevimento") {
+                        if let r = titolare.ricevimento {
+                            Label { Text(r) } icon: { Image(systemName: "clock") }
+                        }
+                        if let l = titolare.luogoRicevimento {
+                            Label { Text(l) } icon: { Image(systemName: "door.left.hand.open") }
+                        }
+                    }
+                }
+                Section("Contatti") {
+                    if let e = titolare.email, let url = URL(string: "mailto:\(e)") {
+                        Link(destination: url) { Label(e, systemImage: "envelope") }
+                    }
+                    if let t = titolare.telefono, let url = URL(string: "tel:\(t.filter { $0.isNumber || $0 == "+" })") {
+                        Link(destination: url) { Label(t, systemImage: "phone") }
+                    }
+                    if let s = titolare.struttura {
+                        if let u = titolare.strutturaURL {
+                            Link(destination: u) { Label(s, systemImage: "building.columns") }
+                        } else {
+                            Label(s, systemImage: "building.columns")
+                        }
+                    }
+                    if let i = titolare.indirizzo {
+                        Button { if let u = Maps.url(address: i) { openURL(u) } } label: {
+                            Label(i, systemImage: "map")
+                        }
+                    }
+                    if let s = titolare.sede, s.matchKey != titolare.indirizzo?.matchKey {
+                        Label(s, systemImage: "mappin.and.ellipse").foregroundStyle(.secondary)
+                    }
+                }
+                if titolare.cvURL != nil || titolare.chiEDoveURL != nil {
+                    Section {
+                        if let u = titolare.cvURL { Link(destination: u) { Label("Curriculum", systemImage: "doc.text") } }
+                        if let u = titolare.chiEDoveURL { Link(destination: u) { Label("Pagina personale (Chi e dove)", systemImage: "person.text.rectangle") } }
+                    }
+                }
+            }
+            .listSectionSpacing(.compact)
+            .contentMargins(.top, 8, for: .scrollContent)
+            .navigationTitle("Docente")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationBackground(Color(.systemGroupedBackground))
     }
 }
 

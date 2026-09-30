@@ -102,7 +102,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - Offerta dell'anno accademico corrente: corsi con sito attivo in cima; quelli senza sito didattico sono raccolti in
   un gruppo richiudibile. Ogni riga: titolo, codice e titolari su una riga.
 - Dettaglio corso: titolo in alto, una sezione per ogni sezione Moodle con icone allineate; descrizioni e post con
-  grassetto, corsivo ed elenchi puntati. Scheda insegnamento (obiettivi, periodo, lingua, docenti, link), **Calendario lezioni**
+  grassetto, corsivo ed elenchi puntati. Un tap sul nome del docente apre il suo **riepilogo** (dal blocco W4
+  "Titolare del sito"): ruolo, ricevimento e luogo, email, telefono, dipartimento con sito, indirizzo (Mappe), sede,
+  curriculum e pagina "Chi e dove". Email e CV non sono più ripetuti nella schermata del corso. Scheda insegnamento (obiettivi, periodo, lingua, docenti, link), **Calendario lezioni**
   (modal compatto con le sole lezioni della materia dalle API Agenda, raggruppate per mese), contenuti per sezione, moduli con descrizione,
   file (anteprima Quick Look), forum e discussioni, partecipanti, valutazioni.
 
@@ -341,6 +343,11 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 - **File orario inesistente** → HTTP 200 con corpo vuoto = nessuna lezione. Risposte `Content-Encoding: gzip`.
 - **Moodle**: la risposta AJAX contiene il JSON **come stringa** (doppia decodifica); il tipo modulo è `module`
   (`forum`), `modname` è l'etichetta localizzata (`Forum`).
+- **Titolare del sito** (myAriel, blocco `.block_w4info`, `#accordionDocenti`): un `div.div-chiedove[data-p]` per
+  docente, già nell'HTML del server (nessuna chiamata in più). Le righe dei contatti variano (un professore a contratto
+  può avere solo email, CV e "Chi e dove"): si riconoscono dall'icona Font Awesome (`fa-university`, `fa-map-marker`
+  con link = indirizzo / senza link = sede, `fa-envelope-o`, `fa-phone`, `fa-file-text`, `fa-address-book`).
+  `.div-ricevimento`: testo del ricevimento, poi "Luogo ricevimento" in grassetto e il luogo.
 - **QR della lezione**: testo Base64 (`UVJfOXRwNG02YW4tMTc5MDc3MzY2MDAwMA==` → `QR_9tp4m6an-1790773660000`); il codice
   lezione è la parte prima del trattino, il numero è un istante in ms che cambia a ogni rotazione del QR e non serve
   (la richiesta usa l'ora attuale). Risposte della timbratura: `{"result":"ok"|"warning"|"failure","message":…}`.
@@ -437,6 +444,11 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (9)
+
+- Ariel: riepilogo del docente (titolare del sito) con contatti e ricevimento, aperto dal nome nella scheda
+  insegnamento; le schede in cache senza questi dati vengono riscaricate.
 
 ### 2026-09-30 (8)
 

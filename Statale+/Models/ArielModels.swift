@@ -79,6 +79,32 @@ nonisolated struct SchedaInsegnamento: Codable, Sendable {
     /// Dal link calendario: "ECDBD-29_1" → "DBD-29_1", lo stesso codice delle API Agenda (`codice` degli insegnamenti).
     let codiceAgenda: String?
     let annoAgenda: String?       // "2026" (cartella del file XML "2026/DBD-29_1_1-semestre.xml")
+    /// "Titolare del sito" (`#accordionDocenti`): contatti e ricevimento. Opzionale per le schede in cache
+    /// salvate prima di questo campo (vengono riscaricate).
+    var titolari: [TitolareSito]? = nil
+}
+
+/// Scheda "Contatti" + "Ricevimento" di un titolare del sito (blocco W4 della pagina del corso). Le righe dei contatti
+/// si riconoscono dall'icona perché variano da docente a docente (un professore a contratto può avere solo email e CV).
+nonisolated struct TitolareSito: Codable, Sendable, Hashable, Identifiable {
+    var id: String { nome }
+    let nome: String                 // p.font-weight-bold "Mario Rossi"
+    let ruolo: String?               // p.font-italic "Professore Ordinario"
+    let struttura: String?           // fa-university: "Dipartimento di Scienze Biomediche e Cliniche"
+    let strutturaURL: URL?           //   a[href] sito del dipartimento
+    let indirizzo: String?           // fa-map-marker con link a Google Maps: "Via … 74, 20157 Milano (MI)"
+    let sede: String?                // fa-map-marker senza link: "Milano - Via …"
+    let email: String?               // fa-envelope-o: a[href^=mailto:]
+    let telefono: String?            // fa-phone
+    let cvURL: URL?                  // fa-file-text: work.unimi.it/chiedove/cv/…pdf
+    let chiEDoveURL: URL?            // fa-address-book: www.unimi.it/it/ugov/person/…
+    let ricevimento: String?         // .div-ricevimento: "previo appuntamento e-mail"
+    let luogoRicevimento: String?    //   dopo "Luogo ricevimento"
+
+    /// "Mario Rossi (Lezioni)" della scheda → questo titolare, se il nome coincide.
+    func corrisponde(a docente: String) -> Bool {
+        docente.matchKey.hasPrefix(nome.matchKey) || nome.matchKey == docente.matchKey
+    }
 }
 
 // MARK: - Contenuti modulo (live)

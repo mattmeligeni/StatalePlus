@@ -103,7 +103,53 @@ nonisolated enum ArielParser {
                                   programmaURL: link("Insegnamento"), calendarioURL: calendario,
                                   emailDocente: mail, cvDocenteURL: cv,
                                   codiceAgenda: codiceAgenda,
-                                  annoAgenda: decoded.firstMatch(#"anno=(\d{4})"#))
+                                  annoAgenda: decoded.firstMatch(#"anno=(\d{4})"#),
+                                  titolari: titolari(block))
+    }
+
+    /// `div.div-chiedove[data-p]` per ogni titolare: colonna contatti (righe con icona Font Awesome) e colonna
+    /// `.div-ricevimento` (testo, poi "Luogo ricevimento" in grassetto seguito dal luogo).
+    static func titolari(_ block: HTMLNode) -> [TitolareSito] {
+        block.select("div.div-chiedove").filter { $0.hasAttr("data-p") }.compactMap { d in
+            guard let nome = d.first("p.font-weight-bold")?.text.trimmed, !nome.isEmpty else { return nil }
+            var struttura: String?, strutturaURL: URL?, indirizzo: String?, sede: String?, email: String?
+            var telefono: String?, cv: URL?, chiEDove: URL?
+            for tr in d.select("tr") {
+                let icona = tr.first("em")?.classes.map(String.init) ?? []
+                let tds = tr.elementChildren.filter { $0.tag == "td" }
+                guard let cella = tds.last else { continue }
+                let testo = cella.text.trimmed
+                let link = cella.first("a[href]")?.attr("href")
+                if icona.contains("fa-university") {
+                    struttura = testo; strutturaURL = link.flatMap(URL.init(string:))
+                } else if icona.contains("fa-map-marker") {
+                    if link != nil { indirizzo = testo } else { sede = testo }
+                } else if icona.contains(where: { $0.hasPrefix("fa-envelope") }) {
+                    email = link.map { $0.replacingOccurrences(of: "mailto:", with: "") } ?? testo
+                } else if icona.contains(where: { $0.hasPrefix("fa-phone") }) {
+                    telefono = testo
+                } else if icona.contains("fa-file-text") {
+                    cv = link.flatMap(URL.init(string:))
+                } else if icona.contains("fa-address-book") {
+                    chiEDove = link.flatMap(URL.init(string:))
+                }
+            }
+            var ricevimento: [String] = []
+            var luogo: String?
+            var prossimoELuogo = false
+            for p in d.first(".div-ricevimento")?.select("p") ?? [] {
+                let t = p.text.trimmed
+                guard !t.isEmpty else { continue }
+                if p.classes.contains("font-weight-bold") { prossimoELuogo = true; continue }
+                if prossimoELuogo { luogo = t; prossimoELuogo = false } else { ricevimento.append(t) }
+            }
+            func vuoto(_ s: String?) -> String? { s.flatMap { $0.isEmpty ? nil : $0 } }
+            return TitolareSito(nome: nome, ruolo: vuoto(d.first("p.font-italic")?.text.trimmed),
+                                struttura: vuoto(struttura), strutturaURL: strutturaURL, indirizzo: vuoto(indirizzo),
+                                sede: vuoto(sede), email: vuoto(email), telefono: vuoto(telefono), cvURL: cv,
+                                chiEDoveURL: chiEDove, ricevimento: ricevimento.isEmpty ? nil : ricevimento.joined(separator: "\n"),
+                                luogoRicevimento: vuoto(luogo))
+        }
     }
 
     // MARK: Moduli
