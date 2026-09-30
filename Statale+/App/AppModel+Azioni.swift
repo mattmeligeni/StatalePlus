@@ -36,10 +36,17 @@ extension AppModel {
 
     // MARK: Registrazioni
 
+    /// Salva una registrazione appena chiusa e, se attivo in Impostazioni, ne migliora l'audio.
+    func salvaRegistrazione(_ r: Registrazione) {
+        recordings.add(r)
+        if Preferenze.miglioraAudio { elaborazioni.migliora(r, in: recordings) }
+    }
+
     /// Eliminazione completa: ferma le elaborazioni in corso, poi audio, metadati, trascrizione, riassunto e indice.
     func eliminaRegistrazione(_ r: Registrazione) {
         elaborazioni.annulla(.trascrizione, r.id)
         elaborazioni.annulla(.riassunto, r.id)
+        elaborazioni.annulla(.miglioramento, r.id)
         recordings.delete(r)
     }
 
@@ -158,7 +165,12 @@ extension AppModel {
     /// registrazioni, foto profilo, file scaricati e cache; altrimenti li conserva per un altro profilo.
     func logout(eliminaDatiLocali: Bool) {
         if recorder.state != .idle {
-            if eliminaDatiLocali { recorder.discard(in: recordings) } else if let r = recorder.stop() { recordings.add(r) }
+            if eliminaDatiLocali {
+                recorder.discard(in: recordings)
+            } else {
+                let archivio = recordings
+                Task { if let r = await recorder.stop() { archivio.add(r) } }
+            }
         }
         fermaAutoRefresh()
         KeychainStore.delete()

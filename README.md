@@ -125,6 +125,14 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   - voce senza audio → rimossa; trascrizioni, riassunti e metadati rimasti senza audio → eliminati.
   Un avviso all'avvio chiede se controllare subito o più tardi; le registrazioni ricostruite restano nella sezione
   **Da verificare** in fondo a Registrazioni (ascolto, data e ora modificabili, insegnamento, "I dati sono corretti").
+- **Miglioramento dell'audio** (automatico dopo ogni registrazione, disattivabile in Impostazioni; manuale dal
+  dettaglio per le registrazioni precedenti), pensato per lezioni registrate da lontano, in `MiglioramentoAudio`:
+  riduzione del rumore spettrale (STFT con vDSP, stima continua del fondo per frequenza, massimo −12 dB), equalizzazione
+  per la voce (passa-alto 90 Hz, −2 dB a 250 Hz, +4 dB a 3 kHz, passa-basso 7,5 kHz), espansore e compressore con
+  soglie ricavate dalla registrazione, normalizzazione a −16 LUFS con limitatore a −3 dBFS. Tutto in streaming, senza
+  file temporanei PCM. Su una lezione reale di 2 h 41 min (−38,9 LUFS): −16,6 LUFS, distanza voce/pause da 8,9 a
+  17,8 dB (`ffmpeg loudnorm` arriva a −23 LUFS e lascia la distanza a 8,5 dB); 48 s su Mac, 32 MB di memoria.
+  L'originale resta in `<id>.originale.m4a` e si può ripristinare; la trascrizione usa la versione migliorata.
 - **Trascrizione** in italiano con il framework Speech di Apple:
   - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber` on-device, pensati per audio lunghi (il modello della lingua viene
     scaricato la prima volta);
@@ -164,7 +172,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - **Aule**: sedi espandibili toccando la riga intera, con le aule e lo stato attuale (libera / occupata fino alle…),
   "1 aula / 2 aule", indirizzo in formato italiano ("Via Celoria 2, 20133 Milano") e **Apri in Mappe**; ricerca sempre
   visibile per sede, aula o indirizzo; _Dove si tiene_ cerca le attività della giornata odierna.
-- **Presenze**: registrazione presenza con codice lezione (digitato o da **QR**), risposta del server mostrata così com'è;
+- **Presenze**: registrazione presenza con codice lezione (digitato o da **QR**, con slider di zoom fino a 5× per i
+  codici proiettati lontano), risposta del server mostrata così com'è;
   frequenza per corso con barra e **tacca sulla soglia**, dettaglio con riepilogo ("mancano 18 h per la soglia del 50%")
   e lezioni future attenuate.
   - **Soglia di frequenza**: EasyBadge restituisce un proprio valore (`percentuale_conseguimento`, es. 0,7) che non
@@ -350,6 +359,7 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 | Foto profilo                                                                                               | `Application Support/profilo.jpg`                                                                                         |
 | Registrazioni                                                                                              | `Application Support/Registrazioni/<id>.m4a` (AAC mono 64 kbps, ~29 MB/ora) + metadati `<id>.json` + indice `registrazioni.json` |
 | Trascrizioni e riassunti                                                                                   | `Application Support/Registrazioni/<id>.txt` e `<id>.riassunto.md`, separati dall'indice                                  |
+| Audio originale (se migliorato)                                                                            | `Application Support/Registrazioni/<id>.originale.m4a`; `<id>.m4a` è la versione migliorata                                |
 | Cookie di sessione                                                                                         | `HTTPCookieStorage` di sistema                                                                                            |
 | Orario, appelli, tasse, presenze, aule, esiti, partecipanti                                                | solo in memoria                                                                                                           |
 
@@ -420,6 +430,15 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (7)
+
+- Registratore e player spostati dentro l'attore `MotoreAudio`: anche `record()`, `play()`, `pause()` e `stop()`
+  (che attivano o disattivano la sessione audio da soli) girano fuori dal main thread. Le API asincrone di
+  attivazione esistono solo da iOS 27.
+- **Miglioramento dell'audio** delle registrazioni (volume, rumore di fondo, voce), automatico o manuale, con
+  ripristino dell'originale.
+- Slider di zoom nella scansione del QR della lezione.
 
 ### 2026-09-30 (6)
 

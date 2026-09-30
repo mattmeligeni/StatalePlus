@@ -266,7 +266,7 @@ private struct RecorderCard: View {
                         rec.state == .paused ? rec.resume() : rec.pause()
                     }
                     CircleButton(system: "stop.fill", tint: .red, big: true) {
-                        if let r = rec.stop() { app.recordings.add(r) }
+                        Task { if let r = await rec.stop() { app.salvaRegistrazione(r) } }
                     }
                     CircleButton(system: "bookmark.fill", tint: .accentColor) { rec.bookmark() }
                         .overlay(alignment: .topTrailing) {
@@ -397,6 +397,7 @@ struct RegistrazioneDetailView: View {
                             PlayerControls(player: player)
                         }
                     }
+                    MiglioramentoSection(registrazione: r)
                     TrascrizioneSection(registrazione: r)
                     if AppleIntelligence.stato != .nonSupportata {
                         RiassuntoSection(registrazione: r)
@@ -426,12 +427,64 @@ struct RegistrazioneDetailView: View {
             }
         }
         .onAppear { if let r = app.recordings.item(id) { player.load(app.recordings.url(for: r)) } }
+        // Audio sostituito (migliorato o ripristinato): stesso percorso, file nuovo.
+        .onChange(of: app.recordings.item(id)?.migliorata) {
+            if let r = app.recordings.item(id) { player.ricarica(app.recordings.url(for: r)) }
+        }
         .onDisappear { player.stop() }
         .confermaEliminazione(Binding(get: { confermaElimina ? app.recordings.item(id) : nil },
                                       set: { if $0 == nil { confermaElimina = false } })) { r in
             player.stop()
             app.eliminaRegistrazione(r)
             dismiss()
+        }
+    }
+}
+
+/// Miglioramento dell'audio: stato, avvio manuale (registrazioni precedenti) e ripristino dell'originale.
+private struct MiglioramentoSection: View {
+    let registrazione: Registrazione
+    @Environment(AppModel.self) private var app
+    @State private var confermaRipristino = false
+
+    var body: some View {
+        let id = registrazione.id
+        Section {
+            if let s = app.elaborazioni.stato(.miglioramento, id) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView(value: s.progresso) {
+                        Text(s.messaggio).font(.subheadline)
+                    } currentValueLabel: {
+                        Text(s.progresso.formatted(.percent.precision(.fractionLength(0)).locale(Formats.it)))
+                    }
+                    Button("Annulla", role: .cancel) { app.elaborazioni.annulla(.miglioramento, id) }
+                        .font(.caption)
+                        .buttonStyle(.borderless)
+                }
+            } else if registrazione.migliorata == true {
+                Label("Audio migliorato", systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(.green)
+                Button("Ripristina l'audio originale") { confermaRipristino = true }
+            } else {
+                Button {
+                    app.elaborazioni.migliora(registrazione, in: app.recordings)
+                } label: {
+                    Label("Migliora l'audio", systemImage: "wand.and.stars")
+                }
+                .disabled(app.elaborazioni.stato(.trascrizione, id) != nil)
+            }
+            if let e = app.elaborazioni.erroriMiglioramento[id] {
+                Text(e).font(.caption).foregroundStyle(.red)
+            }
+        } header: {
+            Text("Audio")
+        } footer: {
+            Text("Alza e uniforma il volume della voce e attenua fruscio e rumore di fondo, per ascoltare e trascrivere meglio. L'audio originale resta conservato.")
+        }
+        .confirmationDialog("Ripristinare l'audio originale?", isPresented: $confermaRipristino, titleVisibility: .visible) {
+            Button("Ripristina originale", role: .destructive) { app.recordings.ripristinaOriginale(id) }
+        } message: {
+            Text("La versione migliorata verrà eliminata. Potrai rifare il miglioramento in qualsiasi momento.")
         }
     }
 }

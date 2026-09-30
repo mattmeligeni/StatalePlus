@@ -215,6 +215,7 @@ struct ImpostazioniView: View {
     @State private var refreshError: String?
     @State private var fotoItem: PhotosPickerItem?
     @AppStorage("sogliaFrequenzaManuale") private var sogliaManuale = 0
+    @AppStorage("miglioraAudio") private var miglioraAudio = true
 
     var body: some View {
         List {
@@ -251,6 +252,13 @@ struct ImpostazioniView: View {
                 Text(app.obbligoFrequenza != nil
                      ? "In automatico vale la percentuale del manifesto degli studi del tuo corso. Scegline una se per un insegnamento vale una regola diversa."
                      : "In automatico vale la percentuale indicata dal sistema presenze, finché non si trova il manifesto degli studi del tuo corso.")
+            }
+            Section {
+                Toggle("Migliora l'audio dopo ogni registrazione", isOn: $miglioraAudio)
+            } header: {
+                Text("Registrazioni")
+            } footer: {
+                Text("Volume della voce normalizzato, fruscio e rumore di fondo attenuati: aiuta anche trascrizione e riassunto. L'originale resta sempre conservato e si può ripristinare dal dettaglio della registrazione.")
             }
             Section {
                 StatoSessione(nome: "CAS (UNIMIA, SIFA)", attiva: CookieJar.has("CASTGC"))

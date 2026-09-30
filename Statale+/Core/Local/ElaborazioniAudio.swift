@@ -1,10 +1,11 @@
 import Foundation
 import Observation
+import UIKit
 
 /// Trascrizioni e riassunti in corso, indipendenti dalla schermata aperta (si può uscire dal dettaglio).
 @Observable
 final class ElaborazioniAudio {
-    enum Tipo { case trascrizione, riassunto }
+    enum Tipo { case trascrizione, riassunto, miglioramento }
 
     struct Stato: Equatable {
         var progresso: Double
@@ -13,13 +14,46 @@ final class ElaborazioniAudio {
 
     private(set) var trascrizioni: [UUID: Stato] = [:]
     private(set) var riassunti: [UUID: Stato] = [:]
+    private(set) var miglioramenti: [UUID: Stato] = [:]
     private(set) var errori: [UUID: String] = [:]
+    private(set) var erroriMiglioramento: [UUID: String] = [:]
     @ObservationIgnored private var tasks: [String: Task<Void, Never>] = [:]
 
-    func stato(_ tipo: Tipo, _ id: UUID) -> Stato? { tipo == .trascrizione ? trascrizioni[id] : riassunti[id] }
+    func stato(_ tipo: Tipo, _ id: UUID) -> Stato? {
+        switch tipo {
+        case .trascrizione: trascrizioni[id]
+        case .riassunto: riassunti[id]
+        case .miglioramento: miglioramenti[id]
+        }
+    }
+
+    /// Volume e rumore di fondo (`MiglioramentoAudio`): l'audio migliorato sostituisce quello della registrazione,
+    /// l'originale resta. Non parte mentre la stessa registrazione viene trascritta (e viceversa).
+    func migliora(_ r: Registrazione, in store: RecordingStore) {
+        guard miglioramenti[r.id] == nil, trascrizioni[r.id] == nil else { return }
+        erroriMiglioramento[r.id] = nil
+        miglioramenti[r.id] = Stato(progresso: 0, messaggio: "Miglioramento dell'audio…")
+        let id = r.id
+        tasks["m\(id)"] = Task {
+            // Qualche decina di secondi in più se si esce dall'app: basta per le registrazioni brevi.
+            let bg = UIApplication.shared.beginBackgroundTask(withName: "Miglioramento audio")
+            defer { if bg != .invalid { UIApplication.shared.endBackgroundTask(bg) } }
+            do {
+                try await store.migliora(id) { p in
+                    Task { @MainActor in self.miglioramenti[id]?.progresso = p }
+                }
+            } catch is CancellationError {
+            } catch {
+                erroriMiglioramento[id] = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            miglioramenti[id] = nil
+            tasks["m\(id)"] = nil
+        }
+    }
 
     func trascrivi(_ r: Registrazione, in store: RecordingStore) {
         guard trascrizioni[r.id] == nil else { return }
+        if miglioramenti[r.id] != nil { errori[r.id] = "Attendi la fine del miglioramento dell'audio."; return }
         if let motivo = LimitiElaborazione.bloccoTrascrizione(r) { errori[r.id] = motivo; return }
         errori[r.id] = nil
         trascrizioni[r.id] = Stato(progresso: 0, messaggio: "Preparazione…")
@@ -64,10 +98,15 @@ final class ElaborazioniAudio {
     }
 
     func annulla(_ tipo: Tipo, _ id: UUID) {
-        let key = (tipo == .trascrizione ? "t" : "r") + id.uuidString
+        let prefisso = switch tipo { case .trascrizione: "t"; case .riassunto: "r"; case .miglioramento: "m" }
+        let key = prefisso + id.uuidString
         tasks[key]?.cancel()
         tasks[key] = nil
-        if tipo == .trascrizione { trascrizioni[id] = nil } else { riassunti[id] = nil }
+        switch tipo {
+        case .trascrizione: trascrizioni[id] = nil
+        case .riassunto: riassunti[id] = nil
+        case .miglioramento: miglioramenti[id] = nil
+        }
     }
 
     func annullaTutto() {
@@ -75,5 +114,6 @@ final class ElaborazioniAudio {
         tasks = [:]
         trascrizioni = [:]
         riassunti = [:]
+        miglioramenti = [:]
     }
 }

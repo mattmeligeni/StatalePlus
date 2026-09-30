@@ -23,6 +23,12 @@ nonisolated enum Preferenze {
         set { defaults.set(newValue, forKey: "sogliaFrequenzaManuale") }
     }
 
+    /// Miglioramento automatico dell'audio dopo ogni registrazione (predefinito: attivo).
+    static var miglioraAudio: Bool {
+        get { defaults.object(forKey: "miglioraAudio") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "miglioraAudio") }
+    }
+
     static var obbligoFrequenza: ObbligoFrequenza? {
         get { defaults.data(forKey: "obbligoFrequenza").flatMap { try? JSONDecoder().decode(ObbligoFrequenza.self, from: $0) } }
         set { defaults.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: "obbligoFrequenza") }
