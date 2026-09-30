@@ -112,7 +112,7 @@ struct LezioneRow: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .trailing) {
                 if mostraData {
-                    Text(lezione.inizio.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "it_IT"))))
+                    Text(lezione.inizio.formatted(.dateTime.day().month(.abbreviated).locale(Formats.it)))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 Text(Formats.time(lezione.inizio)).font(.subheadline.monospacedDigit().bold())

@@ -56,7 +56,7 @@ struct OrarioView: View {
                             Text(lezioni.isEmpty ? "Nessuna lezione per gli insegnamenti attivati" : "Nessuna lezione in questa settimana")
                                 .foregroundStyle(.secondary)
                             if let next = lezioni.first(where: { $0.inizio >= end }) ?? lezioni.last(where: { $0.inizio < weekStart }) {
-                                Button("Vai alla settimana del \(next.inizio.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "it_IT"))))") {
+                                Button("Vai alla settimana del \(next.inizio.formatted(.dateTime.day().month(.wide).locale(Formats.it)))") {
                                     weekOffset = weeks(to: next.inizio)
                                 }
                                 .font(.callout)
@@ -75,7 +75,7 @@ struct OrarioView: View {
                                         .id(chiave(l))
                                 }
                             } header: {
-                                Text(day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "it_IT"))))
+                                Text(day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Formats.it)))
                                     .foregroundStyle(Formats.calendar.isDateInToday(day) ? Color.accentColor : .secondary)
                             }
                         }
@@ -112,7 +112,7 @@ struct OrarioView: View {
                 CorsoPicker(titolo: "Corso per l'orario", albero: app.alberoOrario, load: app.loadAlberoOrario,
                             attuale: app.agenda?.corsoOrario, mio: app.agenda?.mioCorsoOrario) { cambiaCorso($0) }
             }
-            .sheet(item: $selected) { LezioneDetail(lezione: $0).presentationDetents([.medium]) }
+            .sheet(item: $selected) { LezioneDetail(lezione: $0).presentationDetents([.medium, .large]) }
             .sheet(isPresented: $showVaiA) {
                 VaiADataSheet(iniziale: weekStart) { data in
                     if vaiA(data) { Task { await app.loadOrario() } }
@@ -200,19 +200,47 @@ struct OrarioView: View {
 
     private var weekTitle: String {
         let end = Formats.calendar.date(byAdding: .day, value: 6, to: weekStart) ?? weekStart
-        let f = Date.FormatStyle().day().month(.abbreviated).locale(Locale(identifier: "it_IT"))
+        let f = Date.FormatStyle().day().month(.abbreviated).locale(Formats.it)
         return "\(weekStart.formatted(f)) – \(end.formatted(f))"
     }
 }
 
 struct LezioneDetail: View {
     let lezione: Lezione
+    @State private var nomeEspanso = false
+
+    /// Il nome completo sta nella sezione in alto: tap per espanderlo se è lungo.
+    private var nomeLungo: Bool { lezione.insegnamento.count > 45 }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent("Quando", value: "\(lezione.inizio.formatted(date: .abbreviated, time: .shortened)) – \(Formats.time(lezione.fine))")
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { nomeEspanso.toggle() }
+                    } label: {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(lezione.insegnamento)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(nomeEspanso || !nomeLungo ? nil : 2)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            if nomeLungo {
+                                Image(systemName: "chevron.down")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .rotationEffect(.degrees(nomeEspanso ? 180 : 0))
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!nomeLungo)
+                    .accessibilityHint(nomeLungo ? (nomeEspanso ? "Comprimi il nome" : "Mostra il nome completo") : "")
+                }
+                Section {
+                    LabeledContent("Quando", value: "\(lezione.inizio.italiano(date: .abbreviated, time: .shortened)) – \(Formats.time(lezione.fine))")
                     LabeledContent("Aula", value: lezione.aula)
                     LabeledContent("Sede", value: lezione.sede)
                     LabeledContent("Docente", value: lezione.docente)
@@ -224,7 +252,7 @@ struct LezioneDetail: View {
                     Label("Apri in Mappe", systemImage: "map")
                 }
             }
-            .navigationTitle(lezione.insegnamento)
+            .navigationTitle("Lezione")
             .navigationBarTitleDisplayMode(.inline)
         }
     }

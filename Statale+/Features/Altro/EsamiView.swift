@@ -72,7 +72,7 @@ private struct CalendarioAppelliView: View {
                         Button { showVaiA = true } label: { Label("Vai a data", systemImage: "calendar.badge.clock") }
                         Spacer()
                         if let da = app.appelliDa {
-                            Text("Dal \(da.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "it_IT"))))")
+                            Text("Dal \(da.formatted(.dateTime.day().month(.wide).year().locale(Formats.it)))")
                                 .foregroundStyle(.secondary)
                             Button("Oggi") { app.setAppelliDa(nil); Task { await app.loadAppelli() } }
                         }

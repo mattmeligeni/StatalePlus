@@ -80,10 +80,10 @@
 				};
 			};
 			buildConfigurationList = 49FBE424306C093A00202E63 /* Build configuration list for PBXProject "Statale+" */;
-			developmentRegion = en;
+			developmentRegion = it;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				it,
 				Base,
 			);
 			mainGroup = 49FBE420306C093A00202E63;

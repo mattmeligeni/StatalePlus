@@ -40,13 +40,41 @@ nonisolated struct SituazioneTasse: Sendable {
     var totalePagato: Decimal { righe.reduce(0) { $0 + $1.pagato } }
     var totaleDaPagare: Decimal { righe.reduce(0) { $0 + $1.daPagare } }
 
-    /// "…un mese prima della scadenza 02/02/2027…"
-    var prossimaScadenza: Date? {
-        messaggi.lazy
-            .compactMap { $0.firstMatch(#"scadenza\s+(\d{2}/\d{2}/\d{4})"#, options: .caseInsensitive) }
-            .compactMap(Formats.daySlash)
-            .filter { $0 >= Formats.calendar.startOfDay(for: .now) }
-            .min()
+    /// Dagli avvisi: "È possibile pagare la seconda rata con PagoPA un mese prima della scadenza 02/02/2027…".
+    /// Si ricava a quale rata si riferisce e se è già stata emessa (presente fra le righe).
+    var prossimaScadenza: ScadenzaTasse? {
+        let oggi = Formats.calendar.startOfDay(for: .now)
+        let numeri = ["prima": "1", "seconda": "2", "terza": "3", "quarta": "4", "unica": "1"]
+        return messaggi.compactMap { msg -> ScadenzaTasse? in
+            guard let d = msg.firstMatch(#"scadenza\s+(\d{2}/\d{2}/\d{4})"#, options: .caseInsensitive).flatMap(Formats.daySlash),
+                  d >= oggi else { return nil }
+            let rata = msg.firstMatch(#"\b(prima|seconda|terza|quarta|unica)\s+rata\b"#, options: .caseInsensitive)?.lowercased()
+            let emessa = rata.flatMap { numeri[$0] }.map { n in righe.contains { $0.rata == n } } ?? true
+            let pagabileDal = msg.range(of: "un mese prima", options: .caseInsensitive) != nil
+                ? Formats.calendar.date(byAdding: .month, value: -1, to: d) : nil
+            return ScadenzaTasse(data: d, rata: rata, emessa: emessa, pagabileDal: pagabileDal)
+        }
+        .min { $0.data < $1.data }
+    }
+}
+
+/// Scadenza ricavata dagli avvisi delle tasse.
+nonisolated struct ScadenzaTasse: Sendable, Hashable {
+    let data: Date            // 02/02/2027
+    let rata: String?         // "seconda"
+    let emessa: Bool          // false se la rata non è ancora fra le righe
+    let pagabileDal: Date?    // "un mese prima della scadenza"
+
+    /// "Seconda rata non ancora emessa · scadenza 2 febbraio 2027"
+    var descrizione: String {
+        let giorno = data.formatted(.dateTime.day().month(.wide).year().locale(Formats.it))
+        let nome = rata.map { "\($0.prefix(1).uppercased())\($0.dropFirst()) rata" } ?? "Prossimo pagamento"
+        return emessa ? "\(nome) · scadenza \(giorno)" : "\(nome) non ancora emessa · scadenza \(giorno)"
+    }
+
+    /// "Pagabile con PagoPA dal 2 gennaio 2027"
+    var nota: String? {
+        pagabileDal.map { "Pagabile con PagoPA dal \($0.formatted(.dateTime.day().month(.wide).year().locale(Formats.it)))" }
     }
 }
 

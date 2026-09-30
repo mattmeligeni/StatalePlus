@@ -200,7 +200,7 @@ struct ModuleView: View {
                             Text(disc.titolo).font(.subheadline.weight(.semibold))
                             HStack {
                                 Text(disc.autore)
-                                if let d = disc.ultimaAttivita ?? disc.creata { Text("· " + d.formatted(date: .abbreviated, time: .shortened)) }
+                                if let d = disc.ultimaAttivita ?? disc.creata { Text("· " + d.italiano(date: .abbreviated, time: .shortened)) }
                             }
                             .font(.caption).foregroundStyle(.secondary)
                         }
@@ -239,7 +239,7 @@ struct DiscussionView: View {
                         Text(p.oggetto).font(.headline)
                         HStack {
                             Text(p.autore)
-                            if let d = p.data { Text("· " + d.formatted(date: .abbreviated, time: .shortened)) }
+                            if let d = p.data { Text("· " + d.italiano(date: .abbreviated, time: .shortened)) }
                         }
                         .font(.caption).foregroundStyle(.secondary)
                         Text(p.testo).font(.callout).textSelection(.enabled)

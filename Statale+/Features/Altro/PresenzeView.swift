@@ -130,7 +130,7 @@ private struct SlotListView: View {
         List(slot) { s in
             HStack {
                 VStack(alignment: .leading) {
-                    Text(s.inizio.formatted(.dateTime.weekday(.abbreviated).day().month().locale(Locale(identifier: "it_IT"))))
+                    Text(s.inizio.formatted(.dateTime.weekday(.abbreviated).day().month().locale(Formats.it)))
                     Text("\(Formats.time(s.inizio)) – \(Formats.time(s.fine))").font(.caption).foregroundStyle(.secondary)
                     TimeStatusBadge(inizio: s.inizio, fine: s.fine)
                 }

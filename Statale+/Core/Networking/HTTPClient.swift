@@ -20,6 +20,7 @@ nonisolated enum NetError: LocalizedError, Equatable {
     case cloudflareChallenge
     case http(Int)
     case unexpectedPage(String)
+    case cas(String)
 
     var errorDescription: String? {
         switch self {
@@ -31,6 +32,7 @@ nonisolated enum NetError: LocalizedError, Equatable {
         case .cloudflareChallenge: "Il sito universitario ha richiesto una verifica anti-bot. Riprova più tardi."
         case .http(let c): "Il server ha risposto con errore \(c)."
         case .unexpectedPage(let w): "Risposta inattesa da \(w)."
+        case .cas(let messaggio): "Login di Ateneo: \(messaggio)"
         }
     }
 }
@@ -47,7 +49,9 @@ nonisolated enum AppHTTP {
     }
 
     static func formEncode(_ fields: [(String, String)]) -> Data {
-        var allowed = CharacterSet.alphanumerics
+        // Solo ASCII non riservato (come un browser con application/x-www-form-urlencoded): lettere accentate
+        // e simboli vengono codificati in UTF-8 percent-encoding.
+        var allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         allowed.insert(charactersIn: "-._*")
         func enc(_ s: String) -> String {
             (s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s).replacingOccurrences(of: "%20", with: "+")

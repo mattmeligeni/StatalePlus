@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Sessione CAS condivisa da UNIMIA e SIFA.
 actor CASSession {
@@ -49,10 +50,31 @@ actor CASSession {
         let r = try await http.postForm(URL(string: "https://cas.unimi.it/login")!, fields: fields, headers: [
             "Origin": "https://cas.unimi.it", "Referer": Self.loginURL.absoluteString, "Cache-Control": "no-cache",
         ])
+        Self.log.info("CAS POST → \(r.status, privacy: .public) \(r.url.host() ?? "", privacy: .public)\(r.url.path(), privacy: .public)")
         if r.url.host() == "cas.unimi.it" {
-            throw UnimiaParser.isCASLoginForm(r.text) ? NetError.invalidCredentials : NetError.unexpectedPage("cas.unimi.it")
+            let esito = Self.esitoPagina(r.text)
+            Self.log.error("CAS: login non completato. Titolo: \(esito.titolo, privacy: .public) · messaggio: \(esito.messaggio ?? "nessuno", privacy: .public) · form: \(esito.form, privacy: .public)")
+            if let m = esito.messaggio { throw NetError.cas(m) }
+            if esito.form { throw NetError.invalidCredentials }
+            throw NetError.cas("richiesto un passaggio aggiuntivo (\(esito.titolo)). Completa l'accesso una volta dal sito cas.unimi.it.")
         }
         studenteWarm = false
+    }
+
+    // MARK: Diagnostica
+
+    static let log = Logger(subsystem: "com.mattiameligeni.Statale", category: "login")
+
+    /// Cosa mostra CAS dopo un POST non riuscito: messaggi d'errore visibili (`.alert-danger` non nascosti,
+    /// `#msg`, `.errors`), presenza del form e titolo. Mai la password.
+    static func esitoPagina(_ html: String) -> (messaggio: String?, form: Bool, titolo: String) {
+        let doc = HTML.parse(html)
+        let visibili = doc.select(".alert-danger, #msg, .errors, .error, .alert-warning")
+            .filter { !$0.classes.contains("hidden") }
+            .map(\.text)
+            .filter { !$0.isEmpty }
+        let titolo = HTML.text(doc.first("title"))
+        return (visibili.first, UnimiaParser.isCASLoginForm(html), titolo.isEmpty ? "senza titolo" : titolo)
     }
 
     // MARK: UNIMIA

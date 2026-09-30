@@ -18,7 +18,7 @@ struct VaiADataSheet: View {
             Form {
                 DatePicker("Data", selection: $data, displayedComponents: .date)
                     .datePickerStyle(.graphical)
-                    .environment(\.locale, Locale(identifier: "it_IT"))
+                    .environment(\.locale, Formats.it)
                     .environment(\.calendar, Formats.calendar)
                 Section {
                     LabeledContent("Settimana", value: Formats.settimana(Formats.inizioSettimana(data)))

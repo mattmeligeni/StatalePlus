@@ -66,18 +66,19 @@ private struct GruppoRow: View {
         HStack(spacing: 12) {
             Image(systemName: gruppo.nome == GruppoRegistrazioni.senza ? "waveform" : "book.closed.fill")
                 .font(.title3).foregroundStyle(Color.accentColor).frame(width: 28)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(gruppo.nome).font(.subheadline.weight(.semibold)).lineLimit(2)
                 HStack(spacing: 6) {
                     Text(gruppo.items.count == 1 ? "1 registrazione" : "\(gruppo.items.count) registrazioni")
                     Text("· \(durata(gruppo.items.reduce(0) { $0 + $1.durata }))")
                     if let ultima = gruppo.items.first?.creata {
-                        Text("· \(ultima.formatted(date: .abbreviated, time: .omitted))")
+                        Text("· \(ultima.italiano(date: .abbreviated, time: .omitted))")
                     }
                 }
                 .font(.caption).foregroundStyle(.secondary)
             }
         }
+        .padding(.vertical, 8)
     }
 }
 
@@ -112,17 +113,18 @@ private struct RegistrazioneRow: View {
     let r: Registrazione
     var mostraInsegnamento = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 5) {
             Text(r.titolo).font(.subheadline.weight(.semibold)).lineLimit(2)
             if mostraInsegnamento, let i = r.insegnamento { Text(i).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
             HStack(spacing: 8) {
-                Text(r.creata.formatted(date: .abbreviated, time: .shortened))
+                Text(r.creata.italiano(date: .abbreviated, time: .shortened))
                 Text("· \(durata(r.durata))")
                 if !r.segnalibri.isEmpty { Label("\(r.segnalibri.count)", systemImage: "bookmark.fill") }
                 if !r.note.isEmpty { Image(systemName: "note.text") }
             }
             .font(.caption).foregroundStyle(.secondary)
         }
+        .padding(.vertical, 6)
     }
 }
 
@@ -146,19 +148,27 @@ private struct RecorderCard: View {
 
     var body: some View {
         let rec = app.recorder
-        VStack(spacing: 14) {
+        VStack(spacing: 18) {
             if rec.state == .idle {
-                Picker("Insegnamento", selection: $scelto) {
-                    Text("Nessun insegnamento").tag(String?.none)
-                    ForEach(insegnamenti) { Text($0.nome).tag(Optional($0.codice)) }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Insegnamento").font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+                    Picker("Insegnamento", selection: $scelto) {
+                        Text("Nessun insegnamento").tag(String?.none)
+                        ForEach(insegnamenti) { Text($0.nome).tag(Optional($0.codice)) }
+                    }
+                    .labelsHidden()
                 }
                 .pickerStyle(.menu)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Button {
                     Task { await rec.start(in: app.recordings, insegnamento: insegnamenti.first { $0.codice == scelto }) }
                 } label: {
-                    Label("Avvia registrazione", systemImage: "record.circle")
-                        .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                    HStack(spacing: 8) {
+                        Image(systemName: "record.circle")
+                        Text("Avvia registrazione")
+                    }
+                    .foregroundStyle(.white)
+                    .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
@@ -190,7 +200,8 @@ private struct RecorderCard: View {
             }
             if let e = rec.error { Text(e).font(.caption).foregroundStyle(.red) }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 4)
         .onAppear {
             if let r = app.registrazioneRichiesta { scelto = r.codice; app.registrazioneRichiesta = nil }
             if scelto == nil { scelto = suggerito?.codice }
@@ -280,7 +291,7 @@ struct RegistrazioneDetailView: View {
                                 Text(r.insegnamento ?? c).tag(Optional(c))
                             }
                         }
-                        LabeledContent("Registrata", value: r.creata.formatted(date: .long, time: .shortened))
+                        LabeledContent("Registrata", value: r.creata.italiano(date: .long, time: .shortened))
                     }
                     Section { PlayerControls(player: player) }
                     TrascrizioneSection(registrazione: r)
@@ -330,7 +341,7 @@ private struct PlayerControls: View {
     @State private var scrubbing: Double?
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Slider(value: Binding(get: { scrubbing ?? player.currentTime }, set: { scrubbing = $0 }),
                    in: 0...max(player.duration, 1)) { editing in
                 if !editing, let s = scrubbing { player.seek(to: s); scrubbing = nil }
@@ -349,11 +360,11 @@ private struct PlayerControls: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
             Picker("Velocità", selection: Binding(get: { player.rate }, set: { player.setRate($0) })) {
-                ForEach([Float(0.75), 1, 1.25, 1.5, 2], id: \.self) { Text("\($0.formatted())×").tag($0) }
+                ForEach([Float(0.75), 1, 1.25, 1.5, 2], id: \.self) { Text("\($0.formatted(.number.locale(Formats.it)))×").tag($0) }
             }
             .pickerStyle(.segmented)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 10)
     }
 }
 

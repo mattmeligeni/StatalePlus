@@ -6,6 +6,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var working = false
+    @State private var mostraPassword = false
 
     private var esito: Result<String, Credentials.EmailError> { Credentials.normalizzaEmail(email) }
     private var emailValida: String? { if case .success(let e) = esito { e } else { nil } }
@@ -36,8 +37,23 @@ struct LoginView: View {
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    SecureField("Password", text: $password)
+                    HStack {
+                        Group {
+                            if mostraPassword {
+                                TextField("Password", text: $password)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                            } else {
+                                SecureField("Password", text: $password)
+                            }
+                        }
                         .textContentType(.password)
+                        Button { mostraPassword.toggle() } label: {
+                            Image(systemName: mostraPassword ? "eye.slash" : "eye").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(mostraPassword ? "Nascondi password" : "Mostra password")
+                    }
                 } footer: {
                     emailFooter
                 }

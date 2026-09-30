@@ -36,7 +36,7 @@ struct LezioniInsegnamentoSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } } }
             .refreshable { await load() }
             .task { await lezioni.loadIfNeeded { try await fetch() } }
-            .sheet(item: $selected) { LezioneDetail(lezione: $0).presentationDetents([.medium]) }
+            .sheet(item: $selected) { LezioneDetail(lezione: $0).presentationDetents([.medium, .large]) }
         }
     }
 

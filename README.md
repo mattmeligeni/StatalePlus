@@ -39,6 +39,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   (es. `@unimi.it`, `@gmail.com`) o formato non valido viene rifiutato prima di contattare i server.
 - Credenziali salvate in Keychain solo dopo un login CAS riuscito; all'avvio, credenziali con dominio non ammesso
   vengono scartate e si torna all'onboarding.
+- Pulsante per mostrare la password (utile anche nel simulatore, dove la tastiera fisica del Mac può essere interpretata
+  con un layout diverso). Se CAS rifiuta l'accesso viene mostrato il suo messaggio; un log diagnostico
+  (sottosistema `com.mattiameligeni.Statale`, categoria `login`) riporta esito, pagina e messaggio, mai la password.
 
 ### Oggi
 
@@ -64,12 +67,15 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     risulta già avere la presenza (anche confermata da un altro dispositivo o dal web) o dopo una risposta positiva.
   - **Inizia registrazione** → apre _Registrazioni_ e avvia subito la registrazione dell'insegnamento.
 - **Prossimo appello prenotato** (da SIFA), arricchito con aula e sede dal calendario Agenda e pulsante Mappe.
-- **Avvisi Ariel** degli ultimi 10 giorni (bacheche dei corsi attivi).
-- **Tasse**: importo da pagare e prossima scadenza.
+- **Avvisi Ariel** degli ultimi 7 giorni (bacheche dei corsi attivi).
+- **Tasse**: importo da pagare oppure "Tasse in regola"; la prossima scadenza è spiegata a partire dagli avvisi UNIMIA
+  (es. "Seconda rata non ancora emessa · scadenza 2 febbraio 2027 – Pagabile con PagoPA dal 2 gennaio 2027"): si ricava
+  a quale rata si riferisce e se è già stata emessa (presente fra le righe della situazione amministrativa).
 
 ### Orario
 
-- Settimana navigabile, lezioni raggruppate per giorno, dettaglio con aula, sede, docente e **Apri in Mappe**.
+- Settimana navigabile, lezioni raggruppate per giorno, dettaglio con aula, sede, docente e **Apri in Mappe**; nel dettaglio
+  il nome completo dell'insegnamento è in alto e, se lungo, si espande con un tap.
 - **Vai a data**: scelta una data (es. 7 ottobre 2026) porta alla sua settimana (5–11 ottobre); se la data cade in un
   altro periodo didattico, cambia anche la pillola del periodo.
 - **Pillole dei periodi** lette dall'API (semestri, trimestri, quadrimestri, annuale); default: periodo in corso.
@@ -136,6 +142,13 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 Tutti i collegamenti a Mappe usano l'**indirizzo della sede presa da EasyRoom**: per codice aula (gli appelli usano
 lo stesso `room_code` di EasyRoom, es. `33230#4001`), poi per nome aula + sede, poi per sede; ricerca testuale solo come
 ultima risorsa.
+
+---
+
+### Lingua
+
+Tutte le date e i numeri sono in italiano (`Formats.it`, `Date.italiano(date:time:)`, `relativoItaliano`),
+indipendentemente dalla lingua del dispositivo; l'italiano è anche la lingua di sviluppo del progetto.
 
 ---
 
@@ -349,6 +362,16 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30
+
+- Date sempre in italiano (niente più "last week", "Sep", "February"); italiano come lingua di sviluppo.
+- Tasse in Oggi e nella schermata Tasse: scadenza spiegata (quale rata, se emessa, da quando si può pagare).
+- Avvisi Ariel di nuovo sugli ultimi 7 giorni.
+- Pulsanti rapidi in Oggi senza icone; icona bianca su "Avvia registrazione"; più spazio nella schermata Registrazioni.
+- Dettaglio lezione con nome completo espandibile.
+- Login: mostra password, messaggio di CAS in caso di rifiuto, log diagnostico; codifica corretta delle lettere accentate
+  nella password.
 
 ### 2026-09-29 (8)
 

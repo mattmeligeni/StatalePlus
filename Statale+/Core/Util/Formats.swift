@@ -4,6 +4,9 @@ import Foundation
 nonisolated enum Formats {
     static let rome = TimeZone(identifier: "Europe/Rome")!
 
+    /// Lingua di tutte le date e i numeri mostrati, indipendente dalla lingua del dispositivo.
+    static let it = Locale(identifier: "it_IT")
+
     static let calendar: Calendar = {
         var c = Calendar(identifier: .gregorian)
         c.timeZone = rome
@@ -100,5 +103,17 @@ nonisolated extension String {
         folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "it_IT"))
             .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
             .trimmed
+    }
+}
+
+nonisolated extension Date {
+    /// Come `formatted(date:time:)` ma sempre in italiano e nel fuso di Milano.
+    func italiano(date: Date.FormatStyle.DateStyle, time: Date.FormatStyle.TimeStyle) -> String {
+        formatted(Date.FormatStyle(date: date, time: time, locale: Formats.it, calendar: Formats.calendar, timeZone: Formats.rome))
+    }
+
+    /// "ieri", "la settimana scorsa", "tra 2 giorni"…
+    var relativoItaliano: String {
+        formatted(.relative(presentation: .named).locale(Formats.it))
     }
 }

@@ -178,8 +178,8 @@ final class AudioRecorder {
         let durata = r.currentTime
         r.stop()
         cleanup()
-        let titolo = insegnamento.map { "\($0.nome) – \(startedAt.formatted(date: .abbreviated, time: .omitted))" }
-            ?? "Registrazione del \(startedAt.formatted(date: .abbreviated, time: .shortened))"
+        let titolo = insegnamento.map { "\($0.nome) – \(startedAt.italiano(date: .abbreviated, time: .omitted))" }
+            ?? "Registrazione del \(startedAt.italiano(date: .abbreviated, time: .shortened))"
         return Registrazione(id: id, titolo: titolo, codiceInsegnamento: insegnamento?.codice, insegnamento: insegnamento?.nome,
                              creata: startedAt, durata: durata, file: "\(id.uuidString).m4a", segnalibri: segnalibri, note: "")
     }

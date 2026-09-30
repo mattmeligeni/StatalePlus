@@ -19,7 +19,7 @@ struct AuleView: View {
             case .sedi:
                 LiveSection(title: "Sedi", live: app.aule, retry: { await app.loadAule(force: true) }) { sedi($0) }
             case .cerca:
-                LiveSection(title: "Solo attività di oggi, \(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "it_IT"))))",
+                LiveSection(title: "Solo attività di oggi, \(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Formats.it)))",
                             live: app.aule, retry: { await app.loadAule(force: true) }) { cerca($0) }
             }
             UpdatedFooter(date: app.aule.updatedAt).listRowBackground(Color.clear)

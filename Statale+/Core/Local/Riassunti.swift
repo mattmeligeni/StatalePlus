@@ -20,7 +20,7 @@ nonisolated enum AppleIntelligence {
         let modello = SystemLanguageModel.default
         switch modello.availability {
         case .available:
-            return modello.supportsLocale(Locale(identifier: "it_IT")) ? .disponibile : .nonSupportata
+            return modello.supportsLocale(Formats.it) ? .disponibile : .nonSupportata
         case .unavailable(.appleIntelligenceNotEnabled): return .nonAttiva
         case .unavailable(.modelNotReady): return .inPreparazione
         default: return .nonSupportata

@@ -15,6 +15,7 @@ struct Statale_App: App {
         WindowGroup {
             ContentView()
                 .environment(app)
+                .environment(\.locale, Formats.it)
         }
     }
 }

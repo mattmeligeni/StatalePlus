@@ -30,7 +30,7 @@ struct OggiView: View {
                     }
                 }
 
-                LiveSection(title: "Avvisi Ariel (ultimi 10 giorni)", live: avvisi, retry: loadAvvisi) { list in
+                LiveSection(title: "Avvisi Ariel (ultimi 7 giorni)", live: avvisi, retry: loadAvvisi) { list in
                     if list.isEmpty {
                         Text("Nessun avviso recente").foregroundStyle(.secondary)
                     } else {
@@ -40,7 +40,7 @@ struct OggiView: View {
                                     Text(a.discussione.titolo).font(.subheadline.weight(.semibold))
                                     Text(a.corso).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                     if let d = a.discussione.ultimaAttivita ?? a.discussione.creata {
-                                        Text(d, format: .relative(presentation: .named)).font(.caption2).foregroundStyle(.secondary)
+                                        Text(d.relativoItaliano).font(.caption2).foregroundStyle(.secondary)
                                     }
                                 }
                             }
@@ -53,10 +53,13 @@ struct OggiView: View {
                         Label("Da pagare: \(Formats.euroString(t.totaleDaPagare))", systemImage: "eurosign.circle")
                             .foregroundStyle(.red)
                     } else {
-                        Label("Nessun importo da pagare", systemImage: "checkmark.seal").foregroundStyle(.green)
+                        Label("Tasse in regola", systemImage: "checkmark.seal").foregroundStyle(.green)
                     }
                     if let s = t.prossimaScadenza {
-                        Label("Prossima scadenza: \(s.formatted(date: .long, time: .omitted))", systemImage: "calendar.badge.exclamationmark")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label(s.descrizione, systemImage: "calendar").font(.subheadline)
+                            if let nota = s.nota { Text(nota).font(.caption).foregroundStyle(.secondary).padding(.leading, 30) }
+                        }
                     }
                 }
 
@@ -81,7 +84,7 @@ struct OggiView: View {
             ProfileAvatar(size: 56)
             VStack(alignment: .leading, spacing: 2) {
                 Text(saluto).font(.title2.bold())
-                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "it_IT"))).capitalized)
+                Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Formats.it)).capitalized)
                     .font(.subheadline).foregroundStyle(.secondary)
             }
         }
@@ -118,7 +121,7 @@ struct OggiView: View {
             corsi = try await app.services.ariel.offerta()
             app.store.update { $0.offerta = corsi; $0.offertaAggiornata = .now }
         }
-        let since = Date.now.addingTimeInterval(-10 * 86_400)
+        let since = Date.now.addingTimeInterval(-7 * 86_400)
         return await app.services.ariel.avvisiRecenti(corsi: corsi.filter(\.attivo), since: since)
             .map { AvvisoAriel(corso: $0.corso.titolo, discussione: $0.discussione) }
     }
@@ -307,15 +310,12 @@ private struct LezioneOggiRow: View {
                             Label("Presenza registrata", systemImage: "checkmark.seal.fill")
                                 .font(.caption.bold()).foregroundStyle(.green)
                         } else {
-                            Button { app.apriConfermaPresenza(lezione) } label: {
-                                Label("Conferma presenza", systemImage: "hand.raised.fill")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.purple)
+                            Button("Conferma presenza") { app.apriConfermaPresenza(lezione) }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.purple)
                         }
-                        Button { app.avviaRegistrazione(lezione) } label: {
-                            Label(app.recorder.state == .idle ? "Inizia registrazione" : "Registrazione in corso",
-                                  systemImage: app.recorder.state == .idle ? "record.circle" : "waveform")
+                        Button(app.recorder.state == .idle ? "Inizia registrazione" : "Registrazione in corso") {
+                            app.avviaRegistrazione(lezione)
                         }
                         .buttonStyle(.bordered)
                         .tint(.red)
@@ -348,9 +348,9 @@ struct PrenotazioneRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text((appello?.insegnamento ?? prenotazione.esame).capitalized(with: Locale(identifier: "it_IT")))
+            Text((appello?.insegnamento ?? prenotazione.esame).capitalized(with: Formats.it))
                 .font(.subheadline.weight(.semibold))
-            Text((appello?.inizio ?? prenotazione.data).formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Locale(identifier: "it_IT"))))
+            Text((appello?.inizio ?? prenotazione.data).formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Formats.it)))
                 .font(.caption)
             if let appello {
                 HStack {
@@ -372,7 +372,7 @@ struct AppelloRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(appello.insegnamento).font(.subheadline.weight(.semibold)).strikethrough(appello.annullato)
-            Text(appello.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Locale(identifier: "it_IT"))))
+            Text(appello.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).hour().minute().locale(Formats.it)))
                 .font(.caption)
             HStack {
                 Label("\(appello.aula) · \(appello.sede)", systemImage: "mappin.and.ellipse")

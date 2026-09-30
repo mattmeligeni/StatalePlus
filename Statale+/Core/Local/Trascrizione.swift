@@ -6,7 +6,7 @@ import Speech
 ///   (il modello della lingua viene scaricato la prima volta tramite `AssetInventory`).
 /// - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 secondi (on-device se supportato), con punteggiatura.
 nonisolated enum Trascrittore {
-    static let lingua = Locale(identifier: "it_IT")
+    static let lingua = Formats.it
 
     enum Errore: LocalizedError {
         case nonAutorizzato, nonDisponibile, linguaNonSupportata, vuota

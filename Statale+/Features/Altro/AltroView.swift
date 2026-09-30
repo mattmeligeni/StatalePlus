@@ -148,7 +148,7 @@ struct TasseView: View {
                         .font(.caption)
                         HStack {
                             if let d = r.dataPagamento {
-                                Label("Pagato \(Formats.euroString(r.pagato)) il \(d.formatted(date: .numeric, time: .omitted))", systemImage: "checkmark.circle")
+                                Label("Pagato \(Formats.euroString(r.pagato)) il \(d.italiano(date: .numeric, time: .omitted))", systemImage: "checkmark.circle")
                                     .foregroundStyle(.green)
                             }
                             Spacer()
@@ -160,6 +160,12 @@ struct TasseView: View {
                 LabeledContent("Totale dovuto", value: Formats.euroString(t.totaleDovuto))
                 LabeledContent("Totale pagato", value: Formats.euroString(t.totalePagato))
                 LabeledContent("Da pagare", value: Formats.euroString(t.totaleDaPagare)).bold()
+            }
+            if let s = tasse.value?.prossimaScadenza {
+                Section("Prossima scadenza") {
+                    Label(s.descrizione, systemImage: "calendar")
+                    if let nota = s.nota { Text(nota).font(.callout).foregroundStyle(.secondary) }
+                }
             }
             if let msgs = tasse.value?.messaggi, !msgs.isEmpty {
                 Section("Avvisi") { ForEach(msgs, id: \.self) { Text($0).font(.callout) } }
@@ -217,9 +223,9 @@ struct ImpostazioniView: View {
                 LabeledContent("Ariel", value: CookieJar.has("arielauth") ? "Attiva" : (app.arielError ?? "Si riattiva alla prossima richiesta"))
             }
             Section("Dati salvati") {
-                if let d = app.store.snapshot.profiloAggiornato { LabeledContent("Profilo", value: d.formatted(date: .abbreviated, time: .shortened)) }
-                if let d = app.agenda?.aggiornato { LabeledContent("Insegnamenti", value: d.formatted(date: .abbreviated, time: .shortened)) }
-                if let d = app.store.snapshot.offertaAggiornata { LabeledContent("Corsi Ariel", value: d.formatted(date: .abbreviated, time: .shortened)) }
+                if let d = app.store.snapshot.profiloAggiornato { LabeledContent("Profilo", value: d.italiano(date: .abbreviated, time: .shortened)) }
+                if let d = app.agenda?.aggiornato { LabeledContent("Insegnamenti", value: d.italiano(date: .abbreviated, time: .shortened)) }
+                if let d = app.store.snapshot.offertaAggiornata { LabeledContent("Corsi Ariel", value: d.italiano(date: .abbreviated, time: .shortened)) }
                 LabeledContent("Registrazioni", value: "\(app.recordings.items.count) · \(ByteCountFormatter.string(fromByteCount: app.recordings.spazioOccupato, countStyle: .file))")
                 Button {
                     refreshing = true
