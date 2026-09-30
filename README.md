@@ -172,8 +172,11 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - **Aule**: sedi espandibili toccando la riga intera, con le aule e lo stato attuale (libera / occupata fino alle…),
   "1 aula / 2 aule", indirizzo in formato italiano ("Via Celoria 2, 20133 Milano") e **Apri in Mappe**; ricerca sempre
   visibile per sede, aula o indirizzo; _Dove si tiene_ cerca le attività della giornata odierna.
-- **Presenze**: registrazione presenza con codice lezione (digitato o da **QR**, con slider di zoom fino a 5× per i
-  codici proiettati lontano), risposta del server mostrata così com'è;
+- **Presenze**: registrazione presenza con codice lezione digitato o da **QR** (slider di zoom fino a 5× per i codici
+  proiettati lontano; dopo la scansione la richiesta parte subito, perché il QR in aula cambia di continuo).
+  Esiti: `ok` → "Presenza registrata", `warning` → "Presenza già registrata" (conta come confermata), `failure` →
+  "Rilevazione non riuscita" con spiegazione (docente che ha chiuso la rilevazione, codice sbagliato o scaduto: il
+  server usa lo stesso messaggio per tutti i casi); l'esito sta in una sezione a parte sotto il pulsante;
   frequenza per corso con barra e **tacca sulla soglia**, dettaglio con riepilogo ("mancano 18 h per la soglia del 50%")
   e lezioni future attenuate.
   - **Soglia di frequenza**: EasyBadge restituisce un proprio valore (`percentuale_conseguimento`, es. 0,7) che non
@@ -338,6 +341,11 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 - **File orario inesistente** → HTTP 200 con corpo vuoto = nessuna lezione. Risposte `Content-Encoding: gzip`.
 - **Moodle**: la risposta AJAX contiene il JSON **come stringa** (doppia decodifica); il tipo modulo è `module`
   (`forum`), `modname` è l'etichetta localizzata (`Forum`).
+- **QR della lezione**: testo Base64 (`UVJfOXRwNG02YW4tMTc5MDc3MzY2MDAwMA==` → `QR_9tp4m6an-1790773660000`); il codice
+  lezione è la parte prima del trattino, il numero è un istante in ms che cambia a ogni rotazione del QR e non serve
+  (la richiesta usa l'ora attuale). Risposte della timbratura: `{"result":"ok"|"warning"|"failure","message":…}`.
+- **Debug timbratura** (solo build Debug, `DebugNtfy`): ogni chiamata invia esito, codice lezione e risposta del
+  server a `ntfy.sh/StatalePlus` (topic pubblico: niente matricola né dati personali).
 - **EasyBadge**: i campi `Frequentate`, `OreFatte`, `OreDaFare`, `OreLimite` sono **minuti**; `OreDaFare` è il residuo
   (totale = fatte + da fare; soglia EasyBadge = `percentuale_conseguimento` × totale, sostituita in app da quella del
   manifesto).
@@ -400,7 +408,6 @@ Da completare:
       mancano la scelta dell'appello e la conferma, da osservare quando ci saranno appelli aperti (struttura delle
       righe di `ul.nomarker`, campo del modulo, pagina di conferma).
 - [ ] **Pagamenti SIFA**
-- [ ] **Formato del QR** del codice lezione: `QRLezione.codice(from:)` oggi usa il testo letto così com'è.
 - [ ] **Prenotazioni**: le colonne di una prenotazione reale non sono ancora state osservate; data ed esame sono
       ricavati per euristica (`Prenotazione.from`).
 - [ ] Libretto, esiti da accettare e cartelle Ariel con file: parsing generico, da rifinire su casi popolati.
@@ -430,6 +437,13 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-09-30 (8)
+
+- Timbratura tramite QR: decodifica del QR Base64 in codice lezione, invio immediato dopo la scansione, esiti
+  `ok`/`warning`/`failure` con messaggi chiari, esito in una sezione separata (il pulsante non si sposta più).
+- Debug: esito di ogni timbratura inviato a ntfy.sh/StatalePlus nelle build Debug; tolto un `print` della richiesta
+  (conteneva la matricola).
 
 ### 2026-09-30 (7)
 

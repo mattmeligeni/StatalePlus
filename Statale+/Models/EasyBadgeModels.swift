@@ -97,15 +97,67 @@ nonisolated struct TimbraturaRequest: Encodable, Sendable {
     }
 }
 
-/// `{"result":"failure","message":"Il processo di rilevazione è stato interrotto dal docente, …"}`
+/// Risposta di `TimbratureApi.php`. Casi osservati:
+/// - `{"result":"ok","message":"Rilevazione effettuata correttamente"}`;
+/// - `{"result":"warning","message":"La tua presenza alla lezione è già stata registrata"}`;
+/// - `{"result":"failure","message":"Il processo di rilevazione è stato interrotto dal docente, …"}`: messaggio
+///   generico, uguale anche per codice vuoto, sbagliato o scaduto.
 nonisolated struct TimbraturaResult: Decodable, Sendable {
     let result: String
     let message: String
-    var ok: Bool { ["success", "ok", "true"].contains(result.lowercased()) }
+
+    enum Esito { case registrata, giaRegistrata, fallita, sconosciuto }
+
+    var esito: Esito {
+        switch result.lowercased() {
+        case "ok", "success", "true": .registrata
+        case "warning": .giaRegistrata
+        case "failure", "error", "ko", "false": .fallita
+        default: .sconosciuto
+        }
+    }
+
+    /// La presenza risulta sul server (appena registrata o già presente).
+    var ok: Bool { esito == .registrata || esito == .giaRegistrata }
+
+    var titolo: String {
+        switch esito {
+        case .registrata: "Presenza registrata"
+        case .giaRegistrata: "Presenza già registrata"
+        case .fallita: "Rilevazione non riuscita"
+        case .sconosciuto: "Risposta inattesa"
+        }
+    }
+
+    var spiegazione: String {
+        switch esito {
+        case .registrata:
+            "La rilevazione è andata a buon fine."
+        case .giaRegistrata:
+            "La tua presenza a questa lezione era già stata registrata: non serve ripetere la scansione."
+        case .fallita:
+            "Processo di rilevazione fallito: il docente potrebbe averlo interrotto, oppure il codice è sbagliato o scaduto. Scansiona di nuovo il QR proiettato in aula."
+        case .sconosciuto:
+            message.isEmpty ? "Il server ha risposto «\(result)»." : message
+        }
+    }
 }
 
-/// Contenuto del QR mostrato in aula → codice lezione. Formato del QR ancora da definire:
-/// per ora il testo letto viene usato così com'è.
+/// QR proiettato in aula: testo Base64, es. `UVJfOXRwNG02YW4tMTc5MDc3MzY2MDAwMA==` → `QR_9tp4m6an-1790773660000`.
+/// Il codice lezione è `QR_9tp4m6an`; il numero dopo il trattino è un istante in millisecondi che cambia a ogni
+/// rotazione del QR e non serve alla richiesta (che usa l'ora attuale). Accetta anche il codice già in chiaro.
 nonisolated enum QRLezione {
-    static func codice(from payload: String) -> String { payload.trimmed }
+    static func codice(from payload: String) -> String {
+        let t = payload.trimmed
+        var testo = t
+        var b64 = t
+        while b64.count % 4 != 0 { b64 += "=" }
+        if let data = Data(base64Encoded: b64), let s = String(data: data, encoding: .utf8), s.hasPrefix("QR_") {
+            testo = s.trimmed
+        }
+        if let r = testo.range(of: #"-\d{10,}$"#, options: .regularExpression) {
+            return String(testo[..<r.lowerBound])
+        }
+        return testo
+    }
 }

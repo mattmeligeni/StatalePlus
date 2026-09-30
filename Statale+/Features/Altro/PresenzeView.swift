@@ -39,20 +39,23 @@ struct PresenzeView: View {
                     HStack { Spacer(); if inviando { ProgressView() } else { Text("Registra presenza").bold() }; Spacer() }
                 }
                 .disabled(inviando || codice.trimmed.isEmpty || app.studente == nil)
-                if let r = risposta {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label(r.ok ? "Presenza registrata" : "Risposta: \(r.result)",
-                              systemImage: r.ok ? "checkmark.seal.fill" : "exclamationmark.bubble.fill")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(r.ok ? .green : .orange)
-                        if !r.message.isEmpty { Text(r.message).font(.callout) }
-                    }
-                }
-                if let erroreInvio { Label(erroreInvio, systemImage: "wifi.exclamationmark").foregroundStyle(.red).font(.callout) }
             } header: {
                 Text("Registra presenza")
             } footer: {
                 if let m = app.studente?.matricola { Text("Matricola \(m.uppercased())") }
+            }
+
+            // Esito in una sezione a parte: la riga del pulsante non cambia forma né posizione.
+            if let r = risposta {
+                Section {
+                    EsitoTimbratura(simbolo: simbolo(r), colore: colore(r), titolo: r.titolo, testo: r.spiegazione,
+                                    server: r.esito == .sconosciuto ? nil : r.message)
+                }
+            } else if let erroreInvio {
+                Section {
+                    EsitoTimbratura(simbolo: "wifi.exclamationmark", colore: .red, titolo: "Richiesta non inviata",
+                                    testo: erroreInvio, server: nil)
+                }
             }
 
             LiveSection(title: "Frequenza", live: app.frequenze, retry: load) { list in
@@ -81,11 +84,30 @@ struct PresenzeView: View {
         .sheet(isPresented: $showScanner) {
             QRScannerSheet { payload in
                 codice = QRLezione.codice(from: payload)
+                // Il QR in aula cambia di continuo: si invia subito, prima che il codice scada.
+                Task { await invia() }
             }
         }
     }
 
     private func load() async { await app.loadPresenze() }
+
+    private func simbolo(_ r: TimbraturaResult) -> String {
+        switch r.esito {
+        case .registrata: "checkmark.seal.fill"
+        case .giaRegistrata: "checkmark.circle.fill"
+        case .fallita: "xmark.octagon.fill"
+        case .sconosciuto: "questionmark.circle.fill"
+        }
+    }
+
+    private func colore(_ r: TimbraturaResult) -> Color {
+        switch r.esito {
+        case .registrata, .giaRegistrata: .green
+        case .fallita: .red
+        case .sconosciuto: .orange
+        }
+    }
 
     @ViewBuilder
     private func fonteSoglia(_ fonte: FonteSoglia) -> some View {
@@ -99,7 +121,7 @@ struct PresenzeView: View {
     }
 
     private func invia() async {
-        guard let m = app.studente?.matricolaAPI, !codice.trimmed.isEmpty else { return }
+        guard !inviando, let m = app.studente?.matricolaAPI, !codice.trimmed.isEmpty else { return }
         focus = false
         inviando = true
         erroreInvio = nil
@@ -115,6 +137,28 @@ struct PresenzeView: View {
         } catch {
             erroreInvio = app.message(error)
         }
+    }
+}
+
+private struct EsitoTimbratura: View {
+    let simbolo: String
+    let colore: Color
+    let titolo: String
+    let testo: String
+    let server: String?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: simbolo).foregroundStyle(colore)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(titolo).font(.subheadline.bold()).foregroundStyle(colore)
+                Text(testo).font(.callout)
+                if let server, !server.isEmpty {
+                    Text("Messaggio del server: \(server)").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
