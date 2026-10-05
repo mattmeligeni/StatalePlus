@@ -1,7 +1,7 @@
 import Foundation
 import WhisperKit
 
-/// Motori di trascrizione selezionabili in Impostazioni › Trascrizione.
+/// Motori di trascrizione selezionabili in Altro › IA › Trascrizione.
 nonisolated enum MotoreTrascrizione: String, CaseIterable, Sendable {
     /// Speech di Apple (`SpeechAnalyzer`/`SpeechTranscriber`), sul dispositivo: veloce, leggero, nessun download.
     case apple
@@ -117,7 +117,7 @@ nonisolated enum WhisperLocale {
         case nonInstallato, downloadIncompleto, vuota
         var errorDescription: String? {
             switch self {
-            case .nonInstallato: "Il modello Whisper non è scaricato: scaricalo da Impostazioni › Trascrizione."
+            case .nonInstallato: "Il modello Whisper non è scaricato: scaricalo da Altro › IA › Trascrizione."
             case .downloadIncompleto: "Download del modello Whisper incompleto. Riprova con una connessione stabile."
             case .vuota: "Nessun parlato riconosciuto nella registrazione."
             }

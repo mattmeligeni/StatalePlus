@@ -158,7 +158,7 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   file temporanei PCM. Su una lezione reale di 2 h 41 min (−38,9 LUFS): −16,6 LUFS, distanza voce/pause da 8,9 a
   17,8 dB (`ffmpeg loudnorm` arriva a −23 LUFS e lascia la distanza a 8,5 dB); 48 s su Mac, 32 MB di memoria.
   L'originale resta in `<id>.originale.m4a` e si può ripristinare; la trascrizione usa la versione migliorata.
-- **Trascrizione** in italiano, con tre motori a scelta in _Impostazioni › Registrazioni › Trascrizione_ (sotto la
+- **Trascrizione** in italiano, con tre motori a scelta in _Altro › IA › Trascrizione_ (sotto la
   trascrizione c'è la nota "Sono disponibili altri modelli più accurati" con il collegamento alla scelta):
   - **Apple** (predefinito): locale, privato, veloce e leggero.
     - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber` con il preset `.transcription` (quello più accurato, per
@@ -253,9 +253,16 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     coincide con il regolamento; l'app legge l'obbligo di frequenza dal **manifesto degli studi** del corso (es. "almeno
     il 50% del monte ore"); il PDF del manifesto si apre nell'app con Quick Look. In _Impostazioni_ si può scegliere
     una soglia diversa.
-- **Impostazioni**: foto profilo, account (nome e corso leggibili), soglia di frequenza, motore di trascrizione, stato delle sessioni (pallino
+- **Impostazioni**: foto profilo, account (nome e corso leggibili), soglia di frequenza, stato delle sessioni (pallino
   verde / grigio), dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
+- **IA** (icona processore): raccoglie tutte le impostazioni dei modelli, in vista di eventuali servizi cloud:
+  - motore di trascrizione e spazio occupato da Whisper;
+  - miglioramento automatico dell'audio dopo ogni registrazione;
+  - stato di Apple Intelligence per i riassunti (disponibile, disattivata, in download, non supportata), con cosa
+    fare;
+  - servizi cloud, ancora "Prossimamente": oggi tutto resta sul dispositivo;
+  - nota sui lavori lunghi in background.
 - **Crediti** (sezione separata in fondo): servizi dell'Ateneo, piattaforme (Moodle, EasyStaff/EasyAcademy) e tecnologie
   Apple usate, WhisperKit (licenza MIT), ciascuno con il proprio link. Disclaimer e copyright con la versione dell'app stanno in fondo ad _Altro_.
 
@@ -549,6 +556,10 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (6)
+
+- Nuova voce **IA** in Altro: tutte le impostazioni di trascrizione, audio e riassunti in un posto solo.
 
 ### 2026-10-05 (5)
 

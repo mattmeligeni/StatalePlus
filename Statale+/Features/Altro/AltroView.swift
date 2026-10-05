@@ -16,6 +16,7 @@ struct AltroView: View {
                     NavigationLink(value: AltroRoute.esami) { Label("Esami", systemImage: "pencil.and.list.clipboard") }
                     NavigationLink(value: AltroRoute.aule) { Label("Aule", systemImage: "building.2") }
                     NavigationLink(value: AltroRoute.presenze) { Label("Presenze", systemImage: "person.badge.clock") }
+                    NavigationLink(value: AltroRoute.ia) { Label("IA", systemImage: "cpu") }
                     NavigationLink(value: AltroRoute.impostazioni) { Label("Impostazioni", systemImage: "gearshape") }
                 }
                 Section {
@@ -33,6 +34,7 @@ struct AltroView: View {
                 case .esami: EsamiView()
                 case .aule: AuleView()
                 case .presenze: PresenzeView()
+                case .ia: IAView()
                 case .impostazioni: ImpostazioniView()
                 case .crediti: CreditiView()
                 }
@@ -193,8 +195,6 @@ struct ImpostazioniView: View {
     @State private var refreshError: String?
     @State private var fotoItem: PhotosPickerItem?
     @AppStorage("sogliaFrequenzaManuale") private var sogliaManuale = 0
-    @AppStorage("miglioraAudio") private var miglioraAudio = true
-    @AppStorage("motoreTrascrizione") private var motoreTrascrizione = MotoreTrascrizione.apple.rawValue
 
     var body: some View {
         List {
@@ -231,16 +231,6 @@ struct ImpostazioniView: View {
                 Text(app.obbligoFrequenza != nil
                      ? "In automatico vale la percentuale del manifesto degli studi del tuo corso. Scegline una se per un insegnamento vale una regola diversa."
                      : "In automatico vale la percentuale indicata dal sistema presenze, finché non si trova il manifesto degli studi del tuo corso.")
-            }
-            Section {
-                NavigationLink { ImpostazioniTrascrizioneView() } label: {
-                    LabeledContent("Trascrizione", value: (MotoreTrascrizione(rawValue: motoreTrascrizione) ?? .apple).nome)
-                }
-                Toggle("Migliora l'audio dopo ogni registrazione", isOn: $miglioraAudio)
-            } header: {
-                Text("Registrazioni")
-            } footer: {
-                Text("Volume della voce normalizzato, fruscio e rumore di fondo attenuati: aiuta anche trascrizione e riassunto. L'originale resta sempre conservato e si può ripristinare dal dettaglio della registrazione.")
             }
             Section {
                 StatoSessione(nome: "CAS (UNIMIA, SIFA)", attiva: CookieJar.has("CASTGC"))
