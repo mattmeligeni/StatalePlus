@@ -63,15 +63,10 @@ nonisolated enum AppleIntelligence {
         guard #available(iOS 26.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
         progresso(0, "Verifica del contenuto…")
         guard try await eLezione(trascrizione) else { throw Errore.testoInsufficiente }
-        var dimensione = 4_000
-        while true {
-            do {
-                return try await riassumi(trascrizione, dimensione: dimensione, progresso: progresso)
-            } catch LanguageModelSession.GenerationError.exceededContextWindowSize where dimensione > 1_200 {
-                dimensione = dimensione * 2 / 3   // parti più piccole e si riprova
-            } catch LanguageModelSession.GenerationError.guardrailViolation {
-                throw Errore.contenutoNonAmmesso
-            }
+        do {
+            return try await riassumi(trascrizione, dimensione: 4_000, progresso: progresso)
+        } catch LanguageModelSession.GenerationError.guardrailViolation {
+            throw Errore.contenutoNonAmmesso
         }
         #else
         throw Errore.nonDisponibile
@@ -114,19 +109,30 @@ nonisolated enum AppleIntelligence {
     @available(iOS 26.0, *)
     private static func riassumi(_ testo: String, dimensione: Int,
                                  progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
-        let blocchi = dividi(testo, dimensione: dimensione)
+        // Se una parte non entra nel contesto (le trascrizioni piene di errori occupano più token) si divide solo
+        // quella e si continua: prima si ricominciava da capo con parti più piccole, buttando il lavoro fatto
+        // (su una lezione di 2 ore e mezza: 27, poi 41, poi 58 parti, 19 minuti invece di 6).
+        var blocchi = dividi(testo, dimensione: dimensione)
         var parti: [ParteLezione] = []
-        for (i, blocco) in blocchi.enumerated() {
+        var i = 0
+        while i < blocchi.count {
             try Task.checkCancellation()
+            let blocco = blocchi[i]
             progresso(0.05 + Double(i) / Double(blocchi.count) * 0.85, "Parte \(i + 1) di \(blocchi.count)…")
             let sessione = LanguageModelSession(instructions: istruzioni)
-            let r = try await sessione.respond(to: """
-                Questa è la parte \(i + 1) di \(blocchi.count) della trascrizione di una lezione. Prepara gli appunti di \
-                questa parte.
+            let r: LanguageModelSession.Response<ParteLezione>
+            do {
+                r = try await sessione.respond(to: """
+                    Questa è una parte della trascrizione di una lezione. Prepara gli appunti di questa parte.
 
-                Testo:
-                \(blocco)
-                """, generating: ParteLezione.self)
+                    Testo:
+                    \(blocco)
+                    """, generating: ParteLezione.self)
+            } catch LanguageModelSession.GenerationError.exceededContextWindowSize where blocco.count > 1_200 {
+                blocchi.replaceSubrange(i...i, with: dividi(blocco, dimensione: blocco.count * 2 / 3))
+                continue
+            }
+            i += 1
             let parte = r.content
             if !parte.senzaContenuto, parte.riassunto.trimmingCharacters(in: .whitespacesAndNewlines).count > 40 {
                 parti.append(parte)

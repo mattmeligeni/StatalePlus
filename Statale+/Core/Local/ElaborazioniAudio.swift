@@ -63,13 +63,12 @@ final class ElaborazioniAudio {
         trascrizioni[r.id] = Stato(progresso: 0, messaggio: "Preparazione…", motore: motore)
         let url = store.url(for: r)
         let id = r.id
-        let contesto = [r.insegnamento].compactMap { $0 }
         let titolo = r.titolo
         tasks["t\(id)"] = Task {
             do {
                 let testo = try await EsecuzioneEstesa.esegui(titolo: "Trascrizione (\(motore.nome))", sottotitolo: titolo,
                                                                  usaGPU: motore == .whisper) { sistema in
-                    try await Trascrittore.trascrivi(url, motore: motore, contesto: contesto) { p, m in
+                    try await Trascrittore.trascrivi(url, motore: motore) { p, m in
                         sistema(p, fase: m)
                         Task { @MainActor in self.trascrizioni[id]?.progresso = p; self.trascrizioni[id]?.messaggio = m }
                     }

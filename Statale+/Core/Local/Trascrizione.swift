@@ -20,10 +20,11 @@ nonisolated enum Trascrittore {
         }
     }
 
-    /// Trascrive il file audio con il motore scelto in Impostazioni. `contesto`: parole da riconoscere anche se rare
-    /// (nome dell'insegnamento, docente). `progresso` riceve (0…1, messaggio di stato).
+    /// Trascrive il file audio con il motore scelto in Altro › IA. `progresso` riceve (0…1, messaggio di stato).
+    /// Niente parole di contesto (`AnalysisContext.contextualStrings`): provate con un vocabolario di 63 termini su una
+    /// lezione di 2 ore e mezza, con `SpeechTranscriber` il testo resta identico byte per byte.
     @concurrent
-    static func trascrivi(_ url: URL, motore: MotoreTrascrizione = .apple, contesto: [String] = [],
+    static func trascrivi(_ url: URL, motore: MotoreTrascrizione = .apple,
                           progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         if motore == .whisper {
             let durata = (try? AVAudioFile(forReading: url)).map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
@@ -31,7 +32,7 @@ nonisolated enum Trascrittore {
         }
         var testo: String?
         if #available(iOS 26.0, *), SpeechTranscriber.isAvailable {
-            do { testo = try await conAnalyzer(url, contesto: contesto, progresso: progresso) } catch Errore.linguaNonSupportata { testo = nil }
+            do { testo = try await conAnalyzer(url, progresso: progresso) } catch Errore.linguaNonSupportata { testo = nil }
         }
         if testo == nil {
             do { testo = try await conRecognizer(url, progresso: progresso) } catch let e as NSError where e.domain != NSCocoaErrorDomain && !(e is Errore) {
@@ -47,7 +48,7 @@ nonisolated enum Trascrittore {
     // MARK: iOS 26+
 
     @available(iOS 26.0, *)
-    private static func conAnalyzer(_ url: URL, contesto: [String],
+    private static func conAnalyzer(_ url: URL,
                                     progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: lingua) else { throw Errore.linguaNonSupportata }
         // `.transcription`: il preset "accurato" (niente risultati rapidi o provvisori, che sacrificano precisione).
@@ -59,12 +60,6 @@ nonisolated enum Trascrittore {
         let file = try AVAudioFile(forReading: url)
         let durata = Double(file.length) / file.processingFormat.sampleRate
         let analyzer = SpeechAnalyzer(modules: [transcriber])
-        let parole = contesto.flatMap(paroleDiContesto)
-        if !parole.isEmpty {
-            let ctx = AnalysisContext()
-            ctx.contextualStrings[.general] = parole
-            try? await analyzer.setContext(ctx)
-        }
         let raccolta = Task {
             var parti: [String] = []
             for try await r in transcriber.results {
@@ -142,13 +137,6 @@ nonisolated enum Trascrittore {
     }
 
     /// "Neuroscienze cognitive dello sviluppo" → la frase intera e le parole significative (più di 3 lettere).
-    private static func paroleDiContesto(_ s: String) -> [String] {
-        let pulita = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !pulita.isEmpty else { return [] }
-        let parole = pulita.split { !$0.isLetter }.map(String.init).filter { $0.count > 3 }
-        return [pulita] + parole
-    }
-
     // MARK: Formattazione
 
     /// Testo continuo → paragrafi di circa 5 frasi, per la lettura e per i Writing Tools.

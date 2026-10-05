@@ -162,7 +162,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   trascrizione c'è la nota "Sono disponibili altri modelli più accurati" con il collegamento alla scelta):
   - **Apple** (predefinito): locale, privato, veloce e leggero.
     - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber` con il preset `.transcription` (quello più accurato, per
-      dettatura e audio lunghi). Il nome dell'insegnamento si passa come parole di contesto (`AnalysisContext`).
+      dettatura e audio lunghi). Niente parole di contesto (`AnalysisContext`): su una lezione di 2 ore e mezza, un
+      vocabolario di 63 termini lascia il testo identico. `DictationTranscriber` perde più di metà delle parole.
       Il modello della lingua viene scaricato la prima volta.
     - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 s, on-device quando supportato, con punteggiatura.
   - **Whisper** (WhisperKit di Argmax): locale, più preciso, ma richiede un **download aggiuntivo di 626 MB**. È più
@@ -186,8 +187,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
     (iOS 18+), conteggio parole, condivisione, nuova trascrizione.
 - **Riassunto con Apple Intelligence** (FoundationModels, iOS 26+, modello on-device di sistema, solo se disponibile):
-  - La trascrizione è divisa in parti di circa 4000 caratteri: il modello on-device ha un contesto di ~4K token, e la
-    parte si riduce da sola se non ci sta.
+  - La trascrizione è divisa in parti di circa 4000 caratteri, perché il modello on-device ha un contesto di ~4K token.
+    Se una parte non ci sta si divide solo quella e si va avanti. Prima si ricominciava da capo con parti più piccole:
+    su una lezione di 2 h 25 min si passava da 27 a 41 a 58 parti, 19 minuti invece di circa 6.
   - Ogni parte diventa appunti strutturati con generazione guidata (`@Generable`): titolo, riassunto di un paragrafo,
     3–6 punti chiave, 2–3 domande.
   - Il documento finale contiene:
@@ -556,6 +558,12 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (7)
+
+- Riassunti: quando una parte supera il contesto si divide solo quella, senza ricominciare. Su una lezione lunga
+  si passa da 19 a circa 6 minuti.
+- Trascrizione Apple: tolte le parole di contesto, che non avevano alcun effetto.
 
 ### 2026-10-05 (6)
 
