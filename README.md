@@ -425,10 +425,20 @@ processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.
 `PrivacyInfo.xcprivacy`: nessun tracciamento, nessun dato raccolto dallo sviluppatore. API dichiarate:
 UserDefaults (CA92.1), date dei file (C617.1) e spazio su disco (85F4.1, E174.1).
 
-`Statale+.entitlements` è pronto per l'account Apple Developer a pagamento ma non è ancora collegato al progetto
-(`CODE_SIGN_ENTITLEMENTS`): con il team personale la firma fallisce. Contiene _Background GPU Access_ e _Increased
-Memory Limit_ (più memoria per Qwen). _Background Inference_ non è ancora assegnabile; Private Cloud Compute si
-aggiunge quando Apple concede l'entitlement.
+`Statale+.entitlements` (account Apple Developer a pagamento, team `TYJFB2ZDYA`, lo stesso del vecchio team
+personale: l'identificativo dell'app non cambia e gli aggiornamenti da TestFlight conservano i dati):
+
+- _Background GPU Access_ (`…continued-processing.gpu`);
+- _Increased Memory Limit_ (più memoria per Qwen).
+
+Ancora esclusi:
+
+- _Background Inference_: il portale ancora non lo assegna ("not a valid entitlement");
+- Private Cloud Compute: si aggiunge quando Apple concede l'entitlement (Small Business Program in approvazione).
+
+Distribuzione verificata: archivio Release ed esportazione `app-store-connect` riusciti (IPA di 39 MB,
+`beta-reports-active`, `get-task-allow = false`). Icona provvisoria disegnata via codice, senza simboli né font Apple:
+una "S" bianca con un "+" giallo su blu, nelle varianti chiara, scura e tinted, senza canale alfa.
 
 ### Versione dimostrativa
 
@@ -684,6 +694,12 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (12)
+
+- Account Apple Developer a pagamento: permessi di GPU in background e memoria aumentata collegati al progetto e
+  presenti nel profilo.
+- Icona provvisoria dell'app (chiara, scura, tinted); archivio ed esportazione per App Store Connect verificati.
 
 ### 2026-10-05 (11)
 
