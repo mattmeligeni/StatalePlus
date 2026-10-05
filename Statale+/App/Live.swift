@@ -40,5 +40,8 @@ final class Live<Value> {
 
     func set(_ v: Value) { value = v; error = nil; updatedAt = .now }
 
+    /// Trasforma il valore già caricato senza cambiarne la data di aggiornamento (es. modifiche locali).
+    func aggiorna(_ f: (Value) -> Value) { if let value { self.value = f(value) } }
+
     func reset() { generation += 1; value = nil; error = nil; updatedAt = nil; isLoading = false }
 }

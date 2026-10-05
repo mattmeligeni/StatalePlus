@@ -148,6 +148,9 @@ struct LezioneRow: View {
                     .lineLimit(2)
                 LuogoLezione(aula: lezione.aula, sede: lezione.sede)
                 TimeStatusBadge(inizio: lezione.inizio, fine: lezione.fine, annullato: lezione.annullato, adesso: adesso)
+                if lezione.modificataLocalmente {
+                    Label("Modificata da te", systemImage: "pencil").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                }
                 if !lezione.note.isEmpty {
                     Text(lezione.note).font(.caption).foregroundStyle(.orange)
                 }

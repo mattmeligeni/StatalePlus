@@ -208,13 +208,30 @@ struct OrarioView: View {
 }
 
 struct LezioneDetail: View {
+    /// La lezione aperta; i dati mostrati sono quelli attuali (con le modifiche locali) cercati per id.
     let lezione: Lezione
+    @Environment(AppModel.self) private var app
     @State private var nomeEspanso = false
+    @State private var modifica = false
+    @State private var confermaRipristino = false
+
+    private var attuale: Lezione { app.lezione(lezione.id) ?? lezione.conModifica(app.modificheLezioni[lezione.id]) }
 
     /// Il nome completo sta nella sezione in alto: tap per espanderlo se è lungo.
     private var nomeLungo: Bool { lezione.insegnamento.count > 70 }
 
+    private var annullataDaTe: Binding<Bool> {
+        Binding(get: { attuale.annullato }, set: { valore in
+            var m = app.modificheLezioni[lezione.id] ?? ModificaLezione()
+            // Se coincide con l'Agenda la modifica non serve.
+            m.annullata = valore == (attuale.ufficiale?.annullato ?? lezione.annullato) ? nil : valore
+            m.salvata = .now
+            app.salvaModifica(m, lezione: lezione.id)
+        })
+    }
+
     var body: some View {
+        let l = attuale
         NavigationStack {
             List {
                 Section {
@@ -222,7 +239,7 @@ struct LezioneDetail: View {
                         withAnimation(.easeInOut(duration: 0.2)) { nomeEspanso.toggle() }
                     } label: {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(lezione.insegnamento)
+                            Text(l.insegnamento)
                                 .font(.headline)
                                 .foregroundStyle(.primary)
                                 .multilineTextAlignment(.leading)
@@ -241,30 +258,172 @@ struct LezioneDetail: View {
                     .disabled(!nomeLungo)
                     .accessibilityHint(nomeLungo ? (nomeEspanso ? "Comprimi il nome" : "Mostra il nome completo") : "")
                 }
+                if let u = l.ufficiale {
+                    Section {
+                        Label("Modificata da te", systemImage: "pencil").font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
+                        if u.aula != l.aula || u.sede != l.sede { LabeledContent("Agenda: luogo", value: "\(u.aula) · \(u.sede)") }
+                        if u.docente != l.docente { LabeledContent("Agenda: docente", value: Testo.persona(u.docente)) }
+                        if u.annullato != l.annullato { LabeledContent("Agenda: stato", value: u.annullato ? "Annullata" : "Confermata") }
+                        Button("Ripristina i dati dell'Agenda", role: .destructive) { confermaRipristino = true }
+                    } footer: {
+                        Text("Le modifiche restano solo su questo dispositivo e non possono essere verificate: in caso di dubbio fanno fede i canali ufficiali del corso.")
+                    }
+                }
                 Section {
                     LabeledContent("Quando") {
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text(lezione.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Formats.it)))
-                            Text("\(Formats.time(lezione.inizio)) – \(Formats.time(lezione.fine))").monospacedDigit()
+                            Text(l.inizio.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Formats.it)))
+                            Text("\(Formats.time(l.inizio)) – \(Formats.time(l.fine))").monospacedDigit()
                         }
                     }
-                    LabeledContent("Aula", value: lezione.aula)
-                    LabeledContent("Sede", value: lezione.sede)
-                    LabeledContent("Docente", value: Testo.persona(lezione.docente))
-                    LabeledContent("Tipo", value: lezione.tipo)
-                    TimeStatusBadge(inizio: lezione.inizio, fine: lezione.fine, annullato: lezione.annullato)
-                    if !lezione.note.isEmpty { Text(lezione.note) }
+                    LabeledContent("Aula", value: l.aula)
+                    LabeledContent("Sede", value: l.sede)
+                    LabeledContent("Docente", value: Testo.persona(l.docente))
+                    LabeledContent("Tipo", value: l.tipo)
+                    TimeStatusBadge(inizio: l.inizio, fine: l.fine, annullato: l.annullato)
+                    if !l.note.isEmpty { Text(l.note) }
                 }
-                MapsButton(aula: lezione.aula, sede: lezione.sede, codici: [lezione.aulaCodice]) {
+                MapsButton(aula: l.aula, sede: l.sede, codici: [l.aulaCodice]) {
                     Label("Apri in Mappe", systemImage: "map")
+                }
+                Section {
+                    Toggle(isOn: annullataDaTe) {
+                        Label("Lezione annullata", systemImage: "calendar.badge.minus")
+                    }
+                    .tint(.red)
+                    Button { modifica = true } label: {
+                        Label("Modifica aula, sede o docente", systemImage: "pencil")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                } footer: {
+                    Text("Per i corsi in cui il docente non aggiorna l'Agenda web: le modifiche valgono solo su questo dispositivo, in Oggi e in Orario, e non possono essere verificate.")
                 }
             }
             .listSectionSpacing(.compact)
             .contentMargins(.top, 8, for: .scrollContent)
             .navigationTitle("Lezione")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $modifica) { ModificaLezioneSheet(lezione: l) }
+            .confirmationDialog("Ripristinare i dati dell'Agenda?", isPresented: $confermaRipristino, titleVisibility: .visible) {
+                Button("Ripristina", role: .destructive) { app.salvaModifica(nil, lezione: lezione.id) }
+            } message: {
+                Text("La modifica fatta su questo dispositivo verrà eliminata.")
+            }
         }
         .presentationBackground(Color(.systemGroupedBackground))
+    }
+}
+
+/// Modifica locale di aula, sede e docente di una lezione; l'aula si può scegliere dall'elenco EasyRoom (così Mappe
+/// porta alla sede giusta) o scrivere a mano.
+private struct ModificaLezioneSheet: View {
+    let lezione: Lezione
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var aula = ""
+    @State private var aulaScelta: Aula?
+    @State private var sede = ""
+    @State private var docente = ""
+    @State private var annullata = false
+
+    private var ufficiale: ValoriUfficialiLezione {
+        lezione.ufficiale ?? ValoriUfficialiLezione(aula: lezione.aula, aulaCodice: lezione.aulaCodice, sede: lezione.sede,
+                                                     docente: lezione.docente, annullato: lezione.annullato)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    NavigationLink {
+                        SceltaAula { a in aula = a.nome; sede = a.sede; aulaScelta = a }
+                    } label: {
+                        Label("Scegli dall'elenco delle aule", systemImage: "building.2")
+                    }
+                    TextField("Aula", text: $aula)
+                    TextField("Sede", text: $sede)
+                } header: {
+                    Text("Luogo")
+                } footer: {
+                    Text("Scegliendo dall'elenco, \"Apri in Mappe\" porta all'indirizzo dell'aula.")
+                }
+                Section("Docente") {
+                    TextField("Docente", text: $docente)
+                }
+                Section {
+                    Toggle("Lezione annullata", isOn: $annullata).tint(.red)
+                }
+                Section {
+                } footer: {
+                    Text("Agenda: \(ufficiale.aula) · \(ufficiale.sede) · \(Testo.persona(ufficiale.docente))\(ufficiale.annullato ? " · annullata" : "")")
+                }
+            }
+            .navigationTitle("Modifica lezione")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Annulla") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Salva") { salva(); dismiss() }.bold() }
+            }
+            .onAppear {
+                aula = lezione.aula; sede = lezione.sede; docente = Testo.persona(lezione.docente); annullata = lezione.annullato
+            }
+        }
+    }
+
+    private func salva() {
+        let u = ufficiale
+        var m = ModificaLezione()
+        let a = aula.trimmed, s = sede.trimmed, d = docente.trimmed
+        // Il codice EasyRoom vale solo se l'aula è ancora quella scelta dall'elenco.
+        if !a.isEmpty, a != u.aula { m.aula = a; m.aulaCodice = aulaScelta?.nome == a ? aulaScelta?.codice : "" }
+        if !s.isEmpty, s != u.sede { m.sede = s }
+        if !d.isEmpty, d != Testo.persona(u.docente), d != u.docente { m.docente = d }
+        if annullata != u.annullato { m.annullata = annullata }
+        app.salvaModifica(m, lezione: lezione.id)
+    }
+}
+
+/// Elenco aule di EasyRoom per sede, con ricerca.
+private struct SceltaAula: View {
+    let scegli: (Aula) -> Void
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    var body: some View {
+        List {
+            LiveSection(title: "Aule", live: app.aule, retry: { await app.loadAule(force: true) }) { occ in
+                let q = query.trimmed
+                ForEach(occ.sedi.filter { !$0.aule.isEmpty }) { sede in
+                    let aule = sede.aule.filter { q.isEmpty || $0.nome.localizedCaseInsensitiveContains(q) || sede.nome.localizedCaseInsensitiveContains(q) }
+                    if !aule.isEmpty {
+                        Section(sede.nome) {
+                            ForEach(aule) { a in
+                                Button {
+                                    scegli(a)
+                                    dismiss()
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(a.nome).foregroundStyle(.primary)
+                                        if let c = a.capienza { Text("\(c) posti").font(.caption).foregroundStyle(.secondary) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Aula o sede")
+        .navigationTitle("Scegli l'aula")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await app.loadAule() }
     }
 }
 

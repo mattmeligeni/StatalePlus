@@ -85,6 +85,11 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 
 ### Orario
 
+- **Modifiche locali alle lezioni** (per i corsi in cui il docente non aggiorna l'Agenda web): nel dettaglio della lezione,
+  sotto "Apri in Mappe", l'interruttore **Lezione annullata** e il pulsante rosso **Modifica** (aula e sede scelte
+  dall'elenco EasyRoom, così Mappe porta all'indirizzo giusto, oppure scritte a mano; docente; annullata). Le lezioni
+  modificate mostrano "Modificata da te", i valori dell'Agenda e **Ripristina**. Valgono solo sul dispositivo (in Oggi,
+  Orario e calendario del corso), con l'avviso che non possono essere verificate; cancellate all'uscita dall'account.
 - Settimana navigabile, lezioni raggruppate per giorno, dettaglio con aula, sede, docente e **Apri in Mappe**; nel dettaglio
   il nome completo dell'insegnamento è in alto e, se lungo, si espande con un tap; "Quando" riporta il giorno della
   settimana e, sotto, l'orario (es. "08:30 – 12:30").
@@ -417,8 +422,10 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 ## Aggiornamento dei dati
 
 - Ogni schermata live si carica all'apertura e ha il **pull-to-refresh** con "Aggiornato alle HH:MM".
-- **Refresh automatico ogni 5 minuti** (app in primo piano) di lezioni di oggi, presenze, orario e prenotazioni
-  (questi ultimi se già aperti). Il timer riparte da ogni pull-to-refresh su Oggi, Orario o Presenze.
+- **Refresh automatico ogni 5 minuti** (app in primo piano) e **al ritorno in primo piano** se sono passati più di
+  5 minuti: lezioni di oggi, presenze, orario, prenotazioni, notifiche e scadenze Ariel; la lista corsi di Ariel e il
+  corso aperto si ricaricano da soli se i loro dati sono più vecchi (segnale `segnaleAggiornamento`). Il timer riparte
+  da ogni pull-to-refresh su Oggi, Orario o Presenze.
 
 ---
 
@@ -471,6 +478,11 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (2)
+
+- Lezioni: modifiche locali (annullata, aula/sede dall'elenco aule, docente) con ripristino.
+- Ariel si aggiorna da solo al ritorno in primo piano e ogni 5 minuti, come Oggi.
 
 ### 2026-10-05
 

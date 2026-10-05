@@ -52,6 +52,16 @@ struct ArielCoursesView: View {
                 UpdatedFooter(date: offerta.updatedAt ?? app.store.snapshot.offertaAggiornata).listRowBackground(Color.clear)
             }
             .navigationTitle("Ariel")
+            // Refresh automatico (ritorno in primo piano, ogni 5 minuti) come in Oggi, senza pull-to-refresh.
+            .onChange(of: app.segnaleAggiornamento) {
+                guard AppModel.datiVecchi(offerta.updatedAt) else { return }
+                Task {
+                    async let a: Void = reload()
+                    async let b: Void = app.loadScadenzeAriel(force: true)
+                    async let c: Void = app.loadNotificheAriel()
+                    _ = await (a, b, c)
+                }
+            }
             .refreshable {
                 async let a: Void = reload()
                 async let b: Void = app.loadScadenzeAriel(force: true)
@@ -145,6 +155,10 @@ struct CourseDetailView: View {
         }
         .navigationTitle(corso.codice)
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: app.segnaleAggiornamento) {
+            guard AppModel.datiVecchi(struttura.updatedAt) else { return }
+            Task { await loadStruttura() }
+        }
         .refreshable {
             async let a: Void = loadStruttura()
             async let b: Void = loadScheda(force: true)

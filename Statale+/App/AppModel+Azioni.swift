@@ -162,9 +162,16 @@ extension AppModel {
     /// Azzera il timer del refresh automatico (chiamato dai pull-to-refresh).
     func segnaRefresh() { ultimoRefresh = .now }
 
+    /// Dati più vecchi dell'intervallo di refresh (o mai caricati).
+    static func datiVecchi(_ aggiornati: Date?) -> Bool {
+        guard let aggiornati else { return true }
+        return Date.now.timeIntervalSince(aggiornati) >= intervalloRefresh
+    }
+
     /// Dati più rilevanti: lezioni di oggi, presenze, orario e prenotazioni (se già aperti).
     func refreshRilevanti() async {
         segnaRefresh()
+        segnaleAggiornamento += 1
         async let a: Void = loadLezioniUtente()
         async let b: Void = loadPresenze()
         async let c: Void = orario.updatedAt != nil ? loadOrario() : ()
@@ -215,6 +222,7 @@ extension AppModel {
         Preferenze.azzera()
         obbligoFrequenza = nil
         avvisiLetti = [:]
+        modificheLezioni = [:]
         // Zip dei materiali dei corsi: dati dell'account.
         try? FileManager.default.removeItem(at: URL.cachesDirectory.appending(path: "Materiali", directoryHint: .isDirectory))
         if eliminaDatiLocali {

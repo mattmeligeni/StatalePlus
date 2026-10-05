@@ -113,15 +113,56 @@ nonisolated struct Lezione: Sendable, Hashable, Identifiable {
     let id: String               // Giorno@id "6482331"
     let codiceInsegnamento: String // Insegnamento@CodiceGenerale "DBD-29"
     let insegnamento: String     // Insegnamento@Nome
-    let docente: String          // DocenteTitolare@Nome+@Cognome → "Mario Bianchi"
+    var docente: String          // DocenteTitolare@Nome+@Cognome → "Mario Bianchi"
     let inizio: Date             // Giorno@Data + @OraInizio
     let fine: Date               // Giorno@Data + @OraFine
-    let aula: String             // Giorno@Aula "Sala Conferenze"
-    let aulaCodice: String       // Giorno@AulaCodice "9999981-Conf" (EasyRoom: "9999981@Conf")
-    let sede: String             // Giorno@Sede "Istituto Auxologico Italiano"
-    let annullato: Bool          // Giorno@Annullato "1"
+    var aula: String             // Giorno@Aula "Sala Conferenze"
+    var aulaCodice: String       // Giorno@AulaCodice "9999981-Conf" (EasyRoom: "9999981@Conf")
+    var sede: String             // Giorno@Sede "Istituto Auxologico Italiano"
+    var annullato: Bool          // Giorno@Annullato "1"
     let tipo: String             // Giorno@Tipo "Lezione"
     let note: String             // Giorno@Notes + @NoteAula + @NoteSettimanali
+    /// Valori dell'Agenda, presenti solo se l'utente ha modificato la lezione sul dispositivo.
+    var ufficiale: ValoriUfficialiLezione? = nil
+
+    var modificataLocalmente: Bool { ufficiale != nil }
+
+    /// Applica una modifica locale (o la toglie con `nil`), partendo sempre dai valori ufficiali.
+    func conModifica(_ m: ModificaLezione?) -> Lezione {
+        var l = self
+        if let u = ufficiale {
+            l.aula = u.aula; l.aulaCodice = u.aulaCodice; l.sede = u.sede; l.docente = u.docente; l.annullato = u.annullato
+            l.ufficiale = nil
+        }
+        guard let m, !m.vuota else { return l }
+        l.ufficiale = ValoriUfficialiLezione(aula: l.aula, aulaCodice: l.aulaCodice, sede: l.sede, docente: l.docente, annullato: l.annullato)
+        if let a = m.aula { l.aula = a; l.aulaCodice = m.aulaCodice ?? "" }
+        if let s = m.sede { l.sede = s }
+        if let d = m.docente { l.docente = d }
+        if let x = m.annullata { l.annullato = x }
+        return l
+    }
+}
+
+nonisolated struct ValoriUfficialiLezione: Sendable, Hashable {
+    let aula: String
+    let aulaCodice: String
+    let sede: String
+    let docente: String
+    let annullato: Bool
+}
+
+/// Modifica fatta dall'utente a una lezione (professori che non aggiornano l'Agenda web): solo sul dispositivo,
+/// legata a `Lezione.id` (Giorno@id). I campi nil restano quelli ufficiali.
+nonisolated struct ModificaLezione: Codable, Sendable, Hashable {
+    var aula: String?
+    var aulaCodice: String?      // codice EasyRoom se l'aula è scelta dall'elenco (posizione per Mappe)
+    var sede: String?
+    var docente: String?
+    var annullata: Bool?
+    var salvata: Date = .now
+
+    var vuota: Bool { aula == nil && sede == nil && docente == nil && annullata == nil }
 }
 
 nonisolated struct OrarioInsegnamento: Sendable {

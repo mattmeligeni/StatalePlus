@@ -50,7 +50,10 @@ struct LezioniInsegnamentoSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } } }
             .refreshable { await load() }
-            .task { await lezioni.loadIfNeeded { try await fetch() } }
+            .task {
+                let m = app.modificheLezioni
+                await lezioni.loadIfNeeded { try await fetch().map { $0.conModifica(m[$0.id]) } }
+            }
             .sheet(item: $selected) { LezioneDetail(lezione: $0).presentationDetents([.medium, .large]) }
         }
     }
@@ -61,7 +64,10 @@ struct LezioniInsegnamentoSheet: View {
             .sorted { $0.0 < $1.0 }
     }
 
-    private func load() async { await lezioni.load { try await fetch() } }
+    private func load() async {
+        let m = app.modificheLezioni
+        await lezioni.load { try await fetch().map { $0.conModifica(m[$0.id]) } }
+    }
 
     /// File XML: dall'elenco insegnamenti già noto, altrimenti per tentativi sui periodi.
     private func fetch() async throws -> [Lezione] {

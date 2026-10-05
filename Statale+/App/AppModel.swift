@@ -38,6 +38,15 @@ final class AppModel {
     var avvisiLetti: [String: Date] = Preferenze.avvisiLetti.mapValues { Date(timeIntervalSince1970: $0) } {
         didSet { Preferenze.avvisiLetti = avvisiLetti.mapValues(\.timeIntervalSince1970) }
     }
+    /// Modifiche locali alle lezioni: salvate e riapplicate subito a Oggi e Orario.
+    var modificheLezioni: [String: ModificaLezione] = Preferenze.modificheLezioni {
+        didSet {
+            Preferenze.modificheLezioni = modificheLezioni
+            let m = modificheLezioni
+            lezioniUtente.aggiorna { $0.map { $0.conModifica(m[$0.id]) } }
+            orario.aggiorna { $0.map { $0.conModifica(m[$0.id]) } }
+        }
+    }
     let scadenzeAriel = Live<[EventoMoodle]>()     // Oggi (prossimi 7 giorni), Ariel › Scadenze
     let notificheAriel = Live<NotificheMoodle>()   // Oggi (non lette), Ariel › Notifiche
     let alberoOrario = Live<[AgendaScuola]>()
@@ -65,6 +74,9 @@ final class AppModel {
 
     // Refresh automatico
     var ultimoRefresh: Date = .now
+    /// Cresce a ogni refresh automatico (ogni 5 minuti in primo piano e al ritorno dall'app in background): le
+    /// schermate con dati propri (Ariel) lo osservano e si ricaricano se i loro dati sono vecchi.
+    var segnaleAggiornamento = 0
     @ObservationIgnored var autoRefreshTask: Task<Void, Never>?
 
     var studente: Studente? { store.snapshot.studente }
@@ -190,7 +202,8 @@ final class AppModel {
             let all = list ?? []
             insegnamentiOrario.set(all)
             let on = attivati(cdl: cdl, insegnamenti: all)
-            return try await services.agenda.lezioni(di: all.filter { on.contains($0.codice) })
+            let m = modificheLezioni
+            return try await services.agenda.lezioni(di: all.filter { on.contains($0.codice) }).map { $0.conModifica(m[$0.id]) }
         }
     }
 
@@ -212,7 +225,8 @@ final class AppModel {
     /// Lezioni del corso dell'utente (insegnamenti attivati, tutti i periodi).
     func loadLezioniUtente() async {
         guard let list = agenda?.insegnamentiUtenteAttivati else { return }
-        await lezioniUtente.load { try await services.agenda.lezioni(di: list) }
+        let m = modificheLezioni
+        await lezioniUtente.load { try await services.agenda.lezioni(di: list).map { $0.conModifica(m[$0.id]) } }
         assegnaInsegnamentiRecuperati()
     }
 
@@ -279,6 +293,15 @@ final class AppModel {
     }
 
     /// Indirizzo dell'aula da EasyRoom (per codice, poi per nome aula + sede, poi per sede); ricerca libera come ultima risorsa.
+    /// Versione attuale di una lezione (con le modifiche locali), cercata fra Oggi e Orario.
+    func lezione(_ id: String) -> Lezione? {
+        lezioniUtente.value?.first { $0.id == id } ?? orario.value?.first { $0.id == id }
+    }
+
+    func salvaModifica(_ m: ModificaLezione?, lezione id: String) {
+        if let m, !m.vuota { modificheLezioni[id] = m } else { modificheLezioni[id] = nil }
+    }
+
     func mapsURL(aula: String, sede: String, codici: [String] = []) async -> URL? {
         await loadAule()
         if let occ = aule.value {

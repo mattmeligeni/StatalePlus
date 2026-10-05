@@ -46,7 +46,14 @@ nonisolated enum Preferenze {
         set { defaults.set(newValue, forKey: "avvisiLetti") }
     }
 
+    /// Modifiche locali alle lezioni (id lezione → modifica).
+    static var modificheLezioni: [String: ModificaLezione] {
+        get { defaults.data(forKey: "modificheLezioni").flatMap { try? JSONDecoder().decode([String: ModificaLezione].self, from: $0) } ?? [:] }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "modificheLezioni") }
+    }
+
     static func azzera() {
-        ["sogliaFrequenzaManuale", "obbligoFrequenza", "obbligoFrequenzaChiave", "avvisiLetti"].forEach(defaults.removeObject(forKey:))
+        ["sogliaFrequenzaManuale", "obbligoFrequenza", "obbligoFrequenzaChiave", "avvisiLetti", "modificheLezioni"]
+            .forEach(defaults.removeObject(forKey:))
     }
 }
