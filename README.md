@@ -157,7 +157,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   soglie ricavate dalla registrazione, normalizzazione a −16 LUFS con limitatore a −3 dBFS. Tutto in streaming, senza
   file temporanei PCM. Su una lezione reale di 2 h 41 min (−38,9 LUFS): −16,6 LUFS, distanza voce/pause da 8,9 a
   17,8 dB (`ffmpeg loudnorm` arriva a −23 LUFS e lascia la distanza a 8,5 dB); 48 s su Mac, 32 MB di memoria.
-  L'originale resta in `<id>.originale.m4a` e si può ripristinare; la trascrizione usa la versione migliorata.
+  L'originale resta in `<id>.originale.m4a` e si può ripristinare. La trascrizione usa sempre l'originale: nelle prove
+  il miglioramento non aiuta Apple e Parakeet (con Apple i termini riconosciuti scendono da 197 a 180).
 - **Trascrizione** in italiano, con tre motori a scelta in _Altro › IA › Trascrizione_ (sotto la
   trascrizione c'è la nota "Sono disponibili altri modelli più accurati" con il collegamento alla scelta):
   - **Apple** (predefinito): locale, privato, veloce e leggero.
@@ -166,52 +167,88 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
       vocabolario di 63 termini lascia il testo identico. `DictationTranscriber` perde più di metà delle parole.
       Il modello della lingua viene scaricato la prima volta.
     - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 s, on-device quando supportato, con punteggiatura.
-  - **Whisper** (WhisperKit di Argmax): locale, più preciso, ma richiede un **download aggiuntivo di 626 MB**. È più
-    pesante e consuma più batteria, soprattutto sulle registrazioni lunghe.
-    - Modello `openai_whisper-large-v3-v20240930_626MB` (Large v3 Turbo, la versione più recente pubblicata in
-      `argmaxinc/whisperkit-coreml`, compressa per iPhone).
-    - Richiede A15 o successivo (`WhisperKit.recommendedModels()`): su chip più vecchi l'opzione è disattivata.
+  - **Parakeet** (NVIDIA Parakeet TDT 0.6B v3, versione "Ultra", con FluidAudio): locale, più accurato, download di
+    **632 MB**. Lavora sul Neural Engine con circa 90 MB di memoria e legge il file a blocchi dal disco.
     - Prima del download un avviso mostra dimensione, spazio libero, rete (Wi-Fi consigliato, possibili costi su
-      rete cellulare), primo piano consigliato, consumo di batteria e privacy.
-    - Il modello sta in `Application Support/Modelli` (escluso dal backup), con un file marcatore scritto solo a
-      download completato; si può annullare il download o eliminare il modello.
-    - Barra del download con percentuale e MB, sia nella riga di Whisper sia nella sezione del modello. L'avanzamento
-      si misura sui byte già su disco (626 720 156 in tutto): WhisperKit conta i file scaricati, e la sua percentuale
-      resterebbe ferma a lungo sui pesi da centinaia di MB.
-    - La trascrizione legge l'audio a blocchi (`.incremental`), divide in base al parlato (VAD), forza l'italiano e
-      scarta i segmenti di silenzio e le frasi inventate tipiche ("Sottotitoli a cura di…"). Toglie anche le
-      ripetizioni a ciclo, quando Whisper ripete lo stesso pezzo (`senzaRipetizioni`): su una lezione reale di
-      20 minuti erano 15. La prima volta Core ML
-      prepara il modello e serve qualche minuto in più.
-  - **Remoto Pro**: a pagamento, non ancora disponibile (mostrato disattivato).
+      rete cellulare), primo piano, consumi e privacy.
+    - Barra del download in MB, calcolata sui byte: file completati più file parziali.
+    - Il modello sta in `Application Support/Modelli/parakeet-ultra`, escluso dal backup, con un marcatore scritto a
+      download finito. Si può annullare il download o eliminare il modello.
+    - Filtro per le ripetizioni a ciclo (`senzaRipetizioni`), comune a tutti i motori.
+  - **Remoto Pro**  - **Remoto Pro**: a pagamento, non ancora disponibile (mostrato disattivato).
+  - **Prove**, misurate su Mac M1 Pro.
+    - Lezione reale di 2 h 25 min registrata da lontano (−31,7 LUFS); conteggio di circa 60 termini di neuroanatomia:
+
+      | Motore | Tempo | Termini riconosciuti | Ripetizioni a ciclo |
+      | --- | --- | --- | --- |
+      | Apple | 74 s | 197 | 7 |
+      | Whisper Turbo 626 MB | 16–19 min | 202–211 | 52–103 |
+      | Parakeet Ultra | 40 s, 92 MB | 241 | 18 |
+      | Qwen3-ASR 1.7B (MLX) | ~9 min | 272 | 189 |
+
+    - Testo con riferimento esatto (12,7 min letti da una voce sintetica), errore sulle parole (WER):
+
+      | Motore | Audio pulito | Audio "da fondo aula" |
+      | --- | --- | --- |
+      | Qwen3-ASR 1.7B | 4,2% | 6,2% |
+      | Whisper Turbo | 5,7% | 7,5% |
+      | Parakeet Ultra | 6,5% | 7,9% |
+      | Apple | 8,1% | 9,3% |
+
+      Nell'app, nel simulatore, Parakeet fa 6,4%.
+    - Su audio pulito i motori sono vicini. Parakeet è stato scelto per l'equilibrio: velocità (25 volte Whisper),
+      niente frasi inventate né cicli su audio difficile, Neural Engine, pochi consumi.
+    - Whisper è stato tolto (il modello scaricato si cancella da solo, 626 MB): è lento e su audio registrato da
+      lontano inventa ("Grazie.") e ripete.
+    - Qwen3-ASR è il più preciso, ma più lento, usa la GPU e ogni tanto ripete a lungo: per ora non incluso.
   - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
     (iOS 18+), conteggio parole, condivisione, nuova trascrizione.
-- **Riassunto con Apple Intelligence** (FoundationModels, iOS 26+, modello on-device di sistema, solo se disponibile):
-  - La trascrizione è divisa in parti di circa 4000 caratteri, perché il modello on-device ha un contesto di ~4K token.
-    Se una parte non ci sta si divide solo quella e si va avanti. Prima si ricominciava da capo con parti più piccole:
-    su una lezione di 2 h 25 min si passava da 27 a 41 a 58 parti, 19 minuti invece di circa 6.
-  - Ogni parte diventa appunti strutturati con generazione guidata (`@Generable`): titolo, riassunto di un paragrafo,
-    3–6 punti chiave, 2–3 domande.
-  - Il documento finale contiene:
-    - _In breve_;
-    - _Riassunto_ con un paragrafo per ogni parte della lezione;
-    - _Punti chiave_ senza duplicati;
-    - _Da ripassare_ numerato.
-    Su una lezione di 2 ore sono più pagine, non poche righe.
+- **Riassunto** con due motori a scelta in _Altro › IA › Riassunti_.
+  - **Qwen 3.5 4B** (Alibaba, Apache 2.0, `mlx-community/Qwen3.5-4B-4bit`) con MLX sulla GPU: download di **3 GB**, solo
+    iPhone con almeno 8 GB di memoria.
+    - Lavora a sezioni con memoria: blocchi di circa 2200 parole; per ognuno scrive le sezioni `### Titolo` nuove,
+      ricevendo i titoli già scritti per non ripetersi e collegare i concetti. Una passata finale scrive _In breve_,
+      _Punti chiave_ e _Da ripassare_.
+    - Prove sulla lezione di 2 h 25 min: copre 40 termini su 75, contro i 34 di Apple. Corregge nomi e termini
+      storpiati dalla trascrizione ("modo di gambier" → "nodi di Ranvier").
+    - Tempi e memoria: circa 5 minuti sul Mac, 4,1 GB di picco con la cache di MLX limitata a 256 MB. Su iPhone si
+      stimano 10–15 minuti.
+    - In una passata sola è più rapido ma riassume troppo.
+    - Prima di iniziare controlla la memoria libera (`os_proc_available_memory`).
+    - La GPU non si può usare in background: se si esce dall'app il riassunto va in pausa e riprende al ritorno dalle
+      sezioni già scritte.
+    - Il tokenizer è quello di swift-transformers, con un adattatore scritto a mano: niente macro di pacchetto da
+      abilitare in Xcode.
+  - **Apple Intelligence** (FoundationModels, iOS 26+, modello on-device di sistema, solo se disponibile):
+    - La trascrizione è divisa in parti di circa 4000 caratteri, perché il modello ha un contesto di ~4K token. Se una
+      parte non ci sta si divide solo quella e si va avanti. Prima si ricominciava da capo con parti più piccole: su
+      una lezione di 2 h 25 min si passava da 27 a 41 a 58 parti, 19 minuti invece di circa 6.
+    - Ogni parte diventa appunti strutturati con generazione guidata (`@Generable`): titolo, riassunto di un
+      paragrafo, 3–6 punti chiave, 2–3 domande.
+    - Il documento finale contiene _In breve_, _Riassunto_ con un paragrafo per parte, _Punti chiave_ senza duplicati
+      e _Da ripassare_ numerato.
+    - Se Apple Intelligence è disattivata o in download, l'app lo indica.
   - Visualizzazione formattata, modifica con Writing Tools, rigenerazione.
   - **PDF A4** da condividere o stampare: è generato dall'app con titolo, insegnamento e data.
-  - Se Apple Intelligence è disattivata o in download, l'app lo indica.
-- **Lavori lunghi in background** (`EsecuzioneEstesa`): trascrizione, riassunto, miglioramento dell'audio e download di
-  Whisper.
-  - Da iOS 26 usano `BGContinuedProcessingTask`. Se si esce dall'app il lavoro continua, con l'avanzamento in
-    un'attività di sistema da cui si può annullare. È l'unica attività in tempo reale: iOS la mostra comunque, e una
-    nostra la duplicherebbe.
-    - Il titolo dice il lavoro ("Trascrizione (Whisper)", "Riassunto", "Download di Whisper").
-    - Il sottotitolo dice la registrazione, la fase e il tempo che manca, stimato dalla velocità media, ad esempio
-      "Lezione 5 ott · Trascritti 12 di 80 min · circa 9 min" o "Parte 3 di 8". Si aggiorna al massimo ogni 3 secondi.
-    - Whisper chiede anche la **GPU in background** (`requiredResources = .gpu`) dove il dispositivo la supporta.
+- **Catena automatica** (attiva per impostazione predefinita, _Altro › IA › Dopo ogni registrazione_). Alla fine di una
+  registrazione partono, uno dopo l'altro, trascrizione, riassunto e miglioramento dell'audio: quando si apre la
+  lezione è già tutto pronto. Uno dopo l'altro per non contendersi Neural Engine, GPU e CPU.
+- **Lavori lunghi in background** (`EsecuzioneEstesa`): trascrizione, riassunto, miglioramento dell'audio e download dei
+  modelli.
+  - **Live Activity di Statale+** (estensione `StatalePlusAttivita`, `AttivitaLive`), sulla schermata di blocco e nella
+    Dynamic Island.
+    - Un'unica attività con tutti i lavori in corso: icona e colore per tipo, titolo, registrazione, barra, fase e
+      tempo stimato (es. "Trascritti 5 di 13 min · meno di un minuto"), stato "In pausa".
+    - Compatta: icona e percentuale. Minima: anello di avanzamento.
+    - Aggiornamenti raggruppati, al massimo uno al secondo. Quando i lavori finiscono resta 5 minuti con l'esito.
+  - Da iOS 26 c'è anche `BGContinuedProcessingTask`, per continuare fuori dall'app: titolo e sottotitolo con fase e
+    tempo stimato. Nel simulatore iOS non ne mostra l'attività.
+  - GPU (Qwen) e, da iOS 27, Neural Engine in background richiedono entitlement ("Background GPU Access",
+    "Background Inference") che gli account sviluppatore personali non hanno.
+    - Un lavoro che si ferma per questo resta "in pausa" (anche nella Live Activity) e riparte da solo al ritorno in
+      primo piano (`PrimoPiano`, `ElaborazioniAudio.sospendi`).
+    - Parakeet nel simulatore continua in background.
   - Prima di iOS 26 c'è il tempo extra di `beginBackgroundTask`.
-  - Nelle sezioni una nota ricorda che in primo piano è più veloce.
   - Il lavoro pesante gira fuori dal main thread (attori e funzioni `@concurrent`).
 - **Protezioni** contro elaborazioni inutili e riassunti inventati:
   - trascrizione solo per registrazioni di almeno **1 minuto**, riassunto solo da **5 minuti** (controllo sia nell'interfaccia
@@ -259,14 +296,17 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   verde / grigio), dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
 - **IA** (icona processore): raccoglie tutte le impostazioni dei modelli, in vista di eventuali servizi cloud:
-  - motore di trascrizione e spazio occupato da Whisper;
+  - motore di trascrizione (Apple o Parakeet) e motore dei riassunti (Apple Intelligence o Qwen), con download e
+    spazio dei modelli;
+  - catena automatica dopo ogni registrazione (trascrizione, riassunto, miglioramento);
   - miglioramento automatico dell'audio dopo ogni registrazione;
   - stato di Apple Intelligence per i riassunti (disponibile, disattivata, in download, non supportata), con cosa
     fare;
   - servizi cloud, ancora "Prossimamente": oggi tutto resta sul dispositivo;
   - nota sui lavori lunghi in background.
 - **Crediti** (sezione separata in fondo): servizi dell'Ateneo, piattaforme (Moodle, EasyStaff/EasyAcademy) e tecnologie
-  Apple usate, WhisperKit (licenza MIT), ciascuno con il proprio link. Disclaimer e copyright con la versione dell'app stanno in fondo ad _Altro_.
+  Apple usate, i modelli Parakeet (NVIDIA, CC BY 4.0) e Qwen 3.5 (Apache 2.0) e le librerie FluidAudio, MLX Swift e
+  swift-transformers, ciascuno con il proprio link. Disclaimer e copyright con la versione dell'app stanno in fondo ad _Altro_.
 
 ### Mappe
 
@@ -307,10 +347,14 @@ dei docenti, manifesto degli studi) si scaricano e si mostrano con Quick Look (`
 ## Requisiti e build
 
 - Xcode 27 (Swift 6.4), target **iOS 17.0+**, iPhone e iPad.
-- **Una sola dipendenza esterna**: [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) (Swift Package, 1.1.x,
-  MIT) per il motore di trascrizione Whisper opzionale; si porta dietro solo `swift-argument-parser`. HTML, CSS
-  selector, XML, JSON, Keychain, audio, fotocamera, trascrizione Apple e riassunti usano il parser interno e i
-  framework di sistema.
+- **Dipendenze esterne**, solo per i modelli locali:
+  - [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.x (Apache 2.0): Parakeet su Core ML;
+  - [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) 3.32.x (MIT): Qwen con MLX;
+  - [swift-transformers](https://github.com/huggingface/swift-transformers) 1.3.x (Apache 2.0): tokenizer.
+
+  Si portano dietro mlx-swift, swift-huggingface, swift-jinja, swift-collections, swift-crypto e altri pacchetti di
+  base. HTML, CSS selector, XML, JSON, Keychain, audio, fotocamera, trascrizione Apple e riassunti Apple usano il
+  parser interno e i framework di sistema.
 
 ```bash
 open Statale+.xcodeproj
@@ -329,8 +373,12 @@ Portachiavi dalla build di Xcode.
 Impostazioni di progetto rilevanti: `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
 `SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (`UIBackgroundModes = audio,
 processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.elaborazione.*` per i lavori lunghi),
-`Statale+.entitlements` con _Background GPU Access_ (`…continued-processing.gpu`, iOS 26) e _Background Inference_
-(`…continued-processing.inference`, iOS 27, per il Neural Engine in background usato da Core ML/WhisperKit).
+`NSSupportsLiveActivities = YES`. Nessun entitlement: _Background GPU Access_ non è disponibile per i team personali, e
+_Background Inference_ non è ancora assegnabile.
+
+Target `StatalePlusAttivita` (estensione widget per la Live Activity, `com.mattiameligeni.Statale-.Attivita`), con
+`StatalePlusAttivita-Info.plist`. `AttivitaElaborazioneAttributes` è definito sia nell'app sia nell'estensione:
+ActivityKit li abbina per nome, quindi vanno cambiati insieme.
 
 ---
 
@@ -342,7 +390,7 @@ Statale+/
 ├── Core/
 │   ├── Auth/            CASSession, ArielSession, KeychainStore
 │   ├── HTML/            parser HTML tollerante + selettori CSS (sostituisce librerie esterne)
-│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech, WhisperKit), riassunti (FoundationModels), lavori in background
+│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech, Parakeet), riassunti (FoundationModels, Qwen/MLX), modelli, lavori in background, Live Activity
 │   ├── Networking/      HTTPClient (rate limiting per host, redirect guard, rilevazione Cloudflare)
 │   ├── Persistence/     StableStore (cache stabile su disco)
 │   └── Util/            formati di data/importi, decodifica tollerante, helper HTML
@@ -482,8 +530,8 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 | Foto profilo                                                                                               | `Application Support/profilo.jpg`                                                                                         |
 | Registrazioni                                                                                              | `Application Support/Registrazioni/<id>.m4a` (AAC mono 64 kbps, ~29 MB/ora) + metadati `<id>.json` + indice `registrazioni.json` |
 | Trascrizioni e riassunti                                                                                   | `Application Support/Registrazioni/<id>.txt` e `<id>.riassunto.md`, separati dall'indice                                  |
-| Modello Whisper (se scaricato)                                                                             | `Application Support/Modelli/models/argmaxinc/whisperkit-coreml/<variante>` + marcatore `installato-<variante>`, esclusi dal backup |
-| Motore di trascrizione scelto                                                                              | `UserDefaults` (`motoreTrascrizione`: `apple`, `whisper`)                                                                  |
+| Modelli locali (se scaricati)                                                                              | `Application Support/Modelli/parakeet-ultra` e `qwen3.5-4b-4bit` + marcatori `installato-*`, esclusi dal backup              |
+| Motori scelti e catena automatica                                                                          | `UserDefaults` (`motoreTrascrizione`: `apple`/`parakeet`, `motoreRiassunto`: `apple`/`qwen`, `elaborazioneAutomatica`)      |
 | Audio originale (se migliorato)                                                                            | `Application Support/Registrazioni/<id>.originale.m4a`; `<id>.m4a` è la versione migliorata                                |
 | Cookie di sessione                                                                                         | `HTTPCookieStorage` di sistema                                                                                            |
 | Orario, appelli, tasse, presenze, aule, esiti, partecipanti                                                | solo in memoria                                                                                                           |
@@ -515,8 +563,8 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 | Fotocamera          | scansione del QR del codice lezione                 |
 | Riconoscimento vocale | trascrizione delle registrazioni (iOS 17–25)      |
 | Audio in background | la registrazione continua a schermo bloccato        |
-| Elaborazione in background | trascrizione, riassunto, miglioramento e download di Whisper proseguono fuori dall'app (iOS 26+) |
-| GPU e Neural Engine in background | Whisper continua a usarli fuori dall'app (entitlement, nessuna richiesta all'utente) |
+| Elaborazione in background | trascrizione, miglioramento e download proseguono fuori dall'app (iOS 26+); Qwen va in pausa e riprende |
+| Live Activity       | avanzamento dei lavori lunghi su schermata di blocco e Dynamic Island |
 | Libreria foto       | nessun permesso: la foto profilo usa `PhotosPicker` |
 
 ---
@@ -551,13 +599,26 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 
 - Ogni modifica va accompagnata dall'aggiornamento di questo README (funzionalità, endpoint, formati, stato dei lavori)
   e da una voce nel [Changelog](#changelog).
-- Nessuna dipendenza esterna senza una ragione forte (oggi solo WhisperKit, per il motore opzionale).
+- Nessuna dipendenza esterna senza una ragione forte (oggi solo quelle dei modelli locali: FluidAudio, mlx-swift-lm,
+  swift-transformers).
 - Mai dati personali reali (nomi, matricole, indirizzi) nel codice, nei commenti o nei test: usare segnaposto
   (`MARIO ROSSI`, `12345A`).
 
 ---
 
 ## Changelog
+
+### 2026-10-05 (8)
+
+- Trascrizione: **Parakeet** (NVIDIA, versione Ultra, FluidAudio, Neural Engine) al posto di Whisper. Più accurato
+  di Apple, 25 volte più veloce di Whisper, niente frasi inventate. Il modello Whisper scaricato si cancella da solo.
+- Riassunti: **Qwen 3.5 4B** con MLX come motore opzionale (3 GB, iPhone con 8 GB), a sezioni con memoria.
+- Catena automatica dopo ogni registrazione: trascrizione, riassunto, miglioramento dell'audio.
+- La trascrizione usa sempre l'audio originale.
+- **Live Activity** di Statale+ per download e lavori lunghi (schermata di blocco e Dynamic Island).
+- Pausa e ripresa automatica dei lavori che iOS ferma in background.
+- Tolti gli entitlement di GPU e Neural Engine in background: non firmabili con un team personale.
+- Prove con testo di riferimento esatto (WER) e su una lezione reale di 2 h 25 min.
 
 ### 2026-10-05 (7)
 

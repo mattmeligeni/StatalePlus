@@ -6,8 +6,13 @@ struct IAView: View {
     @Environment(AppModel.self) private var app
     @AppStorage("motoreTrascrizione") private var motoreTrascrizione = MotoreTrascrizione.apple.rawValue
     @AppStorage("miglioraAudio") private var miglioraAudio = true
+    @AppStorage("elaborazioneAutomatica") private var automatica = true
+    @AppStorage("motoreRiassunto") private var motoreRiassunto = MotoreRiassunto.apple.rawValue
 
-    private var motore: MotoreTrascrizione { MotoreTrascrizione(rawValue: motoreTrascrizione) ?? .apple }
+    private var motore: MotoreTrascrizione {
+        let m = MotoreTrascrizione(rawValue: motoreTrascrizione) ?? .apple
+        return m == .parakeet && app.parakeet.stato != .installato ? .apple : m
+    }
 
     var body: some View {
         List {
@@ -24,15 +29,30 @@ struct IAView: View {
                 NavigationLink { ImpostazioniTrascrizioneView() } label: {
                     LabeledContent("Motore", value: motore.nome)
                 }
-                if app.whisper.stato == .installato {
-                    LabeledContent("Modello Whisper", value: ByteCountFormatter.string(fromByteCount: WhisperLocale.spazioOccupato, countStyle: .file))
-                }
             } header: {
                 Text("Trascrizione")
             } footer: {
-                Text(motore == .whisper
-                     ? "Whisper è più preciso sui termini tecnici, ma più lento e pesante per la batteria."
-                     : "Apple è veloce e leggero. Whisper riconosce meglio termini tecnici e nomi, con un download aggiuntivo.")
+                Text(motore == .parakeet
+                     ? "Parakeet riconosce più termini tecnici e nomi, mette la punteggiatura e lavora sul Neural Engine."
+                     : "Parakeet è più accurato di Apple su termini tecnici e nomi, con un download di \(ParakeetLocale.dimensioneMB) MB.")
+            }
+
+            Section {
+                NavigationLink { ImpostazioniRiassuntiView() } label: {
+                    LabeledContent("Motore", value: MotoreRiassunto.disponibile?.nome ?? "Non disponibile")
+                }
+            } header: {
+                Text("Riassunti")
+            } footer: {
+                Text(statoRiassunti.nota)
+            }
+
+            Section {
+                Toggle("Trascrivi e riassumi da solo", isOn: $automatica)
+            } header: {
+                Text("Dopo ogni registrazione")
+            } footer: {
+                Text("Alla fine di una registrazione partono, uno dopo l'altro, trascrizione, riassunto e miglioramento dell'audio: quando apri la lezione è già tutto pronto.")
             }
 
             Section {
@@ -40,20 +60,7 @@ struct IAView: View {
             } header: {
                 Text("Audio")
             } footer: {
-                Text("Volume della voce normalizzato, fruscio e rumore di fondo attenuati: aiuta anche trascrizione e riassunto. L'originale resta sempre conservato e si può ripristinare dal dettaglio della registrazione.")
-            }
-
-            Section {
-                LabeledContent("Modello") {
-                    Text("Apple Intelligence")
-                }
-                LabeledContent("Stato") {
-                    Text(statoRiassunti.testo).foregroundStyle(statoRiassunti.colore)
-                }
-            } header: {
-                Text("Riassunti")
-            } footer: {
-                Text(statoRiassunti.nota)
+                Text("Volume della voce normalizzato, fruscio e rumore di fondo attenuati, per ascoltare meglio. La trascrizione usa sempre l'audio originale, che resta conservato e si può ripristinare.")
             }
 
             Section {
@@ -80,16 +87,19 @@ struct IAView: View {
         .navigationTitle("IA")
     }
 
-    private var statoRiassunti: (testo: String, colore: Color, nota: String) {
-        switch AppleIntelligence.stato {
+    private var statoRiassunti: (testo: String, nota: String) {
+        if MotoreRiassunto.disponibile == .qwen {
+            return ("Qwen 3.5 4B", "Qwen lavora sulla GPU con l'app aperta: se esci, il riassunto si mette in pausa e riprende al ritorno.")
+        }
+        return switch AppleIntelligence.stato {
         case .disponibile:
-            ("Disponibile", .green, "I riassunti usano il modello di Apple Intelligence sul dispositivo, aggiornato con iOS.")
+            ("Disponibile", QwenLocale.supportato ? "Apple Intelligence sul dispositivo. Con Qwen 3.5 4B (3 GB) i riassunti sono più completi e precisi." : "Apple Intelligence sul dispositivo, aggiornato con iOS.")
         case .nonAttiva:
-            ("Disattivata", .orange, "Attiva Apple Intelligence in Impostazioni › Apple Intelligence e Siri per generare i riassunti.")
+            ("Disattivata", "Attiva Apple Intelligence in Impostazioni › Apple Intelligence e Siri per generare i riassunti.")
         case .inPreparazione:
-            ("In download", .orange, "Apple Intelligence sta scaricando il modello: i riassunti saranno disponibili tra poco.")
+            ("In download", "Apple Intelligence sta scaricando il modello: i riassunti saranno disponibili tra poco.")
         case .nonSupportata:
-            ("Non disponibile", .secondary, "Questo iPhone o questa versione di iOS non supporta Apple Intelligence: le trascrizioni restano disponibili.")
+            ("Non disponibile", "Questo iPhone o questa versione di iOS non supporta Apple Intelligence: le trascrizioni restano disponibili.")
         }
     }
 }

@@ -2,25 +2,47 @@ import BackgroundTasks
 import Foundation
 import UIKit
 
-/// Lavori lunghi avviati dall'utente (trascrizione, riassunto, miglioramento dell'audio, download del modello Whisper)
+/// Lavori lunghi avviati dall'utente (trascrizione, riassunto, miglioramento dell'audio, download dei modelli)
 /// che devono poter continuare se l'app va in background.
 /// - iOS 26+: `BGContinuedProcessingTask`. Il lavoro parte in primo piano; se si esce dall'app iOS lo lascia
 ///   proseguire e ne mostra l'avanzamento in un'attività in tempo reale, da cui si può anche annullare. Ogni lavoro
 ///   ha un identificativo proprio (`…elaborazione.<uuid>`, ammesso dal carattere jolly in Info.plist).
 /// - L'attività in tempo reale è quella di sistema (non personalizzabile): il titolo dice il lavoro, il sottotitolo
 ///   la fase attuale e il tempo stimato, aggiornati man mano.
-/// - `usaGPU`: per i lavori sulla GPU (Whisper) chiede anche la GPU in background, dove il dispositivo la supporta
-///   (entitlement "Background GPU Access"); il Neural Engine in background richiede "Background Inference" (iOS 27).
+/// - GPU ("Background GPU Access") e, da iOS 27, Neural Engine ("Background Inference") in background richiedono
+///   entitlement che gli account sviluppatore personali non hanno: quei lavori si mettono in pausa e riprendono in
+///   primo piano (`ElaborazioniAudio`).
 /// - Versioni precedenti, o se il sistema non può avviarlo subito: si esegue normalmente chiedendo il tempo extra
 ///   di `beginBackgroundTask` (circa 30 secondi), poi il lavoro si sospende con l'app e riprende al ritorno.
 nonisolated enum EsecuzioneEstesa {
     static let prefisso = (Bundle.main.bundleIdentifier ?? "com.mattiameligeni.Statale-") + ".elaborazione."
 
-    /// Esegue `operazione`; `avanzamento(p, fase)` (p in 0…1) aggiorna anche l'attività di sistema.
-    static func esegui<T: Sendable>(titolo: String, sottotitolo: String, usaGPU: Bool = false,
+    /// Esegue `operazione`; `avanzamento(p, fase)` (p in 0…1) aggiorna l'attività di sistema e la Live Activity di
+    /// Statale+ (`AttivitaLive`). `tipo`: "download", "trascrizione", "riassunto" o "miglioramento" (icona e colore).
+    static func esegui<T: Sendable>(titolo: String, sottotitolo: String, tipo: String,
                                     operazione: @escaping @Sendable (_ avanzamento: Avanzamento) async throws -> T) async throws -> T {
+        let live = UUID().uuidString
+        await AttivitaLive.shared.inizia(id: live, tipo: tipo, titolo: titolo, sottotitolo: sottotitolo)
+        let inoltro = InoltroLive(id: live)
+        do {
+            let valore = try await eseguiConSistema(titolo: titolo, sottotitolo: sottotitolo) { avanzamento in
+                try await operazione(Avanzamento { p, fase in
+                    avanzamento(p, fase: fase)
+                    inoltro.aggiorna(p, fase: fase)
+                })
+            }
+            await AttivitaLive.shared.concludi(id: live, riuscito: true)
+            return valore
+        } catch {
+            await AttivitaLive.shared.concludi(id: live, riuscito: false)
+            throw error
+        }
+    }
+
+    private static func eseguiConSistema<T: Sendable>(titolo: String, sottotitolo: String,
+                                                      operazione: @escaping @Sendable (Avanzamento) async throws -> T) async throws -> T {
         if #available(iOS 26.0, *) {
-            if let risultato = try await continuata(titolo: titolo, sottotitolo: sottotitolo, usaGPU: usaGPU, operazione: operazione) {
+            if let risultato = try await continuata(titolo: titolo, sottotitolo: sottotitolo, operazione: operazione) {
                 return risultato.valore
             }
         }
@@ -28,7 +50,7 @@ nonisolated enum EsecuzioneEstesa {
     }
 
     @available(iOS 26.0, *)
-    private static func continuata<T: Sendable>(titolo: String, sottotitolo: String, usaGPU: Bool,
+    private static func continuata<T: Sendable>(titolo: String, sottotitolo: String,
                                                 operazione: @escaping @Sendable (Avanzamento) async throws -> T) async throws -> Risultato<T>? {
         let identificativo = prefisso + UUID().uuidString
         let stato = StatoContinuato<T>()
@@ -60,7 +82,6 @@ nonisolated enum EsecuzioneEstesa {
                 guard registrato else { stato.concludi(.success(nil)); return }
                 let richiesta = BGContinuedProcessingTaskRequest(identifier: identificativo, title: titolo, subtitle: sottotitolo)
                 richiesta.strategy = .fail
-                if usaGPU, BGTaskScheduler.supportedResources.contains(.gpu) { richiesta.requiredResources = .gpu }
                 do { try BGTaskScheduler.shared.submit(richiesta) } catch { stato.concludi(.success(nil)) }
             }
         } onCancel: {
@@ -119,11 +140,37 @@ private nonisolated final class CompitoDiSistema: @unchecked Sendable {
 
     func concluso(_ ok: Bool) { task.setTaskCompleted(success: ok) }
 
-    /// "circa 4 min" dopo almeno 10 secondi e il 3%: prima la stima oscilla troppo.
-    private static func rimanente(_ p: Double, trascorso: TimeInterval) -> String? {
-        guard p >= 0.03, p < 1, trascorso >= 10 else { return nil }
-        let minuti = Int((trascorso * (1 - p) / p / 60).rounded(.up))
-        return minuti <= 1 ? "meno di un minuto" : "circa \(minuti) min"
+    private static func rimanente(_ p: Double, trascorso: TimeInterval) -> String? { tempoRimanente(p, trascorso: trascorso) }
+}
+
+/// "circa 4 min" dopo almeno 10 secondi e il 3%: prima la stima oscilla troppo.
+nonisolated func tempoRimanente(_ p: Double, trascorso: TimeInterval) -> String? {
+    guard p >= 0.03, p < 1, trascorso >= 10 else { return nil }
+    let minuti = Int((trascorso * (1 - p) / p / 60).rounded(.up))
+    return minuti <= 1 ? "meno di un minuto" : "circa \(minuti) min"
+}
+
+/// Porta l'avanzamento alla Live Activity al massimo due volte al secondo (o subito se cambia la fase).
+private nonisolated final class InoltroLive: @unchecked Sendable {
+    private let id: String
+    private let inizio = Date()
+    private let lock = NSLock()
+    private var ultimo = Date.distantPast
+    private var fase: String?
+
+    init(id: String) { self.id = id }
+
+    func aggiorna(_ p: Double, fase nuova: String?) {
+        lock.lock()
+        let cambiata = nuova != nil && nuova != fase
+        if let nuova { fase = nuova }
+        guard cambiata || Date().timeIntervalSince(ultimo) >= 0.5 else { lock.unlock(); return }
+        ultimo = Date()
+        let fase = fase
+        lock.unlock()
+        let rimanente = tempoRimanente(p, trascorso: Date().timeIntervalSince(inizio))
+        let id = id
+        Task { @MainActor in AttivitaLive.shared.aggiorna(id: id, progresso: min(max(p, 0), 1), fase: fase, rimanente: rimanente) }
     }
 }
 

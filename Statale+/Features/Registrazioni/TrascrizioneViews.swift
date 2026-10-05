@@ -36,8 +36,8 @@ struct TrascrizioneSection: View {
             if registrazione.trascrittaIl == nil, LimitiElaborazione.bloccoTrascrizione(registrazione) == nil,
                app.elaborazioni.stato(.trascrizione, id) == nil {
                 VStack(alignment: .leading, spacing: 6) {
-                    if motore == MotoreTrascrizione.whisper.rawValue, WhisperLocale.installato {
-                        Text("Trascrizione con Whisper, sul dispositivo: più precisa ma più lenta e pesante per la batteria.")
+                    if motore == MotoreTrascrizione.parakeet.rawValue, ParakeetLocale.installato {
+                        Text("Trascrizione con Parakeet, sul dispositivo: accurata e veloce.")
                     } else {
                         Text("Riconoscimento vocale di Apple in italiano, sul dispositivo. Sono disponibili altri modelli più accurati.")
                     }
@@ -58,7 +58,7 @@ struct TrascrizioneSection: View {
     }
 }
 
-/// Riassunto con Apple Intelligence (visibile solo sui dispositivi compatibili).
+/// Riassunto con Apple Intelligence o Qwen (visibile se almeno uno dei due può funzionare su questo iPhone).
 struct RiassuntoSection: View {
     let registrazione: Registrazione
     @Environment(AppModel.self) private var app
@@ -69,7 +69,7 @@ struct RiassuntoSection: View {
         let id = registrazione.id
         let blocco = LimitiElaborazione.bloccoRiassunto(registrazione, trascrizione: trascrizione)
         Section {
-            switch AppleIntelligence.stato {
+            switch MotoreRiassunto.disponibile != nil ? .disponibile : AppleIntelligence.stato {
             case .nonAttiva:
                 Label("Attiva Apple Intelligence in Impostazioni per generare i riassunti delle lezioni.", systemImage: "apple.intelligence")
                     .font(.callout)
@@ -95,8 +95,8 @@ struct RiassuntoSection: View {
         } header: {
             Label("Riassunto", systemImage: "apple.intelligence")
         } footer: {
-            if AppleIntelligence.stato == .disponibile, registrazione.riassuntoIl == nil, blocco == nil {
-                Text("Generato sul dispositivo solo dal testo trascritto: riassunto, punti chiave e domande di ripasso.")
+            if let motore = MotoreRiassunto.disponibile, registrazione.riassuntoIl == nil, blocco == nil {
+                Text("Generato sul dispositivo con \(motore.nome), solo dal testo trascritto: riassunto, punti chiave e domande di ripasso.")
             }
             if let e = app.elaborazioni.errori[id], app.elaborazioni.stato(.riassunto, id) == nil, registrazione.trascrittaIl != nil {
                 Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -117,7 +117,11 @@ private struct StatoElaborazione: View {
             } currentValueLabel: {
                 Text(stato.progresso.formatted(.percent.precision(.fractionLength(0)))).font(.caption.monospacedDigit())
             }
-            Text(NotaBackground.testo).font(.caption).foregroundStyle(.secondary)
+            if !stato.inPausa {
+                Text(stato.motore == MotoreRiassunto.qwen.nome
+                     ? "Qwen lavora con l'app aperta: se esci si mette in pausa e riprende quando torni."
+                     : NotaBackground.testo).font(.caption).foregroundStyle(.secondary)
+            }
             Button("Annulla", role: .destructive, action: annulla).font(.callout).buttonStyle(.borderless)
         }
         .padding(.vertical, 4)

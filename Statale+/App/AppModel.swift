@@ -21,7 +21,13 @@ final class AppModel {
     let recordings = RecordingStore()
     let recorder = AudioRecorder()
     let elaborazioni = ElaborazioniAudio()
-    let whisper = GestoreWhisper()
+    /// Modelli locali: Parakeet per la trascrizione, Qwen per i riassunti. Scaricati, diventano il motore scelto.
+    let parakeet = GestoreModello(.parakeet,
+                                  dopoDownload: { Preferenze.motoreTrascrizione = .parakeet },
+                                  dopoEliminazione: { if Preferenze.motoreTrascrizione == .parakeet { Preferenze.motoreTrascrizione = .apple } })
+    let qwen = GestoreModello(.qwen,
+                              dopoDownload: { Preferenze.motoreRiassunto = .qwen },
+                              dopoEliminazione: { if Preferenze.motoreRiassunto == .qwen { Preferenze.motoreRiassunto = .apple } })
     /// Apre in Registrazioni l'elenco delle registrazioni recuperate (dall'avviso all'avvio).
     var mostraRecuperate = false
     /// L'avviso sulle registrazioni recuperate si mostra una volta per avvio.
@@ -88,6 +94,7 @@ final class AppModel {
 
     func start() async {
         guard phase == .launching else { return }
+        Task.detached(priority: .background) { ModelliDismessi.elimina() }
         // Credenziali salvate con un dominio non ammesso: si torna all'onboarding.
         guard let saved = KeychainStore.load(), case .success = Credentials.normalizzaEmail(saved.email) else {
             KeychainStore.delete()

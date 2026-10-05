@@ -51,7 +51,11 @@ struct CreditiView: View {
         ("Tecnologie Apple", [
             Voce(nome: "Swift e SwiftUI", descrizione: "Linguaggio e interfaccia dell'app", link: "https://developer.apple.com/swiftui/"),
             Voce(nome: "Speech", descrizione: "Trascrizione delle registrazioni", link: "https://developer.apple.com/documentation/speech"),
-            Voce(nome: "WhisperKit (Argmax)", descrizione: "Trascrizione con Whisper sul dispositivo · licenza MIT", link: "https://github.com/argmaxinc/argmax-oss-swift"),
+            Voce(nome: "Parakeet TDT 0.6B v3 (NVIDIA)", descrizione: "Trascrizione sul dispositivo · licenza CC BY 4.0, versione Ultra di moondream", link: "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"),
+            Voce(nome: "FluidAudio (Fluid Inference)", descrizione: "Parakeet con Core ML sul Neural Engine · licenza Apache 2.0", link: "https://github.com/FluidInference/FluidAudio"),
+            Voce(nome: "Qwen 3.5 (Alibaba)", descrizione: "Riassunti sul dispositivo · licenza Apache 2.0", link: "https://huggingface.co/Qwen/Qwen3.5-4B"),
+            Voce(nome: "MLX Swift (Apple)", descrizione: "Esecuzione di Qwen sulla GPU · licenza MIT", link: "https://github.com/ml-explore/mlx-swift-lm"),
+            Voce(nome: "swift-transformers (Hugging Face)", descrizione: "Tokenizer di Qwen · licenza Apache 2.0", link: "https://github.com/huggingface/swift-transformers"),
             Voce(nome: "Apple Intelligence – Foundation Models", descrizione: "Riassunti delle lezioni sul dispositivo", link: "https://developer.apple.com/documentation/foundationmodels"),
             Voce(nome: "Writing Tools", descrizione: "Revisione di trascrizioni e riassunti", link: "https://developer.apple.com/apple-intelligence/"),
             Voce(nome: "AVFoundation", descrizione: "Registrazione, riproduzione e scansione QR", link: "https://developer.apple.com/documentation/avfoundation"),

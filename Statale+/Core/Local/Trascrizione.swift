@@ -1,7 +1,7 @@
 import AVFoundation
 import Speech
 
-/// Trascrizione delle registrazioni con il framework Speech di Apple, in italiano.
+/// Trascrizione delle registrazioni in italiano: Parakeet (se scelto e scaricato) oppure il framework Speech di Apple.
 /// - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber`, on-device e pensato per audio lunghi
 ///   (il modello della lingua viene scaricato la prima volta tramite `AssetInventory`).
 /// - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 secondi (on-device se supportato), con punteggiatura.
@@ -26,9 +26,9 @@ nonisolated enum Trascrittore {
     @concurrent
     static func trascrivi(_ url: URL, motore: MotoreTrascrizione = .apple,
                           progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
-        if motore == .whisper {
+        if motore == .parakeet {
             let durata = (try? AVAudioFile(forReading: url)).map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
-            return paragrafi(try await WhisperLocale.trascrivi(url, durata: durata, progresso: progresso))
+            return paragrafi(try await ParakeetLocale.trascrivi(url, durata: durata, progresso: progresso))
         }
         var testo: String?
         if #available(iOS 26.0, *), SpeechTranscriber.isAvailable {

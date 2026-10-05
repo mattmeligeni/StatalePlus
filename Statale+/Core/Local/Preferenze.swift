@@ -30,6 +30,18 @@ nonisolated enum Preferenze {
     }
 
     /// Miglioramento automatico dell'audio dopo ogni registrazione (predefinito: attivo).
+    /// Motore dei riassunti (Altro › IA). "qwen" vale solo se il modello è scaricato.
+    static var motoreRiassunto: MotoreRiassunto {
+        get { defaults.string(forKey: "motoreRiassunto").flatMap(MotoreRiassunto.init(rawValue:)) ?? .apple }
+        set { defaults.set(newValue.rawValue, forKey: "motoreRiassunto") }
+    }
+
+    /// Dopo ogni registrazione: trascrizione e riassunto partono da soli.
+    static var elaborazioneAutomatica: Bool {
+        get { defaults.object(forKey: "elaborazioneAutomatica") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "elaborazioneAutomatica") }
+    }
+
     static var miglioraAudio: Bool {
         get { defaults.object(forKey: "miglioraAudio") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "miglioraAudio") }

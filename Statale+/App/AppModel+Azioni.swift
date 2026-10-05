@@ -68,10 +68,11 @@ extension AppModel {
 
     // MARK: Registrazioni
 
-    /// Salva una registrazione appena chiusa e, se attivo in Impostazioni, ne migliora l'audio.
+    /// Salva una registrazione appena chiusa e avvia la catena automatica (Altro › IA): trascrizione, riassunto e
+    /// miglioramento dell'audio per l'ascolto, uno dopo l'altro.
     func salvaRegistrazione(_ r: Registrazione) {
         recordings.add(r)
-        if Preferenze.miglioraAudio { elaborazioni.migliora(r, in: recordings) }
+        elaborazioni.dopoRegistrazione(r, in: recordings)
     }
 
     /// Eliminazione completa: ferma le elaborazioni in corso, poi audio, metadati, trascrizione, riassunto e indice.

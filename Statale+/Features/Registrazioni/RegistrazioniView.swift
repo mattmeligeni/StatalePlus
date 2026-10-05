@@ -415,7 +415,7 @@ struct RegistrazioneDetailView: View {
                     }
                     MiglioramentoSection(registrazione: r)
                     TrascrizioneSection(registrazione: r)
-                    if AppleIntelligence.stato != .nonSupportata {
+                    if AppleIntelligence.stato != .nonSupportata || MotoreRiassunto.disponibile != nil {
                         RiassuntoSection(registrazione: r)
                     }
                     if !r.segnalibri.isEmpty {

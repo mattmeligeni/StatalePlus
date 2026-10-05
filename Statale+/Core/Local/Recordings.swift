@@ -122,6 +122,12 @@ final class RecordingStore {
 
     func haOriginale(_ id: UUID) -> Bool { esiste(originaleURL(id)) }
 
+    /// Audio da trascrivere: sempre l'originale. Nelle prove il miglioramento non aiuta Apple e Parakeet (con Apple
+    /// i termini riconosciuti scendono da 197 a 180) e serve solo all'ascolto.
+    func audioPerTrascrizione(_ r: Registrazione) -> URL {
+        esiste(originaleURL(r.id)) ? originaleURL(r.id) : url(for: r)
+    }
+
     /// Migliora l'audio partendo sempre dall'originale (rifarlo non accumula elaborazioni). La versione nuova si scrive
     /// in un file temporaneo e sostituisce `<id>.m4a` solo a elaborazione finita; l'originale si conserva.
     func migliora(_ id: UUID, progresso: @escaping @Sendable (Double) -> Void) async throws {
