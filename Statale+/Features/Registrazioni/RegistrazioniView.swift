@@ -500,7 +500,7 @@ private struct MiglioramentoSection: View {
         } header: {
             Text("Audio")
         } footer: {
-            Text("Alza e uniforma il volume della voce e attenua fruscio e rumore di fondo, per ascoltare e trascrivere meglio. L'audio originale resta conservato.")
+            Text("Alza il volume della voce e riduce il rumore di fondo, solo per l'ascolto: la trascrizione usa sempre l'audio originale, che resta conservato.")
         }
         .confirmationDialog("Ripristinare l'audio originale?", isPresented: $confermaRipristino, titleVisibility: .visible) {
             Button("Ripristina originale", role: .destructive) { app.recordings.ripristinaOriginale(id) }

@@ -37,11 +37,11 @@ struct TrascrizioneSection: View {
                app.elaborazioni.stato(.trascrizione, id) == nil {
                 VStack(alignment: .leading, spacing: 6) {
                     if motore == MotoreTrascrizione.parakeet.rawValue, ParakeetLocale.installato {
-                        Text("Trascrizione con Parakeet, sul dispositivo: accurata e veloce.")
+                        Text("Trascrizione con Parakeet.")
                     } else {
-                        Text("Riconoscimento vocale di Apple in italiano, sul dispositivo. Sono disponibili altri modelli più accurati.")
+                        Text("Riconoscimento vocale di Apple. Sono disponibili modelli più precisi.")
                     }
-                    Button("Scegli il motore di trascrizione") { mostraMotori = true }
+                    Button("Scegli il modello") { mostraMotori = true }
                         .font(.footnote.weight(.semibold))
                 }
             }
@@ -96,7 +96,7 @@ struct RiassuntoSection: View {
             Label("Riassunto", systemImage: "apple.intelligence")
         } footer: {
             if let motore = MotoreRiassunto.disponibile, registrazione.riassuntoIl == nil, blocco == nil {
-                Text("Generato sul dispositivo con \(motore.nome), solo dal testo trascritto: riassunto, punti chiave e domande di ripasso.")
+                Text("Con \(motore.nome), solo dal testo trascritto: riassunto, punti chiave e domande di ripasso.")
             }
             if let e = app.elaborazioni.errori[id], app.elaborazioni.stato(.riassunto, id) == nil, registrazione.trascrittaIl != nil {
                 Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)

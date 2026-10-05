@@ -101,6 +101,7 @@ final class AppModel {
             phase = .onboarding
             return
         }
+        Demo.attiva = saved.email == Demo.email
         if studente != nil, agenda != nil {
             phase = .ready
             await refreshStableIfNeeded()
@@ -118,6 +119,18 @@ final class AppModel {
         case .failure(let err): bootstrapError = err.errorDescription; return
         }
         let creds = Credentials(email: normalizzata, password: password)
+        if normalizzata == Demo.email {
+            guard Demo.credenzialiDemo(email: normalizzata, password: password) else {
+                bootstrapError = "Password della versione dimostrativa non corretta."
+                return
+            }
+            Demo.attiva = true
+            try? KeychainStore.save(creds)
+            recordings.preparaDemo()
+            await bootstrap()
+            return
+        }
+        Demo.attiva = false
         phase = .bootstrapping("Accesso con le credenziali di Ateneo…")
         do {
             try await services.cas.ensureLoggedIn(with: creds)

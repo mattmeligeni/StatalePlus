@@ -215,6 +215,7 @@ extension AppModel {
             }
         }
         fermaAutoRefresh()
+        Demo.attiva = false
         KeychainStore.delete()
         CookieJar.clearUniversityCookies()
         store.wipe()

@@ -34,6 +34,7 @@ nonisolated struct Credentials: Codable, Sendable {
     static func normalizzaEmail(_ input: String) -> Result<String, EmailError> {
         let s = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !s.isEmpty else { return .failure(.vuota) }
+        if s == Demo.email { return .success(Demo.email) }
         let parts = s.split(separator: "@", omittingEmptySubsequences: false)
         guard parts.count <= 2 else { return .failure(.formatoNonValido) }
         let local = String(parts[0])

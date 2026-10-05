@@ -94,7 +94,7 @@ final class ElaborazioniAudio {
         let titolo = r.titolo
         tasks["m\(id)"] = Task {
             do {
-                try await EsecuzioneEstesa.esegui(titolo: "Miglioramento audio", sottotitolo: titolo, tipo: "miglioramento") { sistema in
+                try await EsecuzioneEstesa.esegui(titolo: "Miglioramento audio", sottotitolo: titolo) { sistema in
                     try await store.migliora(id) { p in
                         sistema(p)
                         Task { @MainActor in self.miglioramenti[id]?.progresso = p }
@@ -123,7 +123,7 @@ final class ElaborazioniAudio {
         let titolo = r.titolo
         tasks["t\(id)"] = Task {
             do {
-                let testo = try await EsecuzioneEstesa.esegui(titolo: "Trascrizione (\(motore.nome))", sottotitolo: titolo, tipo: "trascrizione") { sistema in
+                let testo = try await EsecuzioneEstesa.esegui(titolo: "Trascrizione", sottotitolo: titolo) { sistema in
                     try await Trascrittore.trascrivi(url, motore: motore) { p, m in
                         sistema(p, fase: m)
                         Task { @MainActor in self.trascrizioni[id]?.progresso = p; self.trascrizioni[id]?.messaggio = m }
@@ -156,7 +156,7 @@ final class ElaborazioniAudio {
         let titolo = r.titolo
         tasks["r\(id)"] = Task {
             do {
-                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto (\(motore.nome))", sottotitolo: titolo, tipo: "riassunto") { sistema in
+                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo) { sistema in
                     let aggiorna: @Sendable (Double, String) -> Void = { p, m in
                         sistema(p, fase: m)
                         Task { @MainActor in self.riassunti[id]?.progresso = p; self.riassunti[id]?.messaggio = m }
@@ -195,11 +195,6 @@ final class ElaborazioniAudio {
         case .miglioramento: return false
         }
         daRiprendere.append((tipo, id))
-        if let r = archivio?.item(id) {
-            AttivitaLive.shared.pausa(id: Self.idPausa(tipo, id), tipo: tipo == .trascrizione ? "trascrizione" : "riassunto",
-                                      titolo: tipo == .trascrizione ? "Trascrizione" : "Riassunto", sottotitolo: r.titolo,
-                                      progresso: pausa.progresso)
-        }
         if PrimoPiano.attivo { riprendi() }
         return true
     }
@@ -209,7 +204,6 @@ final class ElaborazioniAudio {
         let lavori = daRiprendere
         daRiprendere = []
         for (tipo, id) in lavori {
-            AttivitaLive.shared.rimuovi(id: Self.idPausa(tipo, id))
             guard let r = store.item(id) else { continue }
             switch tipo {
             case .trascrizione: trascrivi(r, in: store)
@@ -218,8 +212,6 @@ final class ElaborazioniAudio {
             }
         }
     }
-
-    private static func idPausa(_ tipo: Tipo, _ id: UUID) -> String { "pausa-\(tipo)-\(id.uuidString)" }
 
     private static func messaggio(_ error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -232,7 +224,6 @@ final class ElaborazioniAudio {
         tasks[key] = nil
         automatiche.remove(id)
         daRiprendere.removeAll { $0 == (tipo, id) }
-        AttivitaLive.shared.rimuovi(id: Self.idPausa(tipo, id))
         switch tipo {
         case .trascrizione: trascrizioni[id] = nil
         case .riassunto: riassunti[id] = nil

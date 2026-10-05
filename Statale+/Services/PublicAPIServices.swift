@@ -17,15 +17,18 @@ actor AgendaService {
 
     /// Albero orario: scuola → tipo → corso → periodi didattici.
     func alberoOrario() async throws -> [AgendaScuola] {
-        try AgendaParser.alberoCorsi(try await data(URL(string: "\(publicBase)/agendastudenti/api_profilo_aa_scuola_tipo_cdl_pd.php")!))
+        if Demo.attiva { await Demo.attesa(); return DatiDemo.alberoOrario() }
+        return try AgendaParser.alberoCorsi(try await data(URL(string: "\(publicBase)/agendastudenti/api_profilo_aa_scuola_tipo_cdl_pd.php")!))
     }
 
     /// Albero esami: scuola → tipo → corso → anni di corso.
     func alberoEsami() async throws -> [AgendaScuola] {
-        try AgendaParser.alberoCorsi(try await data(URL(string: "\(publicBase)/agendastudenti/api_profilo_esami_scuola_tipo_cdl.php")!))
+        if Demo.attiva { await Demo.attesa(); return DatiDemo.alberoEsami() }
+        return try AgendaParser.alberoCorsi(try await data(URL(string: "\(publicBase)/agendastudenti/api_profilo_esami_scuola_tipo_cdl.php")!))
     }
 
     func insegnamenti(cdl: AgendaCdl, periodo: String) async throws -> [InsegnamentoAgenda] {
+        if Demo.attiva { return DatiDemo.insegnamenti(periodo: periodo) }
         var c = URLComponents(string: "\(publicBase)/agendastudenti/api_profilo_lista_insegnamenti.php")!
         c.queryItems = [.init(name: "cdl", value: cdl.valore), .init(name: "periodo_didattico", value: periodo)]
         let list = try AgendaParser.insegnamenti(try await data(c.url!))
@@ -73,6 +76,7 @@ actor AgendaService {
     }
 
     func lezioni(file: String) async throws -> [Lezione] {
+        if Demo.attiva { return DatiDemo.lezioni(file: file) }
         var c = URLComponents(string: "\(publicBase)/agendastudenti//App/zipped.php")!
         c.queryItems = [.init(name: "file", value: file)]
         return try AgendaParser.orario(try await data(c.url!)).lezioni
@@ -80,6 +84,7 @@ actor AgendaService {
 
     /// Appelli. `esami_cdl[]=DBD|1` va codificato come `esami_cdl%5B%5D=DBD%7C1`.
     func appelli(codiceCorso: String, anni: [String], da: Date = .now, giorni: Int = 240) async throws -> [Appello] {
+        if Demo.attiva { await Demo.attesa(); return DatiDemo.appelli() }
         guard !anni.isEmpty else { return [] }
         let a = Formats.dmyString(da)
         let b = Formats.dmyString(Formats.calendar.date(byAdding: .day, value: giorni, to: da) ?? da)
@@ -97,6 +102,7 @@ actor EasyRoomService {
     init(http: HTTPClient) { self.http = http }
 
     func occupazioneOggi() async throws -> OccupazioneAule {
+        if Demo.attiva { await Demo.attesa(); return DatiDemo.occupazioneOggi() }
         let r = try await http.get(URL(string: "\(publicBase)/EasyRoom/do.php")!)
         guard r.status == 200 else { throw NetError.http(r.status) }
         return try EasyRoomParser.parse(r.data, day: .now)
@@ -117,12 +123,14 @@ actor EasyBadgeService {
     }
 
     func frequenze(matricolaAPI: String) async throws -> [Frequenza] {
+        if Demo.attiva { await Demo.attesa(); return DatiDemo.frequenze() }
         let r = try await http.postJSON(URL(string: "\(publicBase)/easybadge-new/api/corso_iscritti.php")!,
                                         body: MatricolaBody(Matricola: matricolaAPI))
         return try EasyBadgeParser.frequenze(r.data)
     }
 
     func slot(matricolaAPI: String, codici: [String]) async throws -> [SlotLezione] {
+        if Demo.attiva { return DatiDemo.slot(codici: codici) }
         guard !codici.isEmpty else { return [] }
         let r = try await http.postJSON(URL(string: "\(publicBase)/easybadge-new/api/timbrature.php")!,
                                         body: SlotBody(Matricola: matricolaAPI, Corsi: codici.map { .init(codice: $0) }))
@@ -131,6 +139,7 @@ actor EasyBadgeService {
 
     /// Timbratura: restituisce `result`/`message` così come arrivano dal server.
     func timbra(_ request: TimbraturaRequest) async throws -> TimbraturaResult {
+        if Demo.attiva { await Demo.attesa(); return TimbraturaResult(result: "ok", message: "Presenza registrata") }
         let r = try await http.postJSON(URL(string: "\(publicBase)/easybadge-new/api/TimbratureApi.php")!, body: request)
         return (try? EasyBadgeParser.esitoTimbratura(r.data))
             ?? TimbraturaResult(result: "HTTP \(r.status)", message: r.text.trimmed.isEmpty ? "Risposta vuota dal server." : r.text.trimmed)

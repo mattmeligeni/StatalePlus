@@ -23,6 +23,7 @@ actor ManifestoService {
     ///   - annoCorso: anno di corso dello studente (1, 2, …)
     ///   - inizioAnnoAccademico: 2026 per l'a.a. 2026/27
     func obbligoFrequenza(codiceCorso: String, annoCorso: Int, inizioAnnoAccademico: Int) async throws -> ObbligoFrequenza? {
+        if Demo.attiva { return DatiDemo.obbligoFrequenza }
         let codice = codiceCorso.trimmed.uppercased()
         guard !codice.isEmpty, codice.allSatisfy({ $0.isLetter || $0.isNumber }) else { return nil }
         let inizioCoorte = inizioAnnoAccademico - max(annoCorso - 1, 0)

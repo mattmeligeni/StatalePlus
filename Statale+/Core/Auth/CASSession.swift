@@ -20,6 +20,7 @@ actor CASSession {
 
     /// Garantisce un CASTGC valido. Login concorrenti vengono unificati in un'unica richiesta.
     func ensureLoggedIn(with credentials: Credentials? = nil) async throws {
+        if Demo.attiva { return }
         if let inFlightLogin { return try await inFlightLogin.value }
         let task = Task { try await self.probeAndLogin(credentials) }
         inFlightLogin = task
@@ -50,7 +51,6 @@ actor CASSession {
         let r = try await http.postForm(URL(string: "https://cas.unimi.it/login")!, fields: fields, headers: [
             "Origin": "https://cas.unimi.it", "Referer": Self.loginURL.absoluteString, "Cache-Control": "no-cache",
         ])
-        Self.log.info("CAS POST → \(r.status, privacy: .public) \(r.url.host() ?? "", privacy: .public)\(r.url.path(), privacy: .public)")
         if r.url.host() == "cas.unimi.it" {
             let esito = Self.esitoPagina(r.text)
             Self.log.error("CAS: login non completato. Titolo: \(esito.titolo, privacy: .public) · messaggio: \(esito.messaggio ?? "nessuno", privacy: .public) · form: \(esito.form, privacy: .public)")

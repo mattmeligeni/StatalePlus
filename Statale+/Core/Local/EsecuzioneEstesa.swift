@@ -17,30 +17,10 @@ import UIKit
 nonisolated enum EsecuzioneEstesa {
     static let prefisso = (Bundle.main.bundleIdentifier ?? "com.mattiameligeni.Statale-") + ".elaborazione."
 
-    /// Esegue `operazione`; `avanzamento(p, fase)` (p in 0…1) aggiorna l'attività di sistema e la Live Activity di
-    /// Statale+ (`AttivitaLive`). `tipo`: "download", "trascrizione", "riassunto" o "miglioramento" (icona e colore).
-    static func esegui<T: Sendable>(titolo: String, sottotitolo: String, tipo: String,
+    /// Esegue `operazione`; `avanzamento(p, fase)` (p in 0…1) aggiorna l'attività di sistema.
+    /// `sottotitolo` si vede solo finché non arriva la prima fase.
+    static func esegui<T: Sendable>(titolo: String, sottotitolo: String,
                                     operazione: @escaping @Sendable (_ avanzamento: Avanzamento) async throws -> T) async throws -> T {
-        let live = UUID().uuidString
-        await AttivitaLive.shared.inizia(id: live, tipo: tipo, titolo: titolo, sottotitolo: sottotitolo)
-        let inoltro = InoltroLive(id: live)
-        do {
-            let valore = try await eseguiConSistema(titolo: titolo, sottotitolo: sottotitolo) { avanzamento in
-                try await operazione(Avanzamento { p, fase in
-                    avanzamento(p, fase: fase)
-                    inoltro.aggiorna(p, fase: fase)
-                })
-            }
-            await AttivitaLive.shared.concludi(id: live, riuscito: true)
-            return valore
-        } catch {
-            await AttivitaLive.shared.concludi(id: live, riuscito: false)
-            throw error
-        }
-    }
-
-    private static func eseguiConSistema<T: Sendable>(titolo: String, sottotitolo: String,
-                                                      operazione: @escaping @Sendable (Avanzamento) async throws -> T) async throws -> T {
         if #available(iOS 26.0, *) {
             if let risultato = try await continuata(titolo: titolo, sottotitolo: sottotitolo, operazione: operazione) {
                 return risultato.valore
@@ -129,7 +109,8 @@ private nonisolated final class CompitoDiSistema: @unchecked Sendable {
         let cambiata = nuova != nil && nuova != fase
         if let nuova { fase = nuova }
         guard cambiata || Date().timeIntervalSince(ultimoAggiornamento) >= 3 else { return }
-        let sottotitolo = [base, fase, Self.rimanente(p, trascorso: Date().timeIntervalSince(inizio))]
+        // L'attività di sistema mostra una sola riga di sottotitolo: fase e tempo rimanente, senza ripetere il titolo.
+        let sottotitolo = [fase ?? base, Self.rimanente(p, trascorso: Date().timeIntervalSince(inizio))]
             .compactMap { $0?.isEmpty == false ? $0 : nil }
             .joined(separator: " · ")
         guard sottotitolo != ultimoSottotitolo else { return }
@@ -148,30 +129,6 @@ nonisolated func tempoRimanente(_ p: Double, trascorso: TimeInterval) -> String?
     guard p >= 0.03, p < 1, trascorso >= 10 else { return nil }
     let minuti = Int((trascorso * (1 - p) / p / 60).rounded(.up))
     return minuti <= 1 ? "meno di un minuto" : "circa \(minuti) min"
-}
-
-/// Porta l'avanzamento alla Live Activity al massimo due volte al secondo (o subito se cambia la fase).
-private nonisolated final class InoltroLive: @unchecked Sendable {
-    private let id: String
-    private let inizio = Date()
-    private let lock = NSLock()
-    private var ultimo = Date.distantPast
-    private var fase: String?
-
-    init(id: String) { self.id = id }
-
-    func aggiorna(_ p: Double, fase nuova: String?) {
-        lock.lock()
-        let cambiata = nuova != nil && nuova != fase
-        if let nuova { fase = nuova }
-        guard cambiata || Date().timeIntervalSince(ultimo) >= 0.5 else { lock.unlock(); return }
-        ultimo = Date()
-        let fase = fase
-        lock.unlock()
-        let rimanente = tempoRimanente(p, trascorso: Date().timeIntervalSince(inizio))
-        let id = id
-        Task { @MainActor in AttivitaLive.shared.aggiorna(id: id, progresso: min(max(p, 0), 1), fase: fase, rimanente: rimanente) }
-    }
 }
 
 /// Avvolge il valore per distinguere "non avviato" (nil) da un risultato che a sua volta può essere opzionale.

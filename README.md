@@ -171,7 +171,18 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     **632 MB**. Lavora sul Neural Engine con circa 90 MB di memoria e legge il file a blocchi dal disco.
     - Prima del download un avviso mostra dimensione, spazio libero, rete (Wi-Fi consigliato, possibili costi su
       rete cellulare), primo piano, consumi e privacy.
-    - Barra del download in MB, calcolata sui byte: file completati più file parziali.
+    - Barra del download in MB, calcolata sui byte: file completati più file parziali (0-90%).
+    - Dopo il download il telefono prepara il modello, e richiede qualche minuto. La barra continua a muoversi
+      (90-99%) perché iOS chiude le attività in background che sembrano ferme.
+    - Controlli di integrità:
+      - ogni download riparte da capo;
+      - alla fine si verificano dimensione (632 314 500 byte) e caricamento dei modelli, prima di scrivere il marcatore;
+      - all'avvio un modello segnato come scaricato ma incompleto si elimina, con un avviso;
+      - se alla trascrizione il modello non si carica, il marcatore si toglie e si chiede di riscaricarlo.
+      Prima un download interrotto lasciava cartelle incomplete che FluidAudio considerava complete: al secondo
+      tocco Parakeet risultava scaricato e le trascrizioni fallivano.
+    - Un download fermato da iOS mostra un errore ("Download interrotto da iOS…"). Prima veniva trattato come un
+      "Annulla" e sembrava non partito.
     - Il modello sta in `Application Support/Modelli/parakeet-ultra`, escluso dal backup, con un marcatore scritto a
       download finito. Si può annullare il download o eliminare il modello.
     - Filtro per le ripetizioni a ciclo (`senzaRipetizioni`), comune a tutti i motori.
@@ -235,17 +246,13 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   lezione è già tutto pronto. Uno dopo l'altro per non contendersi Neural Engine, GPU e CPU.
 - **Lavori lunghi in background** (`EsecuzioneEstesa`): trascrizione, riassunto, miglioramento dell'audio e download dei
   modelli.
-  - **Live Activity di Statale+** (estensione `StatalePlusAttivita`, `AttivitaLive`), sulla schermata di blocco e nella
-    Dynamic Island.
-    - Un'unica attività con tutti i lavori in corso: icona e colore per tipo, titolo, registrazione, barra, fase e
-      tempo stimato (es. "Trascritti 5 di 13 min · meno di un minuto"), stato "In pausa".
-    - Compatta: icona e percentuale. Minima: anello di avanzamento.
-    - Aggiornamenti raggruppati, al massimo uno al secondo. Quando i lavori finiscono resta 5 minuti con l'esito.
-  - Da iOS 26 c'è anche `BGContinuedProcessingTask`, per continuare fuori dall'app: titolo e sottotitolo con fase e
-    tempo stimato. Nel simulatore iOS non ne mostra l'attività.
+  - Da iOS 26 usano `BGContinuedProcessingTask`: si può uscire dall'app e iOS mostra l'attività con barra e pulsante
+    per annullare (non si può nascondere, per questo non c'è una Live Activity dell'app). Ha una sola riga di
+    sottotitolo: solo fase e tempo stimato, ad esempio "312 di 632 MB · circa 2 min" o "Trascritti 5 di 13 min · meno
+    di un minuto". Il titolo è il tipo di lavoro ("Trascrizione", "Riassunto", "Download di Qwen").
   - GPU (Qwen) e, da iOS 27, Neural Engine in background richiedono entitlement ("Background GPU Access",
     "Background Inference") che gli account sviluppatore personali non hanno.
-    - Un lavoro che si ferma per questo resta "in pausa" (anche nella Live Activity) e riparte da solo al ritorno in
+    - Un lavoro che si ferma per questo resta "in pausa" e riparte da solo al ritorno in
       primo piano (`PrimoPiano`, `ElaborazioniAudio.sospendi`).
     - Parakeet nel simulatore continua in background.
   - Prima di iOS 26 c'è il tempo extra di `beginBackgroundTask`.
@@ -373,12 +380,35 @@ Portachiavi dalla build di Xcode.
 Impostazioni di progetto rilevanti: `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
 `SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (`UIBackgroundModes = audio,
 processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.elaborazione.*` per i lavori lunghi),
-`NSSupportsLiveActivities = YES`. Nessun entitlement: _Background GPU Access_ non è disponibile per i team personali, e
+Nessun entitlement: _Background GPU Access_ non è disponibile per i team personali, e
 _Background Inference_ non è ancora assegnabile.
 
-Target `StatalePlusAttivita` (estensione widget per la Live Activity, `com.mattiameligeni.Statale-.Attivita`), con
-`StatalePlusAttivita-Info.plist`. `AttivitaElaborazioneAttributes` è definito sia nell'app sia nell'estensione:
-ActivityKit li abbina per nome, quindi vanno cambiati insieme.
+### Versione dimostrativa
+
+Per App Review, TestFlight e chi vuole provare l'app senza un account d'Ateneo:
+
+- **email** `tester@apple-developer.com`
+- **password** `StatalePlus-Demo`
+
+Con queste credenziali (`Demo`, `DatiDemo`, `DatiDemoAriel`) l'app non contatta UNIMIA, SIFA, Ariel né l'Agenda: ogni
+servizio restituisce dati inventati e coerenti, con una breve attesa come per una richiesta vera. I dati sono:
+
+- lo studente MARIO ROSSI (12345A), al secondo anno di un corso magistrale di neuroscienze (codice `NCN`), con sei
+  insegnamenti e docenti di fantasia;
+- sedi e aule reali dell'Ateneo, con indirizzi pubblici;
+- orario settimanale da sei settimane fa a otto settimane da oggi, una lezione annullata e, in orario di lezione, una
+  lezione in corso per provare presenze e registrazione;
+- presenze con soglia al 70% e timbratura che riesce sempre;
+- appelli passati e futuri, una prenotazione, esami iscrivibili con appelli;
+- tasse in regola con la prossima scadenza, libretto del primo anno;
+- su Ariel bacheche con avvisi recenti (compaiono in Oggi), materiali (PDF dimostrativi), forum con risposte, scadenze
+  (una in ritardo), notifiche lette e non lette, partecipanti e valutazioni;
+- due registrazioni, create all'accesso:
+  - una già trascritta con Parakeet e riassunta con Qwen: audio di 6 minuti letto da una voce sintetica, con il testo
+    di una lezione scritta per la demo; file in `Risorse/Demo`;
+  - una da trascrivere, per provare trascrizione e riassunto.
+
+Trascrizioni, riassunti e download dei modelli funzionano come nella versione normale. Uscendo, la demo si spegne.
 
 ---
 
@@ -390,7 +420,8 @@ Statale+/
 ├── Core/
 │   ├── Auth/            CASSession, ArielSession, KeychainStore
 │   ├── HTML/            parser HTML tollerante + selettori CSS (sostituisce librerie esterne)
-│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech, Parakeet), riassunti (FoundationModels, Qwen/MLX), modelli, lavori in background, Live Activity
+│   ├── Demo/            versione dimostrativa (credenziali, dati inventati)
+│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech, Parakeet), riassunti (FoundationModels, Qwen/MLX), modelli, lavori in background
 │   ├── Networking/      HTTPClient (rate limiting per host, redirect guard, rilevazione Cloudflare)
 │   ├── Persistence/     StableStore (cache stabile su disco)
 │   └── Util/            formati di data/importi, decodifica tollerante, helper HTML
@@ -564,7 +595,6 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 | Riconoscimento vocale | trascrizione delle registrazioni (iOS 17–25)      |
 | Audio in background | la registrazione continua a schermo bloccato        |
 | Elaborazione in background | trascrizione, miglioramento e download proseguono fuori dall'app (iOS 26+); Qwen va in pausa e riprende |
-| Live Activity       | avanzamento dei lavori lunghi su schermata di blocco e Dynamic Island |
 | Libreria foto       | nessun permesso: la foto profilo usa `PhotosPicker` |
 
 ---
@@ -607,6 +637,20 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (9)
+
+- **Versione dimostrativa** con credenziali dedicate e dati realistici in tutte le sezioni (vedi _Requisiti e build_).
+- Download dei modelli più robusti:
+  - verifica di dimensione e caricamento, controllo all'avvio;
+  - errore visibile se iOS interrompe il download;
+  - barra che non si ferma durante la preparazione del modello.
+- Tolta la Live Activity dell'app: iOS mostra già la sua e non si può nascondere. Sottotitolo dell'attività di
+  sistema ridotto a fase e tempo stimato.
+- Testi delle impostazioni IA più brevi e senza termini tecnici, con i compromessi chiari: download, velocità,
+  precisione e privacy (opzioni online in arrivo).
+- Il miglioramento dell'audio è indicato come solo per l'ascolto.
+- Tolta una riga di log del login.
 
 ### 2026-10-05 (8)
 

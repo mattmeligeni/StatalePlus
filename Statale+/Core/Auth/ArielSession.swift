@@ -13,6 +13,7 @@ actor ArielSession {
     init(http: HTTPClient) { self.http = http }
 
     func ensureLoggedIn(with credentials: Credentials? = nil) async throws {
+        if Demo.attiva { return }
         if let inFlightLogin { return try await inFlightLogin.value }
         let task = Task { try await self.login(credentials) }
         inFlightLogin = task

@@ -58,10 +58,19 @@ nonisolated enum QwenLocale {
     }
 
     static var spazioOccupato: Int64 { ScaricatoreModelli.dimensione(cartella) }
+    static let byteTotali: Int64 = 3_061_129_077
 
+    /// Controllo rapido (all'avvio): i file ci sono e occupano quanto devono.
+    static var integro: Bool { installato && Double(spazioOccupato) >= Double(byteTotali) * 0.98 }
+
+    /// Riprende un download interrotto (i file già completi non si riscaricano) e verifica la dimensione finale.
     @concurrent
-    static func scarica(progresso: @escaping @Sendable (Double) -> Void) async throws {
-        try await ScaricatoreModelli.scaricaRepository(repo, in: cartella, progresso: progresso)
+    static func scarica(progresso: @escaping @Sendable (Double, String) -> Void) async throws {
+        try? FileManager.default.removeItem(at: conferma)
+        try await ScaricatoreModelli.scaricaRepository(repo, in: cartella) { p in
+            progresso(p, "\(Int(p * Double(dimensioneMB))) di \(dimensioneMB) MB")
+        }
+        guard Double(spazioOccupato) >= Double(byteTotali) * 0.98 else { throw ScaricatoreModelli.Errore.downloadNonRiuscito }
         try Data().write(to: conferma)
     }
 

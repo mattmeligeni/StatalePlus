@@ -1,3 +1,4 @@
+import CoreML
 import FluidAudio
 import Foundation
 
@@ -20,20 +21,20 @@ nonisolated enum MotoreTrascrizione: String, CaseIterable, Sendable {
 
     var caratteristiche: [String] {
         switch self {
-        case .apple: ["Sul dispositivo", "Privato", "Nessun download"]
-        case .parakeet: ["Sul dispositivo", "Privato", "Più accurato", "Download di \(ParakeetLocale.dimensioneMB) MB"]
-        case .remoto: ["A pagamento", "Presto disponibile"]
+        case .apple: ["Nessun download", "Veloce", "Offline"]
+        case .parakeet: ["Download di \(ParakeetLocale.dimensioneMB) MB", "Più preciso", "Offline"]
+        case .remoto: ["Online", "A pagamento", "Presto"]
         }
     }
 
     var descrizione: String {
         switch self {
         case .apple:
-            "Riconoscimento vocale di Apple in italiano. Non richiede download, ma sbaglia più spesso termini tecnici e nomi, soprattutto con l'audio registrato da lontano."
+            "Il riconoscimento vocale di iPhone. Pronto subito, ma sbaglia più spesso termini tecnici e nomi."
         case .parakeet:
-            "Parakeet di NVIDIA, eseguito sul Neural Engine. Riconosce meglio termini tecnici e nomi, mette la punteggiatura ed è velocissimo: una lezione di due ore in pochi minuti, con pochi consumi."
+            "Riconosce meglio termini tecnici e nomi e mette la punteggiatura. Due ore di lezione in pochi minuti."
         case .remoto:
-            "Trascrizione su server con modelli professionali, per la massima accuratezza. Sarà un'opzione a pagamento."
+            "Più veloce e potente, ma l'audio viene inviato fuori dal telefono."
         }
     }
 }
@@ -62,27 +63,59 @@ nonisolated enum ParakeetLocale {
 
     static var spazioOccupato: Int64 { ScaricatoreModelli.dimensione(cartella) }
 
+    /// Controllo rapido (all'avvio): ci sono tutti i file e occupano quanto devono. Un download interrotto lascia
+    /// cartelle di modelli con solo una parte dei file, che FluidAudio da solo considererebbe complete.
+    static var integro: Bool {
+        installato && Double(spazioOccupato) >= Double(byteTotali) * 0.98
+    }
+
+    /// Scarica da capo (un download interrotto non si riprende: i file parziali sono nella cartella temporanea),
+    /// poi verifica dimensione e caricamento dei modelli prima di dichiararlo pronto.
+    /// Avanzamento: 0-90% download (in byte), 90-99% preparazione e verifica, che sul telefono richiedono qualche
+    /// minuto: la barra continua a muoversi perché iOS chiude le attività in background che sembrano ferme.
     @concurrent
-    static func scarica(progresso: @escaping @Sendable (Double) -> Void) async throws {
+    static func scarica(progresso: @escaping @Sendable (Double, String) -> Void) async throws {
         try ScaricatoreModelli.preparaCartellaBase()
-        // L'avanzamento di FluidAudio riparte da zero per ogni file: si misurano i byte già nella cartella più quelli
-        // dei file parziali che scrive nella cartella temporanea.
+        elimina()
+        let preparazione = InizioPreparazione()
         let misura = Task {
             while !Task.isCancelled {
-                let parziali = ((try? FileManager.default.contentsOfDirectory(at: .temporaryDirectory, includingPropertiesForKeys: [.fileSizeKey])) ?? [])
-                    .filter { $0.pathExtension == "partial" }
-                    .compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }
-                    .reduce(0) { $0 + Int64($1) }
-                progresso(min(Double(spazioOccupato + parziali) / Double(byteTotali), 0.99))
+                if let inizio = preparazione.inizio {
+                    let t = Date().timeIntervalSince(inizio)
+                    progresso(0.9 + 0.09 * (1 - exp(-t / 90)), "Preparazione del modello")
+                } else {
+                    let parziali = ((try? FileManager.default.contentsOfDirectory(at: .temporaryDirectory, includingPropertiesForKeys: [.fileSizeKey])) ?? [])
+                        .filter { $0.pathExtension == "partial" }
+                        .compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }
+                        .reduce(0) { $0 + Int64($1) }
+                    let scaricati = min(spazioOccupato + parziali, byteTotali)
+                    progresso(0.9 * Double(scaricati) / Double(byteTotali), "\(scaricati / 1_000_000) di \(dimensioneMB) MB")
+                }
                 try? await Task.sleep(for: .milliseconds(400))
             }
         }
         defer { misura.cancel() }
-        _ = try await AsrModels.download(to: cartella, version: versione)
+        _ = try await AsrModels.download(to: cartella, version: versione) { p in
+            if case .compiling = p.phase { preparazione.segna() }
+        }
         try Task.checkCancellation()
-        guard AsrModels.modelsExist(at: cartella, version: versione) else { throw Errore.downloadIncompleto }
+        preparazione.segna()
+        guard AsrModels.modelsExist(at: cartella, version: versione),
+              Double(spazioOccupato) >= Double(byteTotali) * 0.98 else {
+            elimina()
+            throw Errore.downloadIncompleto
+        }
+        // Prova a caricare i modelli: se un file è rovinato si scopre ora, non alla prima trascrizione.
+        do {
+            let config = MLModelConfiguration()
+            config.computeUnits = .cpuOnly
+            _ = try await AsrModels.load(from: cartella, configuration: config, version: versione)
+        } catch {
+            elimina()
+            throw Errore.downloadIncompleto
+        }
         try Data().write(to: conferma)
-        progresso(1)
+        progresso(1, "Pronto")
     }
 
     static func elimina() {
@@ -91,11 +124,12 @@ nonisolated enum ParakeetLocale {
     }
 
     enum Errore: LocalizedError {
-        case nonInstallato, downloadIncompleto, vuota
+        case nonInstallato, downloadIncompleto, danneggiato, vuota
         var errorDescription: String? {
             switch self {
             case .nonInstallato: "Il modello Parakeet non è scaricato: scaricalo da Altro › IA › Trascrizione."
-            case .downloadIncompleto: "Download del modello Parakeet incompleto. Riprova con una connessione stabile."
+            case .downloadIncompleto: "Download di Parakeet incompleto: riprova con una connessione stabile."
+            case .danneggiato: "Il modello Parakeet è incompleto o danneggiato: scaricalo di nuovo da Altro › IA › Trascrizione."
             case .vuota: "Nessun parlato riconosciuto nella registrazione."
             }
         }
@@ -106,8 +140,15 @@ nonisolated enum ParakeetLocale {
     static func trascrivi(_ url: URL, durata: TimeInterval,
                           progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         guard installato else { throw Errore.nonInstallato }
-        progresso(0, "Caricamento del modello Parakeet…")
-        let modelli = try await AsrModels.load(from: cartella, version: versione)
+        progresso(0, "Caricamento del modello…")
+        let modelli: AsrModels
+        do {
+            modelli = try await AsrModels.load(from: cartella, version: versione)
+        } catch {
+            // File mancanti o rovinati: il modello si considera da riscaricare.
+            try? FileManager.default.removeItem(at: conferma)
+            throw Errore.danneggiato
+        }
         let asr = AsrManager()
         try await asr.loadModels(modelli)
         let flusso = await asr.transcriptionProgressStream
@@ -117,7 +158,7 @@ nonisolated enum ParakeetLocale {
             }
         }
         defer { osserva.cancel() }
-        progresso(0, "Trascrizione con Parakeet…")
+        progresso(0, "Trascrizione…")
         var stato = TdtDecoderState.make()
         let risultato: ASRResult
         do {
@@ -132,6 +173,14 @@ nonisolated enum ParakeetLocale {
         guard !testo.isEmpty else { throw Errore.vuota }
         return testo
     }
+}
+
+/// Segna (una volta) l'inizio della preparazione del modello, dopo il download.
+private nonisolated final class InizioPreparazione: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data: Date?
+    var inizio: Date? { lock.lock(); defer { lock.unlock() }; return data }
+    func segna() { lock.lock(); if data == nil { data = Date() }; lock.unlock() }
 }
 
 /// Ripulitura dei modelli non più usati (Whisper, sostituito da Parakeet: era più lento e su audio registrato da

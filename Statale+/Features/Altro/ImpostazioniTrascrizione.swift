@@ -24,18 +24,19 @@ struct ImpostazioniTrascrizioneView: View {
                     .disabled(m == .remoto)
                 }
             } footer: {
-                Text("Prove su lezioni reali: Parakeet riconosce più termini tecnici di Apple e trascrive due ore di lezione in pochi minuti. Le trascrizioni già fatte non cambiano: puoi rifarle dal menu della trascrizione.")
+                Text("Le trascrizioni già fatte non cambiano: puoi rifarle dal menu della trascrizione.")
             }
             SezioneModello(gestore: app.parakeet)
         }
         .navigationTitle("Trascrizione")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { app.parakeet.ricontrolla() }
         .sheet(isPresented: $confermaDownload) {
             ConfermaDownloadModello(
                 modello: app.parakeet.modello,
                 titolo: "Scaricare Parakeet?",
-                testo: "Parakeet trascrive le lezioni con più precisione, tutto sul dispositivo. Serve un download aggiuntivo, da fare una sola volta.",
-                consumi: "Lavora sul Neural Engine: una lezione di due ore richiede pochi minuti e poca batteria."
+                testo: "Trascrizioni più precise, sul telefono. Il download si fa una volta sola.",
+                consumi: "Due ore di lezione in pochi minuti, con poca batteria."
             ) { app.parakeet.scarica() }
             .presentationDetents([.large])
         }
@@ -88,33 +89,38 @@ struct ImpostazioniRiassuntiView: View {
             Section {
                 Button { scelto = MotoreRiassunto.apple.rawValue } label: {
                     RigaMotore(nome: "Apple Intelligence", simbolo: "apple.intelligence",
-                               caratteristiche: ["Sul dispositivo", "Privato", "Nessun download"],
-                               descrizione: "Il modello di Apple Intelligence, aggiornato con iOS. Lavora a pezzi piccoli: riassunti lunghi ma più frammentati, e gli errori della trascrizione tendono a restare.",
+                               caratteristiche: ["Nessun download", "Più veloce", "Offline"],
+                               descrizione: "Pronto subito. Riassunti più frammentati, che a volte ripetono gli errori della trascrizione.",
                                selezionato: effettivo == .apple, nota: notaApple, avanzamento: nil, pro: false)
                 }
                 .tint(.primary)
                 .disabled(AppleIntelligence.stato != .disponibile)
                 Button { selezionaQwen() } label: {
                     RigaMotore(nome: "Qwen 3.5 4B", simbolo: "cpu",
-                               caratteristiche: ["Sul dispositivo", "Privato", "Più accurato", "Download di 3 GB"],
-                               descrizione: "Un modello linguistico più grande, eseguito con MLX. Nelle prove copre più argomenti, corregge nomi e termini storpiati dalla trascrizione e scrive appunti più ordinati.",
+                               caratteristiche: ["Download di 3 GB", "Più preciso", "Offline"],
+                               descrizione: "Riassunti più completi e ordinati, che correggono molti errori della trascrizione. Modello pesante: serve un iPhone recente e l'app aperta.",
                                selezionato: effettivo == .qwen, nota: notaQwen, avanzamento: avanzamentoQwen, pro: false)
                 }
                 .tint(.primary)
                 .disabled(!QwenLocale.supportato)
+                RigaMotore(nome: "Remoto Pro", simbolo: "cloud", caratteristiche: ["Online", "A pagamento", "Presto"],
+                           descrizione: "Più veloce e potente, ma il testo della lezione viene inviato fuori dal telefono.",
+                           selezionato: false, nota: nil, avanzamento: nil, pro: true)
+                    .foregroundStyle(.secondary)
             } footer: {
-                Text("Qwen usa la GPU, che iOS non concede alle app in background: se esci dall'app il riassunto si mette in pausa e riprende quando torni.")
+                Text("Con Qwen, se esci dall'app il riassunto si mette in pausa e riprende quando torni.")
             }
             SezioneModello(gestore: app.qwen)
         }
         .navigationTitle("Riassunti")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { app.qwen.ricontrolla() }
         .sheet(isPresented: $confermaDownload) {
             ConfermaDownloadModello(
                 modello: app.qwen.modello,
                 titolo: "Scaricare Qwen?",
-                testo: "Qwen 3.5 4B scrive riassunti più completi e precisi, tutto sul dispositivo. Serve un download aggiuntivo, da fare una sola volta.",
-                consumi: "Usa la GPU e consuma più batteria: il riassunto di una lezione di due ore richiede circa 10-15 minuti con l'app aperta."
+                testo: "Riassunti più completi e precisi, sul telefono. Il download si fa una volta sola.",
+                consumi: "Consuma più batteria: il riassunto di due ore di lezione richiede circa 10-15 minuti con l'app aperta."
             ) { app.qwen.scarica() }
             .presentationDetents([.large])
         }
@@ -160,11 +166,11 @@ private struct SezioneModello: View {
 
     var body: some View {
         if gestore.stato != .assente || gestore.errore != nil {
-            Section("Modello \(gestore.modello.nome)") {
+            Section("Modello scaricato") {
                 switch gestore.stato {
                 case .download(let p):
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Download di \(gestore.modello.nomeCompleto)").font(.callout)
+                        Text("Download di \(gestore.modello.nome)").font(.callout)
                         BarraDownload(avanzamento: p, totaleMB: gestore.modello.dimensioneMB)
                         Text(NotaBackground.testo).font(.caption).foregroundStyle(.secondary)
                         Button("Annulla download", role: .destructive) { gestore.annulla() }
@@ -282,9 +288,9 @@ private struct ConfermaDownloadModello: View {
                          rete.cellulare
                             ? "Sei connesso con la rete cellulare: potrebbero essere applicati costi secondo la tua tariffa."
                             : "Con la rete cellulare potrebbero essere applicati costi secondo la tua tariffa.")
-                    voce("iphone", "Tieni l'app in primo piano", NotaBackground.testo)
+                    voce("iphone", "Meglio con l'app aperta", NotaBackground.testo)
                     voce("battery.50percent", "Consumi", consumi)
-                    voce("lock.shield", "Privato", "Audio e testi non lasciano il dispositivo: il modello si scarica da Hugging Face e funziona offline.")
+                    voce("lock.shield", "Privato", "Dopo il download funziona offline: audio e testi restano sul telefono.")
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -351,9 +357,9 @@ private nonisolated final class UnaVoltaRete: @unchecked Sendable {
 nonisolated enum NotaBackground {
     static var testo: String {
         if #available(iOS 26.0, *) {
-            "Puoi uscire dall'app: iOS continua il lavoro e ne mostra l'avanzamento. In primo piano però è più veloce e più sicuro."
+            "Puoi uscire dall'app: il lavoro continua. Con l'app aperta finisce prima."
         } else {
-            "Tieni l'app aperta finché non finisce: uscendo, il lavoro si ferma dopo pochi secondi e riprende quando torni."
+            "Tieni l'app aperta finché non finisce."
         }
     }
 }

@@ -7,6 +7,7 @@ actor SifaService {
 
     /// "Esami del tuo corso di studio" (esami a cui ci si può iscrivere).
     func esamiIscrivibili() async throws -> [EsameIscrivibile] {
+        if Demo.attiva { await Demo.attesa(); return DatiDemo.esamiIscrivibili() }
         let r = try await cas.sifaPage(.iscrizioneEsami, path: "esamiPack/EsamiNonSostenutiDelCorsoPage")
         return try SifaParser.esamiNonSostenuti(html: r.text)
     }
@@ -14,6 +15,7 @@ actor SifaService {
     /// Pulsante "Iscrizione" di "Esami del tuo corso di studio": ricarica la pagina (il link vale solo per la
     /// versione appena generata, `?N`) e segue il link della riga → "Selezione appello". Solo lettura (GET).
     func appelliDisponibili(_ esame: EsameIscrivibile) async throws -> SelezioneAppello {
+        if Demo.attiva { await Demo.attesa(); return DatiDemo.appelliDisponibili(esame) }
         let lista = try await cas.sifaPage(.iscrizioneEsami, path: "esamiPack/EsamiNonSostenutiDelCorsoPage")
         guard let href = SifaParser.linkIscrizione(html: lista.text, codice: esame.codice),
               let url = URL(string: href, relativeTo: lista.url)?.absoluteURL else {
@@ -24,11 +26,13 @@ actor SifaService {
     }
 
     func prenotazioni() async throws -> TabellaSifa {
+        if Demo.attiva { await Demo.attesa(); return DatiDemo.prenotazioni() }
         let r = try await cas.sifaPage(.iscrizioneEsami, path: "esamiPack/EsamiIscrizioniConfermatePage")
         return try SifaParser.tabella(html: r.text, vuotoMarker: "Nessun esame presente")
     }
 
     func esitiFinali() async throws -> TabellaSifa {
+        if Demo.attiva { return DatiDemo.esitiFinali }
         let r = try await cas.sifaPage(.verbalizzazione, path: "esitiFinali")
         return try SifaParser.tabella(html: r.text, vuotoMarker: "Non è presente nessun esito")
     }

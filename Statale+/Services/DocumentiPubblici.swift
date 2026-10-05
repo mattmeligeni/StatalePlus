@@ -17,6 +17,7 @@ actor DocumentiPubblici {
     }
 
     func pdf(_ url: URL) async throws -> URL {
+        if Demo.attiva { return try DatiDemo.pdf(titolo: url.deletingPathExtension().lastPathComponent, testo: "Documento dimostrativo: nella versione reale qui si apre il PDF pubblicato dall'Ateneo.") }
         guard url.scheme == "https", let host = url.host(), host.hasSuffix("unimi.it") else { throw Errore.nonConsentito }
         let r = try await http.get(url, headers: ["Accept": "application/pdf"])
         guard r.status == 200, r.isPDF else { throw Errore.nonPDF }
