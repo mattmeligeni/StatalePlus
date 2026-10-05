@@ -27,6 +27,7 @@ struct AuleView: View {
         .navigationTitle("Aule")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
                     prompt: mode == .sedi ? "Sede, aula o indirizzo" : "Insegnamento, docente o aula")
+        .autocorrectionDisabled()
         .refreshable { await app.loadAule(force: true) }
         .task { await app.loadAule() }
     }

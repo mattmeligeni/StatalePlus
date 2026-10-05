@@ -46,6 +46,8 @@ nonisolated enum WhisperLocale {
     static let variante = "openai_whisper-large-v3-v20240930_626MB"
     static let repo = "argmaxinc/whisperkit-coreml"
     static let dimensioneMB = 626
+    /// Dimensione esatta dei file del modello, per l'avanzamento del download.
+    static let byteTotali: Int64 = 626_720_156
 
     static var cartellaBase: URL {
         URL.applicationSupportDirectory.appending(path: "Modelli", directoryHint: .isDirectory)
@@ -91,10 +93,18 @@ nonisolated enum WhisperLocale {
         var valori = URLResourceValues()
         valori.isExcludedFromBackup = true
         try? base.setResourceValues(valori)
-        _ = try await WhisperKit.download(variant: variante, downloadBase: cartellaBase, from: repo) { p in
-            progresso(p.fractionCompleted)
+        // WhisperKit conta i file scaricati, non i byte: i file piccoli finiscono subito e poi l'avanzamento resta
+        // fermo sui pesi da centinaia di MB. Si misura quindi quanto è già su disco (anche i file `.incomplete`).
+        let misura = Task {
+            while !Task.isCancelled {
+                progresso(min(Double(spazioOccupato) / Double(byteTotali), 0.99))
+                try? await Task.sleep(for: .milliseconds(500))
+            }
         }
+        defer { misura.cancel() }
+        _ = try await WhisperKit.download(variant: variante, downloadBase: cartellaBase, from: repo)
         try Task.checkCancellation()
+        progresso(1)
         try Data().write(to: conferma)
         guard installato else { throw Errore.downloadIncompleto }
     }
@@ -146,7 +156,7 @@ nonisolated enum WhisperLocale {
         progresso(0, "Trascrizione con Whisper…")
         pipe.segmentDiscoveryCallback = { segmenti in
             guard durata > 0, let fine = segmenti.map(\.end).max() else { return }
-            progresso(min(0.99, Double(fine) / durata), "Trascrizione con Whisper…")
+            progresso(min(0.99, Double(fine) / durata), faseTrascrizione(Double(fine), di: durata))
         }
         let opzioni = DecodingOptions(task: .transcribe, language: "it", temperatureFallbackCount: 3,
                                       usePrefillPrompt: true, detectLanguage: false, skipSpecialTokens: true,

@@ -258,6 +258,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Statale+-Info.plist";
+				CODE_SIGN_ENTITLEMENTS = "Statale+.entitlements";
 				INFOPLIST_KEY_CFBundleDisplayName = "Statale+";
 				INFOPLIST_KEY_NSCameraUsageDescription = "La fotocamera serve per scansionare il QR del codice lezione.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Il microfono serve per registrare le lezioni.";
@@ -295,6 +296,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Statale+-Info.plist";
+				CODE_SIGN_ENTITLEMENTS = "Statale+.entitlements";
 				INFOPLIST_KEY_CFBundleDisplayName = "Statale+";
 				INFOPLIST_KEY_NSCameraUsageDescription = "La fotocamera serve per scansionare il QR del codice lezione.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Il microfono serve per registrare le lezioni.";

@@ -74,6 +74,7 @@ struct RegistrazioniView: View {
             .navigationTitle("Registrazioni")
             .navigationDestination(isPresented: $app.mostraRecuperate) { RegistrazioniDaVerificareView() }
             .searchable(text: $query, prompt: "Titolo, insegnamento o note")
+            .autocorrectionDisabled()
             .task { if app.lezioniUtente.updatedAt == nil { await app.loadLezioniUtente() } }
         }
     }
@@ -337,6 +338,19 @@ struct RegistrazioneDetailView: View {
     @State private var confermaElimina = false
 
     /// Collegamento diretto all'archivio: trascrizioni e riassunti che finiscono in background restano coerenti.
+    /// Un a capo (Invio) non entra nel testo: chiude la tastiera.
+    private func unaRiga(_ b: Binding<String>) -> Binding<String> {
+        Binding(get: { b.wrappedValue },
+                set: { v in
+                    if v.contains("\n") {
+                        b.wrappedValue = v.replacingOccurrences(of: "\n", with: "")
+                        Tastiera.chiudi()
+                    } else {
+                        b.wrappedValue = v
+                    }
+                })
+    }
+
     private func campo<T>(_ kp: WritableKeyPath<Registrazione, T>, _ vuoto: T) -> Binding<T> {
         Binding(get: { app.recordings.item(id)?[keyPath: kp] ?? vuoto },
                 set: { v in
@@ -378,7 +392,9 @@ struct RegistrazioneDetailView: View {
                         }
                     }
                     Section {
-                        TextField("Titolo", text: campo(\.titolo, ""), axis: .vertical)
+                        // Su più righe per i titoli lunghi, ma Invio chiude la tastiera come negli altri campi.
+                        TextField("Titolo", text: unaRiga(campo(\.titolo, "")), axis: .vertical)
+                            .submitLabel(.done)
                         Picker("Insegnamento", selection: insegnamento) {
                             Text("Nessuno").tag(String?.none)
                             ForEach(app.agenda?.insegnamentiUtenteAttivati ?? []) { Text($0.nome).tag(Optional($0.codice)) }
@@ -420,6 +436,7 @@ struct RegistrazioneDetailView: View {
                         Button("Elimina registrazione", role: .destructive) { confermaElimina = true }
                     }
                 }
+                .tastieraConChiudi()
                 .navigationTitle(r.titolo)
                 .navigationBarTitleDisplayMode(.inline)
             } else {

@@ -14,6 +14,7 @@ struct Statale_App: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .gestiTastiera()
                 .environment(app)
                 .environment(\.locale, Formats.it)
         }

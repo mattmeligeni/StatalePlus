@@ -7,6 +7,9 @@ struct LoginView: View {
     @State private var password = ""
     @State private var working = false
     @State private var mostraPassword = false
+    @FocusState private var campoAttivo: Campo?
+
+    private enum Campo { case email, password }
 
     private var esito: Result<String, Credentials.EmailError> { Credentials.normalizzaEmail(email) }
     private var emailValida: String? { if case .success(let e) = esito { e } else { nil } }
@@ -37,6 +40,9 @@ struct LoginView: View {
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .focused($campoAttivo, equals: .email)
+                        .submitLabel(.next)
+                        .onSubmit { campoAttivo = .password }
                     HStack {
                         Group {
                             if mostraPassword {
@@ -48,6 +54,9 @@ struct LoginView: View {
                             }
                         }
                         .textContentType(.password)
+                        .focused($campoAttivo, equals: .password)
+                        .submitLabel(.go)
+                        .onSubmit(accedi)
                         Button { mostraPassword.toggle() } label: {
                             Image(systemName: mostraPassword ? "eye.slash" : "eye").foregroundStyle(.secondary)
                         }
@@ -61,16 +70,21 @@ struct LoginView: View {
                     Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
                 }
                 Section {
-                    Button {
-                        working = true
-                        Task { await app.login(email: email, password: password); working = false; password = "" }
-                    } label: {
+                    Button(action: accedi) {
                         HStack { Spacer(); if working { ProgressView() } else { Text("Accedi").bold() }; Spacer() }
                     }
                     .disabled(!valid || working)
                 }
             }
+            .tastieraConChiudi()
         }
+    }
+
+    private func accedi() {
+        guard valid, !working else { return }
+        Tastiera.chiudi()
+        working = true
+        Task { await app.login(email: email, password: password); working = false; password = "" }
     }
 
     @ViewBuilder

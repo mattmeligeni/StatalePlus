@@ -206,6 +206,7 @@ struct IscrizioneAppelloSheet: View {
                 }
             }
             .searchable(text: $descrizione, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca insegnamento")
+            .autocorrectionDisabled()
             .navigationTitle("Iscrizione agli appelli")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Chiudi") { dismiss() } } }

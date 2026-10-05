@@ -14,7 +14,7 @@ struct ImpostazioniTrascrizioneView: View {
         List {
             Section {
                 ForEach(MotoreTrascrizione.allCases, id: \.self) { m in
-                    Button { seleziona(m) } label: { RigaMotore(motore: m, selezionato: m == motore, nota: nota(m)) }
+                    Button { seleziona(m) } label: { RigaMotore(motore: m, selezionato: m == motore, nota: nota(m), avanzamento: avanzamento(m)) }
                         .tint(.primary)
                         .disabled(!selezionabile(m))
                 }
@@ -27,12 +27,8 @@ struct ImpostazioniTrascrizioneView: View {
                     switch app.whisper.stato {
                     case .download(let p):
                         VStack(alignment: .leading, spacing: 8) {
-                            ProgressView(value: p) {
-                                Text("Download di Whisper Large v3 Turbo").font(.callout)
-                            } currentValueLabel: {
-                                Text("\(p.formatted(.percent.precision(.fractionLength(0)))) di \(WhisperLocale.dimensioneMB) MB")
-                                    .font(.caption.monospacedDigit())
-                            }
+                            Text("Download di Whisper Large v3 Turbo").font(.callout)
+                            BarraDownload(avanzamento: p)
                             Text(NotaBackground.testo).font(.caption).foregroundStyle(.secondary)
                             Button("Annulla download", role: .destructive) { app.whisper.annulla() }
                                 .font(.callout).buttonStyle(.borderless)
@@ -81,11 +77,16 @@ struct ImpostazioniTrascrizioneView: View {
             if !WhisperLocale.supportato { return "Richiede un iPhone con chip A15 o successivo (iPhone 13 e successivi)." }
             switch app.whisper.stato {
             case .installato: return "Scaricato e pronto."
-            case .download: return "Download in corso…"
+            case .download: return nil
             case .assente: return "Toccalo per scaricarlo (\(WhisperLocale.dimensioneMB) MB)."
             }
         case .remoto: return "Non ancora disponibile."
         }
+    }
+
+    private func avanzamento(_ m: MotoreTrascrizione) -> Double? {
+        if m == .whisper, case .download(let p) = app.whisper.stato { return p }
+        return nil
     }
 
     private func seleziona(_ m: MotoreTrascrizione) {
@@ -104,6 +105,7 @@ private struct RigaMotore: View {
     let motore: MotoreTrascrizione
     let selezionato: Bool
     let nota: String?
+    var avanzamento: Double?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -119,6 +121,7 @@ private struct RigaMotore: View {
                 Text(motore.caratteristiche.joined(separator: " · ")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                 Text(motore.descrizione).font(.callout).fixedSize(horizontal: false, vertical: true)
                 if let nota { Text(nota).font(.caption).foregroundStyle(.secondary) }
+                if let avanzamento { BarraDownload(avanzamento: avanzamento).padding(.top, 2) }
             }
             Spacer(minLength: 0)
             if selezionato { Image(systemName: "checkmark").font(.headline).foregroundStyle(Color.accentColor) }
@@ -132,6 +135,26 @@ private struct RigaMotore: View {
         case .apple: "apple.logo"
         case .whisper: "waveform.badge.mic"
         case .remoto: "cloud"
+        }
+    }
+}
+
+/// Barra del download del modello con percentuale e MB scaricati.
+struct BarraDownload: View {
+    let avanzamento: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ProgressView(value: avanzamento)
+                .tint(.accentColor)
+                .animation(.easeOut(duration: 0.4), value: avanzamento)
+            HStack {
+                Text(avanzamento.formatted(.percent.precision(.fractionLength(0))))
+                Spacer()
+                Text("\(Int((avanzamento * Double(WhisperLocale.dimensioneMB)).rounded())) di \(WhisperLocale.dimensioneMB) MB")
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
         }
     }
 }

@@ -331,6 +331,9 @@ private struct ModificaLezioneSheet: View {
     @State private var sede = ""
     @State private var docente = ""
     @State private var annullata = false
+    @FocusState private var campoAttivo: Campo?
+
+    private enum Campo { case aula, sede, docente }
 
     private var ufficiale: ValoriUfficialiLezione {
         lezione.ufficiale ?? ValoriUfficialiLezione(aula: lezione.aula, aulaCodice: lezione.aulaCodice, sede: lezione.sede,
@@ -347,7 +350,15 @@ private struct ModificaLezioneSheet: View {
                         Label("Scegli dall'elenco delle aule", systemImage: "building.2")
                     }
                     TextField("Aula", text: $aula)
+                        .autocorrectionDisabled()
+                        .focused($campoAttivo, equals: .aula)
+                        .submitLabel(.next)
+                        .onSubmit { campoAttivo = .sede }
                     TextField("Sede", text: $sede)
+                        .autocorrectionDisabled()
+                        .focused($campoAttivo, equals: .sede)
+                        .submitLabel(.next)
+                        .onSubmit { campoAttivo = .docente }
                 } header: {
                     Text("Luogo")
                 } footer: {
@@ -355,6 +366,10 @@ private struct ModificaLezioneSheet: View {
                 }
                 Section("Docente") {
                     TextField("Docente", text: $docente)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.words)
+                        .focused($campoAttivo, equals: .docente)
+                        .submitLabel(.done)
                 }
                 Section {
                     Toggle("Lezione annullata", isOn: $annullata).tint(.red)
@@ -364,6 +379,7 @@ private struct ModificaLezioneSheet: View {
                     Text("Agenda: \(ufficiale.aula) · \(ufficiale.sede) · \(Testo.persona(ufficiale.docente))\(ufficiale.annullato ? " · annullata" : "")")
                 }
             }
+            .tastieraConChiudi()
             .navigationTitle("Modifica lezione")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -421,6 +437,7 @@ private struct SceltaAula: View {
             }
         }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Aula o sede")
+        .autocorrectionDisabled()
         .navigationTitle("Scegli l'aula")
         .navigationBarTitleDisplayMode(.inline)
         .task { await app.loadAule() }
@@ -562,6 +579,7 @@ private struct CorsiList<Row: View>: View {
             row(CorsoSelezionato(scuola: scuola.label, tipo: laurea.tipo, cdl: cdl))
         }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca corso")
+        .autocorrectionDisabled()
         .navigationTitle(laurea.tipo.capitalized)
     }
 }

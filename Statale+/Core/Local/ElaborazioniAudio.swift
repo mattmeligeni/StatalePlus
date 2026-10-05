@@ -67,9 +67,10 @@ final class ElaborazioniAudio {
         let titolo = r.titolo
         tasks["t\(id)"] = Task {
             do {
-                let testo = try await EsecuzioneEstesa.esegui(titolo: "Trascrizione (\(motore.nome))", sottotitolo: titolo) { sistema in
+                let testo = try await EsecuzioneEstesa.esegui(titolo: "Trascrizione (\(motore.nome))", sottotitolo: titolo,
+                                                                 usaGPU: motore == .whisper) { sistema in
                     try await Trascrittore.trascrivi(url, motore: motore, contesto: contesto) { p, m in
-                        sistema(p)
+                        sistema(p, fase: m)
                         Task { @MainActor in self.trascrizioni[id]?.progresso = p; self.trascrizioni[id]?.messaggio = m }
                     }
                 }
@@ -96,7 +97,7 @@ final class ElaborazioniAudio {
             do {
                 let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo) { sistema in
                     try await AppleIntelligence.riassumi(testo) { p, m in
-                        sistema(p)
+                        sistema(p, fase: m)
                         Task { @MainActor in self.riassunti[id]?.progresso = p; self.riassunti[id]?.messaggio = m }
                     }
                 }

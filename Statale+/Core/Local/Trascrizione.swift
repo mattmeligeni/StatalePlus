@@ -69,7 +69,7 @@ nonisolated enum Trascrittore {
             var parti: [String] = []
             for try await r in transcriber.results {
                 parti.append(String(r.text.characters))
-                if durata > 0 { progresso(min(0.99, r.range.end.seconds / durata), "Trascrizione in corso…") }
+                if durata > 0 { progresso(min(0.99, r.range.end.seconds / durata), faseTrascrizione(r.range.end.seconds, di: durata)) }
             }
             return parti.joined(separator: " ")
         }
@@ -119,7 +119,8 @@ nonisolated enum Trascrittore {
             richiesta.endAudio()
             let testo = try await riconosci(recognizer, richiesta)
             if !testo.isEmpty { parti.append(testo) }
-            progresso(Double(file.framePosition) / Double(totale), "Trascrizione in corso…")
+            progresso(Double(file.framePosition) / Double(totale),
+                      faseTrascrizione(Double(file.framePosition) / formato.sampleRate, di: Double(file.length) / formato.sampleRate))
         }
         return parti.joined(separator: " ")
     }
@@ -176,4 +177,10 @@ nonisolated private final class UnaVolta: @unchecked Sendable {
         fatto = true
         blocco()
     }
+}
+
+/// "Trascritti 12 di 80 min" (nell'app e nell'attività di sistema); sotto i 2 minuti in secondi.
+nonisolated func faseTrascrizione(_ fatto: Double, di totale: Double) -> String {
+    if totale < 120 { return "Trascritti \(Int(fatto)) di \(Int(totale)) s" }
+    return "Trascritti \(Int(fatto / 60)) di \(Int((totale / 60).rounded())) min"
 }

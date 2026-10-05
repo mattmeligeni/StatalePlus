@@ -10,7 +10,6 @@ struct PresenzeView: View {
     @State private var erroreInvio: String?
     /// Esito "ok" o "failure": schermata a tutto schermo, impossibile da non notare (gli utenti riprovavano per sicurezza).
     @State private var esitoGrande: TimbraturaResult?
-    @FocusState private var focus: Bool
     @AppStorage("sogliaFrequenzaManuale") private var sogliaManuale = 0
 
     var body: some View {
@@ -23,12 +22,7 @@ struct PresenzeView: View {
                     }
                 }
                 HStack {
-                    TextField("Codice lezione", text: $codice)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .focused($focus)
-                        .submitLabel(.send)
-                        .onSubmit { Task { await invia() } }
+                    CampoCodice(segnaposto: "Codice lezione", testo: $codice, invio: .send) { Task { await invia() } }
                     Button { showScanner = true } label: {
                         Image(systemName: "qrcode.viewfinder").font(.title2)
                     }
@@ -83,6 +77,7 @@ struct PresenzeView: View {
             }
             UpdatedFooter(date: app.frequenze.updatedAt).listRowBackground(Color.clear)
         }
+        .tastieraConChiudi()
         .navigationTitle("Presenze")
         .refreshable { app.segnaRefresh(); await load() }
         .task { if app.frequenze.updatedAt == nil { await load() } }
@@ -126,7 +121,7 @@ struct PresenzeView: View {
 
     private func invia() async {
         guard !inviando, let m = app.studente?.matricolaAPI, !codice.trimmed.isEmpty else { return }
-        focus = false
+        Tastiera.chiudi()
         inviando = true
         erroreInvio = nil
         risposta = nil

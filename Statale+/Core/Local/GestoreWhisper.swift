@@ -21,10 +21,10 @@ final class GestoreWhisper {
         stato = .download(0)
         compito = Task {
             do {
-                try await EsecuzioneEstesa.esegui(titolo: "Download modello Whisper",
-                                                  sottotitolo: "\(WhisperLocale.dimensioneMB) MB") { sistema in
+                try await EsecuzioneEstesa.esegui(titolo: "Download di Whisper",
+                                                  sottotitolo: "Whisper Large v3 Turbo") { sistema in
                     try await WhisperLocale.scarica { p in
-                        sistema(p)
+                        sistema(p, fase: "\(Int(p * Double(WhisperLocale.dimensioneMB))) di \(WhisperLocale.dimensioneMB) MB")
                         Task { @MainActor in if case .download = self.stato { self.stato = .download(p) } }
                     }
                 }

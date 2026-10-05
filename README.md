@@ -170,6 +170,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
       rete cellulare), primo piano consigliato, consumo di batteria e privacy.
     - Il modello sta in `Application Support/Modelli` (escluso dal backup), con un file marcatore scritto solo a
       download completato; si può annullare il download o eliminare il modello.
+    - Barra del download con percentuale e MB, sia nella riga di Whisper sia nella sezione del modello. L'avanzamento
+      si misura sui byte già su disco (626 720 156 in tutto): WhisperKit conta i file scaricati, e la sua percentuale
+      resterebbe ferma a lungo sui pesi da centinaia di MB.
     - La trascrizione legge l'audio a blocchi (`.incremental`), divide in base al parlato (VAD), forza l'italiano e
       scarta i segmenti di silenzio e le frasi inventate tipiche ("Sottotitoli a cura di…"). La prima volta Core ML
       prepara il modello e serve qualche minuto in più.
@@ -193,7 +196,12 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - **Lavori lunghi in background** (`EsecuzioneEstesa`): trascrizione, riassunto, miglioramento dell'audio e download di
   Whisper.
   - Da iOS 26 usano `BGContinuedProcessingTask`. Se si esce dall'app il lavoro continua, con l'avanzamento in
-    un'attività di sistema da cui si può annullare.
+    un'attività di sistema da cui si può annullare. È l'unica attività in tempo reale: iOS la mostra comunque, e una
+    nostra la duplicherebbe.
+    - Il titolo dice il lavoro ("Trascrizione (Whisper)", "Riassunto", "Download di Whisper").
+    - Il sottotitolo dice la registrazione, la fase e il tempo che manca, stimato dalla velocità media, ad esempio
+      "Lezione 5 ott · Trascritti 12 di 80 min · circa 9 min" o "Parte 3 di 8". Si aggiorna al massimo ogni 3 secondi.
+    - Whisper chiede anche la **GPU in background** (`requiredResources = .gpu`) dove il dispositivo la supporta.
   - Prima di iOS 26 c'è il tempo extra di `beginBackgroundTask`.
   - Nelle sezioni una nota ricorda che in primo piano è più veloce.
   - Il lavoro pesante gira fuori dal main thread (attori e funzioni `@concurrent`).
@@ -260,6 +268,21 @@ indipendentemente dalla lingua del dispositivo; l'italiano è anche la lingua di
 
 ---
 
+### Tastiera
+
+Uguale in tutta l'app (`Tastiera.swift`):
+
+- si chiude toccando un punto qualsiasi fuori dai campi, con uno swipe verso il basso o trascinando il contenuto verso la
+  tastiera; i gesti sono sulla finestra, quindi valgono anche nei fogli;
+- pulsante **Chiudi** a destra sopra la tastiera, in vetro, grande quanto la scritta. Non usa la barra della tastiera
+  di SwiftUI, che su iOS 26 centra il pulsante o allarga il vetro;
+- Invio: nei campi di una riga passa al campo successivo o conferma (login: email → password → accedi; modifica
+  lezione: aula → sede → docente). Il titolo della registrazione va a capo da solo ma Invio chiude. Va a capo solo
+  nei testi lunghi (note, trascrizione, riassunto);
+- niente correttore nei campi con codici, nomi e ricerche. Il **codice lezione** è un `UITextField`
+  (`CampoCodice`) senza correttore, suggerimenti né previsioni: da iOS 26 `autocorrectionDisabled()` lascia la barra
+  dei suggerimenti, che proponeva parole al posto del codice.
+
 ### Nessun collegamento esterno
 
 L'app non apre siti web né il browser: ciò che non si può integrare non c'è. I PDF pubblici dell'Ateneo (curriculum
@@ -290,7 +313,9 @@ Portachiavi dalla build di Xcode.
 
 Impostazioni di progetto rilevanti: `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
 `SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (`UIBackgroundModes = audio,
-processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.elaborazione.*` per i lavori lunghi).
+processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.elaborazione.*` per i lavori lunghi),
+`Statale+.entitlements` con _Background GPU Access_ (`…continued-processing.gpu`, iOS 26) e _Background Inference_
+(`…continued-processing.inference`, iOS 27, per il Neural Engine in background usato da Core ML/WhisperKit).
 
 ---
 
@@ -476,6 +501,7 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 | Riconoscimento vocale | trascrizione delle registrazioni (iOS 17–25)      |
 | Audio in background | la registrazione continua a schermo bloccato        |
 | Elaborazione in background | trascrizione, riassunto, miglioramento e download di Whisper proseguono fuori dall'app (iOS 26+) |
+| GPU e Neural Engine in background | Whisper continua a usarli fuori dall'app (entitlement, nessuna richiesta all'utente) |
 | Libreria foto       | nessun permesso: la foto profilo usa `PhotosPicker` |
 
 ---
@@ -517,6 +543,14 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (4)
+
+- Download di Whisper con barra in MB calcolata sui byte (prima restava ferma sul file più grande).
+- Tastiera uguale ovunque: chiusura con tocco fuori, swipe o trascinamento, pulsante "Chiudi" in vetro a destra, Invio
+  coerente, niente correttore e suggerimenti nel codice lezione, nei nomi e nelle ricerche.
+- Lavori in background: sottotitolo dell'attività di sistema con fase e tempo stimato; entitlement per GPU e Neural
+  Engine in background.
 
 ### 2026-10-05 (3)
 

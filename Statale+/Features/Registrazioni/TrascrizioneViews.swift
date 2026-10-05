@@ -141,6 +141,7 @@ struct TrascrizioneView: View {
             .font(.body)
             .strumentiScrittura()
             .padding(.horizontal, 8)
+            .tastieraConChiudi()
             .navigationTitle("Trascrizione")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
@@ -211,6 +212,7 @@ struct RiassuntoView: View {
                     .font(.body.monospaced())
                     .strumentiScrittura()
                     .padding(.horizontal, 8)
+                    .tastieraConChiudi()
             } else {
                 ScrollView {
                     MarkdownTesto(markdown: testo)
