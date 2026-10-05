@@ -4,8 +4,11 @@ import FoundationModels
 #endif
 
 /// Riassunti delle trascrizioni con il modello on-device di Apple Intelligence (FoundationModels, iOS 26+).
-/// Il contesto del modello è limitato (~4K token): la trascrizione viene divisa in parti, ciascuna ridotta ad appunti,
-/// poi gli appunti vengono uniti in un riassunto finale in Markdown (riassunto, punti chiave, domande di ripasso).
+/// `SystemLanguageModel.default` è sempre la versione più recente del modello, aggiornata con iOS (26.0–26.3, 26.4,
+/// 27.0); il modello più grande su Private Cloud Compute richiede un entitlement che Apple concede su richiesta.
+/// Il contesto è di ~4K token, quindi la lezione viene divisa in parti: per ognuna il modello produce (output guidato,
+/// `@Generable`) titolo, riassunto dettagliato, punti chiave e domande; il documento finale lo compone il codice.
+/// Così la lunghezza cresce con la lezione: una lezione di due ore dà una ventina di sezioni, non cinque righe.
 nonisolated enum AppleIntelligence {
     enum Stato: Equatable {
         case disponibile
@@ -44,18 +47,12 @@ nonisolated enum AppleIntelligence {
     /// Il nome della materia NON entra mai nei prompt: con una trascrizione povera il modello lo userebbe
     /// per inventare una lezione plausibile. Si lavora solo sul testo trascritto.
     private static let istruzioni = """
-        Sei un assistente che prende appunti per uno studente universitario. Scrivi sempre in italiano. \
+        Sei un assistente che prepara appunti di studio dettagliati per uno studente universitario. Scrivi sempre in \
+        italiano, in modo chiaro e completo, come appunti da cui si possa studiare senza riascoltare la lezione. \
         Usa esclusivamente le informazioni presenti nel testo che ricevi: non aggiungere argomenti, definizioni, \
-        esempi o domande che non derivano direttamente dal testo. Se il testo non contiene contenuti di una lezione \
-        (è vuoto, incomprensibile, solo saluti, rumore o frasi senza argomento), rispondi soltanto con \(segnaleVuoto).
+        esempi o domande che non derivano dal testo. La trascrizione automatica può contenere errori di \
+        riconoscimento: correggili solo quando il significato è evidente.
         """
-
-    /// Risposta attesa quando non c'è materiale da riassumere.
-    static let segnaleVuoto = "CONTENUTO_INSUFFICIENTE"
-
-    private static func vuoto(_ risposta: String) -> Bool {
-        risposta.uppercased().contains(segnaleVuoto) || risposta.trimmingCharacters(in: .whitespacesAndNewlines).count < 20
-    }
 
     /// Riassume una trascrizione. `progresso` riceve (0…1, messaggio di stato).
     @concurrent
@@ -66,12 +63,12 @@ nonisolated enum AppleIntelligence {
         guard #available(iOS 26.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
         progresso(0, "Verifica del contenuto…")
         guard try await eLezione(trascrizione) else { throw Errore.testoInsufficiente }
-        var dimensione = 5_000
+        var dimensione = 4_000
         while true {
             do {
                 return try await riassumi(trascrizione, dimensione: dimensione, progresso: progresso)
-            } catch LanguageModelSession.GenerationError.exceededContextWindowSize where dimensione > 1_500 {
-                dimensione /= 2   // parti più piccole e si riprova
+            } catch LanguageModelSession.GenerationError.exceededContextWindowSize where dimensione > 1_200 {
+                dimensione = dimensione * 2 / 3   // parti più piccole e si riprova
             } catch LanguageModelSession.GenerationError.guardrailViolation {
                 throw Errore.contenutoNonAmmesso
             }
@@ -82,6 +79,21 @@ nonisolated enum AppleIntelligence {
     }
 
     #if canImport(FoundationModels)
+    @available(iOS 26.0, *)
+    @Generable
+    struct ParteLezione {
+        @Guide(description: "true solo se il testo non spiega alcun argomento (saluti, attese, rumore, frasi senza contenuto)")
+        let senzaContenuto: Bool
+        @Guide(description: "Titolo breve dell'argomento di questa parte, al massimo 8 parole")
+        let titolo: String
+        @Guide(description: "Riassunto dettagliato di questa parte in 2 o 3 paragrafi: concetti, definizioni, esempi, passaggi e collegamenti spiegati dal docente")
+        let riassunto: String
+        @Guide(description: "I concetti più importanti di questa parte, ognuno in una frase completa", .minimumCount(3), .maximumCount(6))
+        let puntiChiave: [String]
+        @Guide(description: "Domande di verifica a cui si risponde con il contenuto di questa parte", .minimumCount(2), .maximumCount(3))
+        let domande: [String]
+    }
+
     /// Controllo preliminare su un campione del testo: contiene la spiegazione di argomenti di una lezione?
     @available(iOS 26.0, *)
     private static func eLezione(_ testo: String) async throws -> Bool {
@@ -102,49 +114,71 @@ nonisolated enum AppleIntelligence {
     @available(iOS 26.0, *)
     private static func riassumi(_ testo: String, dimensione: Int,
                                  progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
-        // 1. Ogni parte → appunti (le parti senza contenuto vengono scartate).
-        // 2. Appunti troppo lunghi → di nuovo condensati. 3. Riassunto finale, solo dagli appunti.
-        var appunti = testo
-        var giro = 0
-        while appunti.count > dimensione {
-            let parti = dividi(appunti, dimensione: dimensione)
-            var ridotti: [String] = []
-            for (i, parte) in parti.enumerated() {
-                try Task.checkCancellation()
-                progresso(Double(i) / Double(parti.count) * 0.85, giro == 0 ? "Lettura della parte \(i + 1) di \(parti.count)…" : "Unione degli appunti…")
-                let sessione = LanguageModelSession(instructions: istruzioni)
-                let r = try await sessione.respond(to: """
-                    Questa è una parte della trascrizione di una lezione. Estrai i contenuti presenti nel testo in 3-8 \
-                    punti elenco concisi, senza introduzione e senza commenti.
+        let blocchi = dividi(testo, dimensione: dimensione)
+        var parti: [ParteLezione] = []
+        for (i, blocco) in blocchi.enumerated() {
+            try Task.checkCancellation()
+            progresso(0.05 + Double(i) / Double(blocchi.count) * 0.85, "Parte \(i + 1) di \(blocchi.count)…")
+            let sessione = LanguageModelSession(instructions: istruzioni)
+            let r = try await sessione.respond(to: """
+                Questa è la parte \(i + 1) di \(blocchi.count) della trascrizione di una lezione. Prepara gli appunti di \
+                questa parte.
 
-                    Testo:
-                    \(parte)
-                    """)
-                if !vuoto(r.content) { ridotti.append(r.content) }
+                Testo:
+                \(blocco)
+                """, generating: ParteLezione.self)
+            let parte = r.content
+            if !parte.senzaContenuto, parte.riassunto.trimmingCharacters(in: .whitespacesAndNewlines).count > 40 {
+                parti.append(parte)
             }
-            guard !ridotti.isEmpty else { throw Errore.testoInsufficiente }
-            appunti = ridotti.joined(separator: "\n")
-            giro += 1
         }
+        guard !parti.isEmpty else { throw Errore.testoInsufficiente }
         try Task.checkCancellation()
-        progresso(0.9, "Scrittura del riassunto…")
-        let sessione = LanguageModelSession(instructions: istruzioni)
-        let finale = try await sessione.respond(to: """
-            A partire SOLO dal testo seguente, scrivi in Markdown:
-            ## Riassunto
-            uno o due paragrafi che spiegano gli argomenti presenti nel testo.
-            ## Punti chiave
-            un elenco puntato dei concetti più importanti presenti nel testo.
-            ## Da ripassare
-            da 3 a 5 domande di verifica che si possono rispondere con il testo.
-            Se il testo non basta per un riassunto, rispondi soltanto con \(segnaleVuoto).
-
-            Testo:
-            \(appunti)
-            """)
-        guard !vuoto(finale.content) else { throw Errore.testoInsufficiente }
+        progresso(0.92, "Sintesi finale…")
+        let inBreve = try? await sintesi(parti)
         progresso(1, "Completato")
-        return finale.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return documento(parti, inBreve: inBreve)
+    }
+
+    /// "In breve": 4-6 frasi su tutta la lezione, dai titoli e dall'inizio dei riassunti delle parti.
+    @available(iOS 26.0, *)
+    private static func sintesi(_ parti: [ParteLezione]) async throws -> String? {
+        var traccia = ""
+        for (i, p) in parti.enumerated() {
+            let riga = "\(i + 1). \(p.titolo): \(p.riassunto.prefix(260))\n"
+            if traccia.count + riga.count > 7_000 { break }
+            traccia += riga
+        }
+        let sessione = LanguageModelSession(instructions: istruzioni)
+        let r = try await sessione.respond(to: """
+            Questi sono gli argomenti di una lezione, nell'ordine in cui sono stati trattati. Scrivi un paragrafo di \
+            4-6 frasi che descriva di cosa parla la lezione nel suo insieme e come gli argomenti si collegano. Solo il \
+            paragrafo, senza titolo.
+
+            \(traccia)
+            """)
+        let t = r.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.count > 40 ? t : nil
+    }
+
+    @available(iOS 26.0, *)
+    private static func documento(_ parti: [ParteLezione], inBreve: String?) -> String {
+        var md: [String] = []
+        if let inBreve { md += ["## In breve", inBreve, ""] }
+        md.append("## Riassunto")
+        for p in parti {
+            md += ["### \(p.titolo.trimmingCharacters(in: .whitespacesAndNewlines))", p.riassunto.trimmingCharacters(in: .whitespacesAndNewlines), ""]
+        }
+        var visti = Set<String>()
+        let punti = parti.flatMap(\.puntiChiave).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && visti.insert($0.lowercased()).inserted }
+        md.append("## Punti chiave")
+        md += punti.map { "- \($0)" }
+        md.append("")
+        let domande = parti.flatMap(\.domande).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        md.append("## Da ripassare")
+        md += domande.enumerated().map { "\($0.offset + 1). \($0.element)" }
+        return md.joined(separator: "\n")
     }
     #endif
 

@@ -194,6 +194,7 @@ struct ImpostazioniView: View {
     @State private var fotoItem: PhotosPickerItem?
     @AppStorage("sogliaFrequenzaManuale") private var sogliaManuale = 0
     @AppStorage("miglioraAudio") private var miglioraAudio = true
+    @AppStorage("motoreTrascrizione") private var motoreTrascrizione = MotoreTrascrizione.apple.rawValue
 
     var body: some View {
         List {
@@ -232,6 +233,9 @@ struct ImpostazioniView: View {
                      : "In automatico vale la percentuale indicata dal sistema presenze, finché non si trova il manifesto degli studi del tuo corso.")
             }
             Section {
+                NavigationLink { ImpostazioniTrascrizioneView() } label: {
+                    LabeledContent("Trascrizione", value: (MotoreTrascrizione(rawValue: motoreTrascrizione) ?? .apple).nome)
+                }
                 Toggle("Migliora l'audio dopo ogni registrazione", isOn: $miglioraAudio)
             } header: {
                 Text("Registrazioni")

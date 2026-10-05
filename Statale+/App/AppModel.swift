@@ -21,6 +21,7 @@ final class AppModel {
     let recordings = RecordingStore()
     let recorder = AudioRecorder()
     let elaborazioni = ElaborazioniAudio()
+    let whisper = GestoreWhisper()
     /// Apre in Registrazioni l'elenco delle registrazioni recuperate (dall'avviso all'avvio).
     var mostraRecuperate = false
     /// L'avviso sulle registrazioni recuperate si mostra una volta per avvio.

@@ -7,6 +7,8 @@ struct TrascrizioneSection: View {
     let registrazione: Registrazione
     @Environment(AppModel.self) private var app
     @State private var anteprima: String?
+    @State private var mostraMotori = false
+    @AppStorage("motoreTrascrizione") private var motore = MotoreTrascrizione.apple.rawValue
 
     var body: some View {
         let id = registrazione.id
@@ -31,8 +33,23 @@ struct TrascrizioneSection: View {
         } header: {
             Text("Trascrizione")
         } footer: {
-            if registrazione.trascrittaIl == nil, LimitiElaborazione.bloccoTrascrizione(registrazione) == nil {
-                Text("Riconoscimento vocale di Apple in italiano, sul dispositivo quando supportato. Puoi uscire da questa schermata durante la trascrizione.")
+            if registrazione.trascrittaIl == nil, LimitiElaborazione.bloccoTrascrizione(registrazione) == nil,
+               app.elaborazioni.stato(.trascrizione, id) == nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    if motore == MotoreTrascrizione.whisper.rawValue, WhisperLocale.installato {
+                        Text("Trascrizione con Whisper, sul dispositivo: più precisa ma più lenta e pesante per la batteria.")
+                    } else {
+                        Text("Riconoscimento vocale di Apple in italiano, sul dispositivo. Sono disponibili altri modelli più accurati.")
+                    }
+                    Button("Scegli il motore di trascrizione") { mostraMotori = true }
+                        .font(.footnote.weight(.semibold))
+                }
+            }
+        }
+        .sheet(isPresented: $mostraMotori) {
+            NavigationStack {
+                ImpostazioniTrascrizioneView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { mostraMotori = false } } }
             }
         }
         .task(id: registrazione.trascrittaIl) {
@@ -100,6 +117,7 @@ private struct StatoElaborazione: View {
             } currentValueLabel: {
                 Text(stato.progresso.formatted(.percent.precision(.fractionLength(0)))).font(.caption.monospacedDigit())
             }
+            Text(NotaBackground.testo).font(.caption).foregroundStyle(.secondary)
             Button("Annulla", role: .destructive, action: annulla).font(.callout).buttonStyle(.borderless)
         }
         .padding(.vertical, 4)
@@ -184,6 +202,7 @@ struct RiassuntoView: View {
     @State private var testo = ""
     @State private var caricato = false
     @State private var modifica = false
+    @State private var pdf: URL?
 
     var body: some View {
         Group {
@@ -212,8 +231,10 @@ struct RiassuntoView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    ShareLink(item: testo) { Label("Condividi", systemImage: "square.and.arrow.up") }
-                    Button { UIPasteboard.general.string = testo } label: { Label("Copia", systemImage: "doc.on.doc") }
+                    if let pdf {
+                        ShareLink(item: pdf) { Label("Condividi o stampa il PDF", systemImage: "printer") }
+                    }
+                    Button { UIPasteboard.general.string = testo } label: { Label("Copia il testo", systemImage: "doc.on.doc") }
                     Button {
                         if let r = app.recordings.item(id) { app.elaborazioni.riassumi(r, in: app.recordings) }
                         dismiss()
@@ -230,6 +251,12 @@ struct RiassuntoView: View {
             guard !caricato else { return }
             testo = app.recordings.riassunto(id) ?? ""
             caricato = true
+        }
+        .task(id: modifica ? "" : testo) {
+            // PDF rigenerato quando il testo cambia (non durante la modifica).
+            guard !modifica, !testo.isEmpty, let r = app.recordings.item(id) else { return }
+            pdf = PDFRiassunto.crea(markdown: testo, titolo: r.titolo,
+                                    sottotitolo: [r.insegnamento, r.creata.italiano(date: .long, time: .shortened)].compactMap { $0 }.joined(separator: " · "))
         }
         .onDisappear { salva() }
     }
@@ -250,9 +277,12 @@ struct MarkdownTesto: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(markdown.components(separatedBy: "\n").enumerated()), id: \.offset) { _, riga in
                 let r = riga.trimmingCharacters(in: .whitespaces)
-                if r.hasPrefix("#") {
+                if r.hasPrefix("###") {
                     Text(inline(r.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces)))
-                        .font(.headline).padding(.top, 6)
+                        .font(.subheadline.weight(.semibold)).padding(.top, 4)
+                } else if r.hasPrefix("#") {
+                    Text(inline(r.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces)))
+                        .font(.title3.bold()).padding(.top, 10)
                 } else if r.hasPrefix("- ") || r.hasPrefix("* ") || r.hasPrefix("• ") {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text("•")

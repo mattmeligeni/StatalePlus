@@ -23,6 +23,12 @@ nonisolated enum Preferenze {
         set { defaults.set(newValue, forKey: "sogliaFrequenzaManuale") }
     }
 
+    /// Motore di trascrizione scelto in Impostazioni (predefinito: Apple).
+    static var motoreTrascrizione: MotoreTrascrizione {
+        get { defaults.string(forKey: "motoreTrascrizione").flatMap(MotoreTrascrizione.init(rawValue:)) ?? .apple }
+        set { defaults.set(newValue.rawValue, forKey: "motoreTrascrizione") }
+    }
+
     /// Miglioramento automatico dell'audio dopo ogni registrazione (predefinito: attivo).
     static var miglioraAudio: Bool {
         get { defaults.object(forKey: "miglioraAudio") as? Bool ?? true }

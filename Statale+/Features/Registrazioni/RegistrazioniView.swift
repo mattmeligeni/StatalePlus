@@ -457,6 +457,7 @@ private struct MiglioramentoSection: View {
                     } currentValueLabel: {
                         Text(s.progresso.formatted(.percent.precision(.fractionLength(0)).locale(Formats.it)))
                     }
+                    Text(NotaBackground.testo).font(.caption).foregroundStyle(.secondary)
                     Button("Annulla", role: .cancel) { app.elaborazioni.annulla(.miglioramento, id) }
                         .font(.caption)
                         .buttonStyle(.borderless)

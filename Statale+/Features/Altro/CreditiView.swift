@@ -51,6 +51,7 @@ struct CreditiView: View {
         ("Tecnologie Apple", [
             Voce(nome: "Swift e SwiftUI", descrizione: "Linguaggio e interfaccia dell'app", link: "https://developer.apple.com/swiftui/"),
             Voce(nome: "Speech", descrizione: "Trascrizione delle registrazioni", link: "https://developer.apple.com/documentation/speech"),
+            Voce(nome: "WhisperKit (Argmax)", descrizione: "Trascrizione con Whisper sul dispositivo · licenza MIT", link: "https://github.com/argmaxinc/argmax-oss-swift"),
             Voce(nome: "Apple Intelligence – Foundation Models", descrizione: "Riassunti delle lezioni sul dispositivo", link: "https://developer.apple.com/documentation/foundationmodels"),
             Voce(nome: "Writing Tools", descrizione: "Revisione di trascrizioni e riassunti", link: "https://developer.apple.com/apple-intelligence/"),
             Voce(nome: "AVFoundation", descrizione: "Registrazione, riproduzione e scansione QR", link: "https://developer.apple.com/documentation/avfoundation"),

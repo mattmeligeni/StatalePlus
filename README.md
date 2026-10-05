@@ -154,16 +154,49 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   file temporanei PCM. Su una lezione reale di 2 h 41 min (−38,9 LUFS): −16,6 LUFS, distanza voce/pause da 8,9 a
   17,8 dB (`ffmpeg loudnorm` arriva a −23 LUFS e lascia la distanza a 8,5 dB); 48 s su Mac, 32 MB di memoria.
   L'originale resta in `<id>.originale.m4a` e si può ripristinare; la trascrizione usa la versione migliorata.
-- **Trascrizione** in italiano con il framework Speech di Apple:
-  - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber` on-device, pensati per audio lunghi (il modello della lingua viene
-    scaricato la prima volta);
-  - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 s, on-device quando supportato, con punteggiatura.
+- **Trascrizione** in italiano, con tre motori a scelta in _Impostazioni › Registrazioni › Trascrizione_ (sotto la
+  trascrizione c'è la nota "Sono disponibili altri modelli più accurati" con il collegamento alla scelta):
+  - **Apple** (predefinito): locale, privato, veloce e leggero.
+    - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber` con il preset `.transcription` (quello più accurato, per
+      dettatura e audio lunghi). Il nome dell'insegnamento si passa come parole di contesto (`AnalysisContext`).
+      Il modello della lingua viene scaricato la prima volta.
+    - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 s, on-device quando supportato, con punteggiatura.
+  - **Whisper** (WhisperKit di Argmax): locale, più preciso, ma richiede un **download aggiuntivo di 626 MB**. È più
+    pesante e consuma più batteria, soprattutto sulle registrazioni lunghe.
+    - Modello `openai_whisper-large-v3-v20240930_626MB` (Large v3 Turbo, la versione più recente pubblicata in
+      `argmaxinc/whisperkit-coreml`, compressa per iPhone).
+    - Richiede A15 o successivo (`WhisperKit.recommendedModels()`): su chip più vecchi l'opzione è disattivata.
+    - Prima del download un avviso mostra dimensione, spazio libero, rete (Wi-Fi consigliato, possibili costi su
+      rete cellulare), primo piano consigliato, consumo di batteria e privacy.
+    - Il modello sta in `Application Support/Modelli` (escluso dal backup), con un file marcatore scritto solo a
+      download completato; si può annullare il download o eliminare il modello.
+    - La trascrizione legge l'audio a blocchi (`.incremental`), divide in base al parlato (VAD), forza l'italiano e
+      scarta i segmenti di silenzio e le frasi inventate tipiche ("Sottotitoli a cura di…"). La prima volta Core ML
+      prepara il modello e serve qualche minuto in più.
+  - **Remoto Pro**: a pagamento, non ancora disponibile (mostrato disattivato).
   - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
     (iOS 18+), conteggio parole, condivisione, nuova trascrizione.
-- **Riassunto con Apple Intelligence** (FoundationModels, iOS 26+, solo se disponibile sul dispositivo): la trascrizione è
-  divisa in parti (il modello on-device ha un contesto di ~4K token), ogni parte diventa appunti e gli appunti diventano un
-  riassunto in Markdown con _Riassunto_, _Punti chiave_ e _Da ripassare_ (domande di verifica). Visualizzazione formattata,
-  modifica con Writing Tools, rigenerazione. Se Apple Intelligence è disattivata o in download l'app lo indica.
+- **Riassunto con Apple Intelligence** (FoundationModels, iOS 26+, modello on-device di sistema, solo se disponibile):
+  - La trascrizione è divisa in parti di circa 4000 caratteri: il modello on-device ha un contesto di ~4K token, e la
+    parte si riduce da sola se non ci sta.
+  - Ogni parte diventa appunti strutturati con generazione guidata (`@Generable`): titolo, riassunto di un paragrafo,
+    3–6 punti chiave, 2–3 domande.
+  - Il documento finale contiene:
+    - _In breve_;
+    - _Riassunto_ con un paragrafo per ogni parte della lezione;
+    - _Punti chiave_ senza duplicati;
+    - _Da ripassare_ numerato.
+    Su una lezione di 2 ore sono più pagine, non poche righe.
+  - Visualizzazione formattata, modifica con Writing Tools, rigenerazione.
+  - **PDF A4** da condividere o stampare: è generato dall'app con titolo, insegnamento e data.
+  - Se Apple Intelligence è disattivata o in download, l'app lo indica.
+- **Lavori lunghi in background** (`EsecuzioneEstesa`): trascrizione, riassunto, miglioramento dell'audio e download di
+  Whisper.
+  - Da iOS 26 usano `BGContinuedProcessingTask`. Se si esce dall'app il lavoro continua, con l'avanzamento in
+    un'attività di sistema da cui si può annullare.
+  - Prima di iOS 26 c'è il tempo extra di `beginBackgroundTask`.
+  - Nelle sezioni una nota ricorda che in primo piano è più veloce.
+  - Il lavoro pesante gira fuori dal main thread (attori e funzioni `@concurrent`).
 - **Protezioni** contro elaborazioni inutili e riassunti inventati:
   - trascrizione solo per registrazioni di almeno **1 minuto**, riassunto solo da **5 minuti** (controllo sia nell'interfaccia
     sia nel gestore dei lavori, con il motivo mostrato al posto del pulsante);
@@ -206,11 +239,11 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     coincide con il regolamento; l'app legge l'obbligo di frequenza dal **manifesto degli studi** del corso (es. "almeno
     il 50% del monte ore"); il PDF del manifesto si apre nell'app con Quick Look. In _Impostazioni_ si può scegliere
     una soglia diversa.
-- **Impostazioni**: foto profilo, account (nome e corso leggibili), soglia di frequenza, stato delle sessioni (pallino
+- **Impostazioni**: foto profilo, account (nome e corso leggibili), soglia di frequenza, motore di trascrizione, stato delle sessioni (pallino
   verde / grigio), dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
 - **Crediti** (sezione separata in fondo): servizi dell'Ateneo, piattaforme (Moodle, EasyStaff/EasyAcademy) e tecnologie
-  Apple usate, ciascuno con il proprio link. Disclaimer e copyright con la versione dell'app stanno in fondo ad _Altro_.
+  Apple usate, WhisperKit (licenza MIT), ciascuno con il proprio link. Disclaimer e copyright con la versione dell'app stanno in fondo ad _Altro_.
 
 ### Mappe
 
@@ -236,8 +269,10 @@ dei docenti, manifesto degli studi) si scaricano e si mostrano con Quick Look (`
 ## Requisiti e build
 
 - Xcode 27 (Swift 6.4), target **iOS 17.0+**, iPhone e iPad.
-- **Nessuna dipendenza esterna**: HTML, CSS selector, XML, JSON, Keychain, audio e fotocamera usano solo il parser
-  interno e i framework di sistema.
+- **Una sola dipendenza esterna**: [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) (Swift Package, 1.1.x,
+  MIT) per il motore di trascrizione Whisper opzionale; si porta dietro solo `swift-argument-parser`. HTML, CSS
+  selector, XML, JSON, Keychain, audio, fotocamera, trascrizione Apple e riassunti usano il parser interno e i
+  framework di sistema.
 
 ```bash
 open Statale+.xcodeproj
@@ -254,7 +289,8 @@ una build non firmata non ha l'`application-identifier` del team e quindi non ve
 Portachiavi dalla build di Xcode.
 
 Impostazioni di progetto rilevanti: `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
-`SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (solo `UIBackgroundModes = audio`).
+`SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (`UIBackgroundModes = audio,
+processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.elaborazione.*` per i lavori lunghi).
 
 ---
 
@@ -266,7 +302,7 @@ Statale+/
 ├── Core/
 │   ├── Auth/            CASSession, ArielSession, KeychainStore
 │   ├── HTML/            parser HTML tollerante + selettori CSS (sostituisce librerie esterne)
-│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech), riassunti (FoundationModels)
+│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech, WhisperKit), riassunti (FoundationModels), lavori in background
 │   ├── Networking/      HTTPClient (rate limiting per host, redirect guard, rilevazione Cloudflare)
 │   ├── Persistence/     StableStore (cache stabile su disco)
 │   └── Util/            formati di data/importi, decodifica tollerante, helper HTML
@@ -406,6 +442,8 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 | Foto profilo                                                                                               | `Application Support/profilo.jpg`                                                                                         |
 | Registrazioni                                                                                              | `Application Support/Registrazioni/<id>.m4a` (AAC mono 64 kbps, ~29 MB/ora) + metadati `<id>.json` + indice `registrazioni.json` |
 | Trascrizioni e riassunti                                                                                   | `Application Support/Registrazioni/<id>.txt` e `<id>.riassunto.md`, separati dall'indice                                  |
+| Modello Whisper (se scaricato)                                                                             | `Application Support/Modelli/models/argmaxinc/whisperkit-coreml/<variante>` + marcatore `installato-<variante>`, esclusi dal backup |
+| Motore di trascrizione scelto                                                                              | `UserDefaults` (`motoreTrascrizione`: `apple`, `whisper`)                                                                  |
 | Audio originale (se migliorato)                                                                            | `Application Support/Registrazioni/<id>.originale.m4a`; `<id>.m4a` è la versione migliorata                                |
 | Cookie di sessione                                                                                         | `HTTPCookieStorage` di sistema                                                                                            |
 | Orario, appelli, tasse, presenze, aule, esiti, partecipanti                                                | solo in memoria                                                                                                           |
@@ -437,6 +475,7 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 | Fotocamera          | scansione del QR del codice lezione                 |
 | Riconoscimento vocale | trascrizione delle registrazioni (iOS 17–25)      |
 | Audio in background | la registrazione continua a schermo bloccato        |
+| Elaborazione in background | trascrizione, riassunto, miglioramento e download di Whisper proseguono fuori dall'app (iOS 26+) |
 | Libreria foto       | nessun permesso: la foto profilo usa `PhotosPicker` |
 
 ---
@@ -471,13 +510,23 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 
 - Ogni modifica va accompagnata dall'aggiornamento di questo README (funzionalità, endpoint, formati, stato dei lavori)
   e da una voce nel [Changelog](#changelog).
-- Nessuna dipendenza esterna senza una ragione forte.
+- Nessuna dipendenza esterna senza una ragione forte (oggi solo WhisperKit, per il motore opzionale).
 - Mai dati personali reali (nomi, matricole, indirizzi) nel codice, nei commenti o nei test: usare segnaposto
   (`MARIO ROSSI`, `12345A`).
 
 ---
 
 ## Changelog
+
+### 2026-10-05 (3)
+
+- Trascrizione: scelta del motore fra Apple (predefinito, preset più accurato con parole di contesto), Whisper Large v3
+  Turbo locale con WhisperKit (download di 626 MB con avviso su rete, spazio e batteria) e Remoto Pro (non ancora
+  disponibile).
+- Trascrizioni, riassunti, miglioramento dell'audio e download proseguono in background (`BGContinuedProcessingTask`
+  su iOS 26+), con una nota che consiglia il primo piano.
+- Riassunto più completo (in breve, riassunto per parti, punti chiave, da ripassare) ed esportabile in PDF A4 da
+  condividere o stampare.
 
 ### 2026-10-05 (2)
 

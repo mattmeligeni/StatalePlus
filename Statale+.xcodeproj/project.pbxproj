@@ -6,6 +6,10 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		49FBE4A2306C093A00202E63 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 49FBE4A1306C093A00202E63 /* WhisperKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		49FBE429306C093A00202E63 /* Statale+.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Statale+.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -22,6 +26,7 @@
 		49FBE426306C093A00202E63 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				49FBE4A2306C093A00202E63 /* WhisperKit in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -60,6 +65,9 @@
 				49FBE42B306C093A00202E63 /* Statale+ */,
 			);
 			name = "Statale+";
+			packageProductDependencies = (
+				49FBE4A1306C093A00202E63 /* WhisperKit */,
+			);
 			productName = "Statale+";
 			productReference = 49FBE429306C093A00202E63 /* Statale+.app */;
 			productType = "com.apple.product-type.application";
@@ -88,6 +96,9 @@
 			);
 			mainGroup = 49FBE420306C093A00202E63;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				49FBE4A0306C093A00202E63 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 49FBE42A306C093A00202E63 /* Products */;
 			projectDirPath = "";
@@ -330,6 +341,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		49FBE4A0306C093A00202E63 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		49FBE4A1306C093A00202E63 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 49FBE4A0306C093A00202E63 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
+			productName = WhisperKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 49FBE421306C093A00202E63 /* Project object */;
 	validationLevel = 1;

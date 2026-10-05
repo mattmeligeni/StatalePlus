@@ -1,8 +1,8 @@
 import Foundation
 import Observation
-import UIKit
 
-/// Trascrizioni e riassunti in corso, indipendenti dalla schermata aperta (si può uscire dal dettaglio).
+/// Trascrizioni, riassunti e miglioramenti in corso, indipendenti dalla schermata aperta. Girano in
+/// `EsecuzioneEstesa`: da iOS 26 continuano anche uscendo dall'app (con l'avanzamento mostrato da iOS).
 @Observable
 final class ElaborazioniAudio {
     enum Tipo { case trascrizione, riassunto, miglioramento }
@@ -10,6 +10,7 @@ final class ElaborazioniAudio {
     struct Stato: Equatable {
         var progresso: Double
         var messaggio: String
+        var motore: MotoreTrascrizione? = nil
     }
 
     private(set) var trascrizioni: [UUID: Stato] = [:]
@@ -34,17 +35,18 @@ final class ElaborazioniAudio {
         erroriMiglioramento[r.id] = nil
         miglioramenti[r.id] = Stato(progresso: 0, messaggio: "Miglioramento dell'audio…")
         let id = r.id
+        let titolo = r.titolo
         tasks["m\(id)"] = Task {
-            // Qualche decina di secondi in più se si esce dall'app: basta per le registrazioni brevi.
-            let bg = UIApplication.shared.beginBackgroundTask(withName: "Miglioramento audio")
-            defer { if bg != .invalid { UIApplication.shared.endBackgroundTask(bg) } }
             do {
-                try await store.migliora(id) { p in
-                    Task { @MainActor in self.miglioramenti[id]?.progresso = p }
+                try await EsecuzioneEstesa.esegui(titolo: "Miglioramento audio", sottotitolo: titolo) { sistema in
+                    try await store.migliora(id) { p in
+                        sistema(p)
+                        Task { @MainActor in self.miglioramenti[id]?.progresso = p }
+                    }
                 }
             } catch is CancellationError {
             } catch {
-                erroriMiglioramento[id] = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                erroriMiglioramento[id] = Self.messaggio(error)
             }
             miglioramenti[id] = nil
             tasks["m\(id)"] = nil
@@ -56,18 +58,25 @@ final class ElaborazioniAudio {
         if miglioramenti[r.id] != nil { errori[r.id] = "Attendi la fine del miglioramento dell'audio."; return }
         if let motivo = LimitiElaborazione.bloccoTrascrizione(r) { errori[r.id] = motivo; return }
         errori[r.id] = nil
-        trascrizioni[r.id] = Stato(progresso: 0, messaggio: "Preparazione…")
+        // Whisper solo se scelto e scaricato; altrimenti Apple.
+        let motore: MotoreTrascrizione = Preferenze.motoreTrascrizione == .whisper && WhisperLocale.installato ? .whisper : .apple
+        trascrizioni[r.id] = Stato(progresso: 0, messaggio: "Preparazione…", motore: motore)
         let url = store.url(for: r)
         let id = r.id
+        let contesto = [r.insegnamento].compactMap { $0 }
+        let titolo = r.titolo
         tasks["t\(id)"] = Task {
             do {
-                let testo = try await Trascrittore.trascrivi(url) { p, m in
-                    Task { @MainActor in self.trascrizioni[id]?.progresso = p; self.trascrizioni[id]?.messaggio = m }
+                let testo = try await EsecuzioneEstesa.esegui(titolo: "Trascrizione (\(motore.nome))", sottotitolo: titolo) { sistema in
+                    try await Trascrittore.trascrivi(url, motore: motore, contesto: contesto) { p, m in
+                        sistema(p)
+                        Task { @MainActor in self.trascrizioni[id]?.progresso = p; self.trascrizioni[id]?.messaggio = m }
+                    }
                 }
                 store.salvaTrascrizione(id, testo)
             } catch is CancellationError {
             } catch {
-                errori[id] = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                errori[id] = Self.messaggio(error)
             }
             trascrizioni[id] = nil
             tasks["t\(id)"] = nil
@@ -82,19 +91,27 @@ final class ElaborazioniAudio {
         errori[r.id] = nil
         riassunti[r.id] = Stato(progresso: 0, messaggio: "Preparazione…")
         let id = r.id
+        let titolo = r.titolo
         tasks["r\(id)"] = Task {
             do {
-                let md = try await AppleIntelligence.riassumi(testo) { p, m in
-                    Task { @MainActor in self.riassunti[id]?.progresso = p; self.riassunti[id]?.messaggio = m }
+                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo) { sistema in
+                    try await AppleIntelligence.riassumi(testo) { p, m in
+                        sistema(p)
+                        Task { @MainActor in self.riassunti[id]?.progresso = p; self.riassunti[id]?.messaggio = m }
+                    }
                 }
                 store.salvaRiassunto(id, md)
             } catch is CancellationError {
             } catch {
-                errori[id] = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                errori[id] = Self.messaggio(error)
             }
             riassunti[id] = nil
             tasks["r\(id)"] = nil
         }
+    }
+
+    private static func messaggio(_ error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
     func annulla(_ tipo: Tipo, _ id: UUID) {
