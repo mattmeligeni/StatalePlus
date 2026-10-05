@@ -432,7 +432,10 @@ struct RegistrazioneDetailView: View {
                         TextField("Appunti sulla lezione", text: campo(\.note, ""), axis: .vertical).lineLimit(4...)
                     }
                     Section {
-                        ShareLink(item: app.recordings.url(for: r)) { Label("Condividi audio", systemImage: "square.and.arrow.up") }
+                        ShareLink(item: AudioCondiviso(sorgente: app.recordings.url(for: r), nome: r.nomeCondivisione),
+                                  preview: SharePreview(r.nomeCondivisione)) {
+                            Label("Condividi audio", systemImage: "square.and.arrow.up")
+                        }
                         Button("Elimina registrazione", role: .destructive) { confermaElimina = true }
                     }
                 }

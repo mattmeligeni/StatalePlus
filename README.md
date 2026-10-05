@@ -137,6 +137,10 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   (numero, durata totale, data dell'ultima); toccandone uno si apre il suo elenco. La ricerca per titolo,
   insegnamento o note mostra i risultati in un'unica lista.
 - Dettaglio: player (±15/30 s, velocità 0,75–2×, salto ai segnalibri), titolo, insegnamento, note, condivisione, eliminazione.
+- **Condivisione dell'audio con un nome leggibile** ("Colloquio e processo anamnestico – 30 set 2026, ore 10.15.m4a"
+  invece di `<id>.m4a`), ricavato al momento da titolo, data e ora, quindi anche per le registrazioni già fatte.
+  Sul dispositivo i file restano `<id>.m4a`, perché indice, recupero, trascrizioni e riassunti si basano sull'id. La
+  copia da condividere è un clone APFS in `tmp/Condivisi`: istantaneo e senza spazio in più; si elimina dopo un'ora.
 - **Eliminazione** (dal dettaglio o con lo swipe) sempre con conferma: rimuove audio, metadati, trascrizione, riassunto e la
   voce di `registrazioni.json`, e ferma trascrizioni o riassunti in corso per quella registrazione.
 - **Riconciliazione all'avvio** fra file e indice:
@@ -174,7 +178,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
       si misura sui byte già su disco (626 720 156 in tutto): WhisperKit conta i file scaricati, e la sua percentuale
       resterebbe ferma a lungo sui pesi da centinaia di MB.
     - La trascrizione legge l'audio a blocchi (`.incremental`), divide in base al parlato (VAD), forza l'italiano e
-      scarta i segmenti di silenzio e le frasi inventate tipiche ("Sottotitoli a cura di…"). La prima volta Core ML
+      scarta i segmenti di silenzio e le frasi inventate tipiche ("Sottotitoli a cura di…"). Toglie anche le
+      ripetizioni a ciclo, quando Whisper ripete lo stesso pezzo (`senzaRipetizioni`): su una lezione reale di
+      20 minuti erano 15. La prima volta Core ML
       prepara il modello e serve qualche minuto in più.
   - **Remoto Pro**: a pagamento, non ancora disponibile (mostrato disattivato).
   - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
@@ -543,6 +549,14 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (5)
+
+- Audio condiviso con nome leggibile (titolo, data, ora), anche per le registrazioni esistenti.
+- Whisper: filtro per le ripetizioni a ciclo.
+- Prove su una lezione reale di 20 minuti e su una sintetica di circa 1 h 45 min: Apple contro Whisper per la
+  trascrizione; per il riassunto, Apple on-device contro Qwen 3.5 (4B e 2B) e Gemma 4 E2B con MLX. I file delle
+  prove restano fuori dalla repo.
 
 ### 2026-10-05 (4)
 

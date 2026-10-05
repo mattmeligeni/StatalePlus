@@ -172,6 +172,28 @@ nonisolated enum WhisperLocale {
             .filter { s in !s.isEmpty && !allucinazioni.contains { s.lowercased().contains($0) } }
             .joined(separator: " ")
         guard !testo.isEmpty else { throw Errore.vuota }
-        return testo
+        return senzaRipetizioni(testo)
+    }
+
+    /// Whisper a volte "si inceppa" e ripete lo stesso pezzo ("la valorezza la valorezza la valorezza"): su una
+    /// lezione reale di 20 minuti c'erano 15 ripetizioni così. Si tiene una sola copia di ogni gruppo di 1-8 parole
+    /// ripetuto subito dopo (confronto senza maiuscole e punteggiatura).
+    static func senzaRipetizioni(_ testo: String) -> String {
+        func chiave(_ p: Substring) -> String { p.lowercased().filter { $0.isLetter || $0.isNumber } }
+        var parole: [Substring] = []
+        var chiavi: [String] = []
+        for p in testo.split(separator: " ", omittingEmptySubsequences: true) {
+            parole.append(p)
+            chiavi.append(chiave(p))
+            for n in stride(from: 8, through: 1, by: -1) where chiavi.count >= 2 * n {
+                let k = chiavi.count
+                if chiavi[(k - n)...] == chiavi[(k - 2 * n)..<(k - n)], !chiavi[(k - n)...].allSatisfy(\.isEmpty) {
+                    parole.removeLast(n)
+                    chiavi.removeLast(n)
+                    break
+                }
+            }
+        }
+        return parole.joined(separator: " ")
     }
 }

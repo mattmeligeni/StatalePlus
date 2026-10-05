@@ -36,6 +36,24 @@ nonisolated struct Registrazione: Codable, Sendable, Identifiable, Hashable {
         insegnamento.map { "\($0) – \(creata.italiano(date: .abbreviated, time: .omitted))" }
             ?? "Registrazione del \(creata.italiano(date: .abbreviated, time: .shortened))"
     }
+
+    /// Nome del file quando si condivide l'audio: "Colloquio e processo anamnestico – 30 set 2026, ore 10.15".
+    /// Sul dispositivo i file restano `<id>.m4a` (indice, recupero, trascrizioni e riassunti si basano sull'id);
+    /// il nome leggibile si calcola al momento, quindi vale anche per le registrazioni già fatte e segue il titolo.
+    var nomeCondivisione: String {
+        let data = creata.italiano(date: .abbreviated, time: .omitted)
+        let ora = creata.italiano(date: .omitted, time: .shortened)
+        var nome = titolo.trimmingCharacters(in: .whitespacesAndNewlines)
+        if nome.isEmpty { nome = "Registrazione" }
+        if !nome.contains(data) { nome += " – \(data)" }
+        if !nome.contains(ora) { nome += ", ore \(ora)" }
+        // I due punti e le barre non sono ammessi (o danno problemi) nei nomi di file.
+        nome = nome.replacingOccurrences(of: ":", with: ".")
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: "\\", with: "-")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return String(nome.prefix(150))
+    }
 }
 
 // MARK: - Archivio
