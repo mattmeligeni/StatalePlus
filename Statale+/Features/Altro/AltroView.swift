@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import QuickLook
 import PhotosUI
 
@@ -256,6 +257,7 @@ struct ImpostazioniView: View {
                 .disabled(refreshing)
                 if let refreshError { Text(refreshError).font(.caption).foregroundStyle(.red) }
             }
+            ArchivioSection()
             Section {
                 Button("Esci", role: .destructive) { confirmLogout = true }
             } footer: {
@@ -277,5 +279,66 @@ struct ImpostazioniView: View {
         } message: {
             Text("Credenziali e dati dell'account vengono sempre rimossi. Registrazioni (\(app.recordings.items.count)), foto profilo e file scaricati possono restare sul dispositivo per usarli con un altro profilo.")
         }
+    }
+}
+
+
+/// Esporta tutte le registrazioni in un file da salvare in File o iCloud Drive, e le reimporta (per cambiare
+/// iPhone o reinstallare l'app senza perderle).
+private struct ArchivioSection: View {
+    @Environment(AppModel.self) private var app
+    @State private var archivio: URL?
+    @State private var inCorso = false
+    @State private var importa = false
+    @State private var messaggio: String?
+
+    var body: some View {
+        Section {
+            if let archivio {
+                ShareLink(item: archivio) {
+                    Label("Salva l'archivio (\(ByteCountFormatter.string(fromByteCount: dimensione(archivio), countStyle: .file)))",
+                          systemImage: "square.and.arrow.up")
+                }
+            } else {
+                Button { esporta() } label: {
+                    HStack { Label("Esporta tutte le registrazioni", systemImage: "archivebox"); Spacer(); if inCorso { ProgressView() } }
+                }
+                .disabled(inCorso || app.recordings.items.isEmpty)
+            }
+            Button { importa = true } label: { Label("Importa da un archivio", systemImage: "tray.and.arrow.down") }
+                .disabled(inCorso)
+            if let messaggio { Text(messaggio).font(.caption).foregroundStyle(.secondary) }
+        } header: {
+            Text("Backup delle registrazioni")
+        } footer: {
+            Text("Un unico file con audio, trascrizioni, riassunti e note, da salvare in File o iCloud Drive. Serve prima di disinstallare l'app o per passare a un altro iPhone. Le registrazioni già presenti non vengono duplicate.")
+        }
+        .fileImporter(isPresented: $importa, allowedContentTypes: [UTType(filenameExtension: "aar") ?? .data, .data]) { r in
+            guard case .success(let url) = r else { return }
+            inCorso = true
+            Task {
+                do {
+                    let n = try await ArchivioRegistrazioni.importa(url, in: app.recordings.folder)
+                    app.recordings.riconcilia()
+                    messaggio = n == 0 ? "Tutte le registrazioni dell'archivio erano già presenti." : "Importate \(n) registrazioni."
+                } catch {
+                    messaggio = app.message(error)
+                }
+                inCorso = false
+            }
+        }
+    }
+
+    private func esporta() {
+        inCorso = true
+        messaggio = nil
+        Task {
+            do { archivio = try await ArchivioRegistrazioni.esporta(da: app.recordings.folder) } catch { messaggio = app.message(error) }
+            inCorso = false
+        }
+    }
+
+    private func dimensione(_ url: URL) -> Int64 {
+        Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
     }
 }

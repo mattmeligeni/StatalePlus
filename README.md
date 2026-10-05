@@ -144,6 +144,13 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   invece di `<id>.m4a`), ricavato al momento da titolo, data e ora, quindi anche per le registrazioni già fatte.
   Sul dispositivo i file restano `<id>.m4a`, perché indice, recupero, trascrizioni e riassunti si basano sull'id. La
   copia da condividere è un clone APFS in `tmp/Condivisi`: istantaneo e senza spazio in più; si elimina dopo un'ora.
+- **Backup delle registrazioni** (_Impostazioni › Backup delle registrazioni_, `ArchivioRegistrazioni`).
+  - Esporta in un unico file `.aar` (AppleArchive, senza compressione: l'audio è già compresso) audio, originali,
+    metadati, trascrizioni e riassunti, da salvare in File o iCloud Drive.
+  - L'importazione estrae l'archivio, aggiunge solo le registrazioni che mancano e le inserisce nell'elenco tramite il
+    normale recupero dai file.
+  - Serve per cambiare iPhone e per il passaggio a un altro team di sviluppo: iOS non aggiorna un'app firmata con un
+    identificativo diverso, quindi va disinstallata, e disinstallando si perdono i dati.
 - **Eliminazione** (dal dettaglio o con lo swipe) sempre con conferma: rimuove audio, metadati, trascrizione, riassunto e la
   voce di `registrazioni.json`, e ferma trascrizioni o riassunti in corso per quella registrazione.
 - **Riconciliazione all'avvio** fra file e indice:
@@ -677,6 +684,10 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (11)
+
+- Backup delle registrazioni: esportazione e importazione di un archivio con audio, trascrizioni, riassunti e note.
 
 ### 2026-10-05 (10)
 
