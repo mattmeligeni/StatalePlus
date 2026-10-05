@@ -137,6 +137,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   (numero, durata totale, data dell'ultima); toccandone uno si apre il suo elenco. La ricerca per titolo,
   insegnamento o note mostra i risultati in un'unica lista.
 - Dettaglio: player (±15/30 s, velocità 0,75–2×, salto ai segnalibri), titolo, insegnamento, note, condivisione, eliminazione.
+  - L'audio continua aprendo trascrizione o riassunto a pagina intera, dove compare un mini player (pausa, ±15/30 s,
+    tempo). Quelle schermate "tengono" il player (`AudioPlayer.utilizzatori`); il dettaglio lo chiude solo se, uscendo,
+    nessuna lo sta usando. Se era chiuso, il play riapre il file dal punto in cui era.
 - **Condivisione dell'audio con un nome leggibile** ("Colloquio e processo anamnestico – 30 set 2026, ore 10.15.m4a"
   invece di `<id>.m4a`), ricavato al momento da titolo, data e ora, quindi anche per le registrazioni già fatte.
   Sul dispositivo i file restano `<id>.m4a`, perché indice, recupero, trascrizioni e riassunti si basano sull'id. La
@@ -230,6 +233,13 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
       sezioni già scritte.
     - Il tokenizer è quello di swift-transformers, con un adattatore scritto a mano: niente macro di pacchetto da
       abilitare in Xcode.
+  - **Apple Intelligence online** (`NuvolaApple`, Private Cloud Compute, iOS 27): il modello più grande di Apple sui
+    suoi server, con 32K token di contesto.
+    - Usa la stessa pipeline a sezioni di Qwen (`RiassuntoASezioni`), con blocchi da circa 6000 parole.
+    - Mostra il limite giornaliero di richieste e l'offerta di Apple per alzarlo con iCloud+.
+    - Serve l'entitlement `com.apple.developer.private-cloud-compute`, concesso da Apple su richiesta a chi è
+      nell'App Store Small Business Program. Finché manca, `StatalePCCAutorizzata = NO` in Info.plist e l'opzione
+      non compare (al suo posto "Remoto Pro · Presto").
   - **Apple Intelligence** (FoundationModels, iOS 26+, modello on-device di sistema, solo se disponibile):
     - La trascrizione è divisa in parti di circa 4000 caratteri, perché il modello ha un contesto di ~4K token. Se una
       parte non ci sta si divide solo quella e si va avanti. Prima si ricominciava da capo con parti più piccole: su
@@ -241,6 +251,25 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     - Se Apple Intelligence è disattivata o in download, l'app lo indica.
   - Visualizzazione formattata, modifica con Writing Tools, rigenerazione.
   - **PDF A4** da condividere o stampare: è generato dall'app con titolo, insegnamento e data.
+- **Glossario del corso** (_Altro › IA › Glossario del corso_, `GlossarioCorso`, `GestoreGlossario`): termini del corso
+  per correggere le parole storpiate dalla trascrizione ("dopamila" → "dopamina").
+  - Creazione: una richiesta per insegnamento (60 termini: concetti, strutture, sostanze, test, sindromi, metodi,
+    autori), più nomi degli insegnamenti e cognomi dei docenti. Modello usato, in ordine: Apple Intelligence online se
+    autorizzata, Qwen, Apple Intelligence sul telefono. Si crea da solo alla fine del download di Qwen; i termini si
+    possono aggiungere e togliere a mano.
+  - Correzione (`CorrettoreTermini`), automatica sulle nuove trascrizioni e su richiesta su quelle già fatte. Una parola
+    si sostituisce solo se:
+    - il correttore ortografico italiano di iOS non la conosce;
+    - non è una parola inglese valida;
+    - ha almeno 6 lettere;
+    - un solo termine le è vicinissimo: 1 lettera di differenza, 2 dalle 10 lettere in su;
+    - non è solo un'altra forma della stessa parola (singolare e plurale, derivati, parola contenuta nell'altra);
+    - mantiene la desinenza trascritta, e la maiuscola resta solo per i nomi propri.
+  - Prove: su 20 minuti di psicofarmacologia corregge "dopamila", "dopamita", "dopamia" e "serotonnina" in 0,08 s;
+    sulla lezione di neuroanatomia corregge "bidollo" e "mitollo" in "midollo" e "cebelletto" in "cervelletto". Le regole
+    sono state ristrette dopo correzioni sbagliate ("endogrine" → "endorfine", "neurotrasmettitore" al plurale).
+  - FluidAudio ha un sistema per suggerire parole a Parakeet, ma usa un modello aggiuntivo solo in inglese: non
+    adatto all'italiano.
 - **Catena automatica** (attiva per impostazione predefinita, _Altro › IA › Dopo ogni registrazione_). Alla fine di una
   registrazione partono, uno dopo l'altro, trascrizione, riassunto e miglioramento dell'audio: quando si apre la
   lezione è già tutto pronto. Uno dopo l'altro per non contendersi Neural Engine, GPU e CPU.
@@ -251,7 +280,12 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     sottotitolo: solo fase e tempo stimato, ad esempio "312 di 632 MB · circa 2 min" o "Trascritti 5 di 13 min · meno
     di un minuto". Il titolo è il tipo di lavoro ("Trascrizione", "Riassunto", "Download di Qwen").
   - GPU (Qwen) e, da iOS 27, Neural Engine in background richiedono entitlement ("Background GPU Access",
-    "Background Inference") che gli account sviluppatore personali non hanno.
+    "Background Inference") che gli account sviluppatore personali non hanno. Con l'account a pagamento Qwen chiede
+    la GPU in background (`EsecuzioneEstesa.esegui(gpu: true)`, `requiredResources = .gpu`, `gpuConcessa`) dove iOS la
+    supporta.
+    - Senza GPU in background il lavoro non passa dall'attività di sistema: iOS la chiudeva subito e il riassunto
+      sembrava non partire.
+    - Un'interruzione non chiesta dall'utente ora mostra un errore.
     - Un lavoro che si ferma per questo resta "in pausa" e riparte da solo al ritorno in
       primo piano (`PrimoPiano`, `ElaborazioniAudio.sospendi`).
     - Parakeet nel simulatore continua in background.
@@ -380,8 +414,14 @@ Portachiavi dalla build di Xcode.
 Impostazioni di progetto rilevanti: `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
 `SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (`UIBackgroundModes = audio,
 processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.elaborazione.*` per i lavori lunghi),
-Nessun entitlement: _Background GPU Access_ non è disponibile per i team personali, e
-_Background Inference_ non è ancora assegnabile.
+`ITSAppUsesNonExemptEncryption = NO` (solo HTTPS di sistema) e `StatalePCCAutorizzata` (vedi sopra).
+`PrivacyInfo.xcprivacy`: nessun tracciamento, nessun dato raccolto dallo sviluppatore. API dichiarate:
+UserDefaults (CA92.1), date dei file (C617.1) e spazio su disco (85F4.1, E174.1).
+
+`Statale+.entitlements` è pronto per l'account Apple Developer a pagamento ma non è ancora collegato al progetto
+(`CODE_SIGN_ENTITLEMENTS`): con il team personale la firma fallisce. Contiene _Background GPU Access_ e _Increased
+Memory Limit_ (più memoria per Qwen). _Background Inference_ non è ancora assegnabile; Private Cloud Compute si
+aggiunge quando Apple concede l'entitlement.
 
 ### Versione dimostrativa
 
@@ -637,6 +677,19 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05 (10)
+
+- **Glossario del corso** per correggere le parole storpiate dalla trascrizione, creato con Apple Intelligence
+  online, Qwen o Apple Intelligence.
+- Riassunti con **Apple Intelligence online** (Private Cloud Compute) pronti, attivabili quando Apple concede
+  l'entitlement.
+- Qwen: GPU in background con l'account a pagamento. Prima il riassunto sembrava non partire, ora le interruzioni di
+  iOS mostrano un errore.
+- Player: l'audio continua aprendo trascrizione e riassunto, con un mini player.
+- Dettaglio lezione: pulsante "Modifica" senza icona.
+- Pronti per TestFlight: manifest della privacy, dichiarazione sulla crittografia, entitlement per l'account a
+  pagamento (da collegare quando il team compare in Xcode).
 
 ### 2026-10-05 (9)
 

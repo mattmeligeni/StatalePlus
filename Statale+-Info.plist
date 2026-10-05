@@ -7,6 +7,10 @@
 		<string>audio</string>
 		<string>processing</string>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>StatalePCCAutorizzata</key>
+	<false/>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.mattiameligeni.Statale-.elaborazione.*</string>

@@ -216,6 +216,7 @@ extension AppModel {
         }
         fermaAutoRefresh()
         Demo.attiva = false
+        GlossarioCorso.eliminaTutti()
         KeychainStore.delete()
         CookieJar.clearUniversityCookies()
         store.wipe()
@@ -242,5 +243,17 @@ extension AppModel {
         bootstrapError = nil
         arielError = nil
         phase = .onboarding
+    }
+}
+
+extension AppModel {
+    /// Crea (o aggiorna) il glossario del corso con tutti gli insegnamenti del corso dello studente.
+    func creaGlossario() {
+        guard let s = studente else { return }
+        let insegnamenti = agenda.map { a in
+            a.insegnamenti.filter { $0.key.hasPrefix(a.mioCorsoOrario.cdl.valore + "|") }.values.flatMap { $0 }
+        } ?? []
+        var visti = Set<String>()
+        glossario.crea(corso: Testo.nomeCorso(s.corso), insegnamenti: insegnamenti.filter { visti.insert($0.codice).inserted })
     }
 }

@@ -13,11 +13,14 @@ nonisolated enum MotoreRiassunto: String, CaseIterable, Sendable {
     case apple
     /// Qwen 3.5 4B (Alibaba, Apache 2.0) con MLX, sul dispositivo: più accurato, download di ~3 GB.
     case qwen
+    /// Apple Intelligence su Private Cloud Compute (online, iOS 27): solo con l'entitlement concesso da Apple.
+    case cloud
 
     var nome: String {
         switch self {
         case .apple: "Apple Intelligence"
         case .qwen: "Qwen 3.5 4B"
+        case .cloud: "Apple Intelligence online"
         }
     }
 }
@@ -77,7 +80,7 @@ nonisolated enum QwenLocale {
     static func elimina() {
         try? FileManager.default.removeItem(at: cartella)
         try? FileManager.default.removeItem(at: conferma)
-        Task { await Sezioni.shared.svuota() }
+        Task { await RiassuntoASezioni.svuotaCache() }
     }
 
     enum Errore: LocalizedError {
@@ -92,20 +95,11 @@ nonisolated enum QwenLocale {
         }
     }
 
-    private static let istruzioni = """
-        Sei un assistente che prepara appunti di studio dettagliati per uno studente universitario. Scrivi sempre in \
-        italiano, in modo chiaro e completo, come appunti da cui si possa studiare senza riascoltare la lezione. Usa \
-        esclusivamente le informazioni presenti nel testo: non aggiungere argomenti, definizioni, esempi o domande che \
-        non derivano dal testo. La trascrizione automatica contiene errori di riconoscimento (parole sbagliate, nomi di \
-        autori storpiati, frasi spezzate): correggili quando il significato è evidente dal contesto, altrimenti ignora \
-        i passaggi incomprensibili. Tralascia saluti, avvisi organizzativi e pause, salvo indicazioni utili per l'esame.
-        """
-
     /// Riassume una trascrizione. `progresso` riceve (0…1, messaggio).
     @concurrent
     static func riassumi(_ trascrizione: String, progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         guard installato else { throw Errore.nonInstallato }
-        guard PrimoPiano.attivo else { throw Errore.inPausa }
+        guard PrimoPiano.attivo || EsecuzioneEstesa.gpuConcessa else { throw Errore.inPausa }
         #if os(iOS)
         guard UInt64(os_proc_available_memory()) >= memoriaNecessaria else { throw Errore.memoriaInsufficiente }
         #endif
@@ -114,116 +108,48 @@ nonisolated enum QwenLocale {
         defer { Memory.clearCache() }
         let modello = try await LLMModelFactory.shared.loadContainer(from: cartella, using: CaricatoreTokenizer())
 
-        let blocchi = dividiInBlocchi(trascrizione, parole: 2_200)
-        let chiave = trascrizione.hashValue
-        var sezioni = await Sezioni.shared.fatte(chiave)
-        for i in sezioni.count..<blocchi.count {
-            try Task.checkCancellation()
-            progresso(0.03 + 0.85 * Double(i) / Double(blocchi.count), "Parte \(i + 1) di \(blocchi.count)…")
-            let titoli = sezioni.flatMap(titoliSezioni).map { "- \($0)" }.joined(separator: "\n")
-            var richiesta = "Stai preparando gli appunti di una lezione divisa in \(blocchi.count) parti. Questa è la parte \(i + 1).\n"
-            if !titoli.isEmpty {
-                richiesta += "Argomenti già trattati nelle parti precedenti (non ripeterli, ma collega i nuovi concetti a questi quando il docente lo fa):\n\(titoli)\n"
-            }
-            richiesta += """
-
-                Scrivi gli appunti di questa parte in Markdown: una sezione `### Titolo` per ogni argomento nuovo, \
-                nell'ordine, con 1-3 paragrafi dettagliati (concetti, definizioni, autori, esempi, test e passaggi \
-                spiegati dal docente). Solo le sezioni, senza introduzione né conclusione.
-
-                Trascrizione della parte \(i + 1):
-                \(blocchi[i])
-                """
-            let testo = try await genera(richiesta, massimo: 3_000, con: modello)
-            sezioni.append(testo)
-            await Sezioni.shared.salva(chiave, sezioni)
+        return try await RiassuntoASezioni.riassumi(trascrizione, paroleBlocco: 2_200, progresso: progresso) { richiesta, massimo in
+            try await genera(richiesta, massimo: massimo, con: modello)
         }
-        let corpo = sezioni.joined(separator: "\n\n")
-        guard !corpo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw Errore.vuoto }
-        progresso(0.9, "Sintesi finale…")
-        let finale = try await genera("""
-            Questi sono gli appunti completi di una lezione. Scrivi, in Markdown:
-
-            ## In breve
-            Un paragrafo di 4-6 frasi su cosa tratta la lezione e come si collegano gli argomenti.
-
-            ## Punti chiave
-            Elenco puntato dei 10-15 concetti più importanti, ognuno in una frase completa.
-
-            ## Da ripassare
-            Elenco numerato di 10-15 domande di verifica a cui si risponde con gli appunti.
-
-            Appunti:
-            \(corpo)
-            """, massimo: 2_500, con: modello)
-        await Sezioni.shared.svuota(chiave)
-        progresso(1, "Completato")
-        return documento(corpo: corpo, finale: finale)
     }
 
-    /// "## In breve" + "## Riassunto" con le sezioni + "## Punti chiave" e "## Da ripassare" della passata finale.
-    private static func documento(corpo: String, finale: String) -> String {
-        let parti = finale.components(separatedBy: "## Punti chiave")
-        let inBreve = parti[0].trimmingCharacters(in: .whitespacesAndNewlines)
-        let resto = parti.count > 1 ? "## Punti chiave" + parti[1...].joined(separator: "## Punti chiave") : ""
-        // Le sezioni usano solo `###`: eventuali titoli di livello più alto scritti dal modello si abbassano.
-        let sezioni = corpo.split(separator: "\n", omittingEmptySubsequences: false).map { riga -> String in
-            riga.hasPrefix("## ") || riga.hasPrefix("# ") ? "### " + riga.drop { $0 == "#" || $0 == " " } : String(riga)
-        }.joined(separator: "\n")
-        var md = inBreve.hasPrefix("## In breve") ? inBreve : "## In breve\n" + inBreve
-        md += "\n\n## Riassunto\n\n" + sezioni.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !resto.isEmpty { md += "\n\n" + resto.trimmingCharacters(in: .whitespacesAndNewlines) }
-        return md
-    }
-
-    private static func titoliSezioni(_ testo: String) -> [String] {
-        testo.split(separator: "\n").filter { $0.hasPrefix("### ") }.map { $0.dropFirst(4).trimmingCharacters(in: .whitespaces) }
-    }
-
-    /// Blocchi di circa `parole` parole, rispettando i paragrafi.
-    static func dividiInBlocchi(_ testo: String, parole: Int) -> [String] {
-        var blocchi: [String] = []
-        var corrente: [Substring] = []
-        var conteggio = 0
-        for p in testo.split(separator: "\n", omittingEmptySubsequences: true) {
-            let n = p.split(separator: " ").count
-            if conteggio > 0, conteggio + n > parole {
-                blocchi.append(corrente.joined(separator: "\n\n"))
-                corrente = []
-                conteggio = 0
-            }
-            corrente.append(p)
-            conteggio += n
+    /// Più risposte brevi con lo stesso modello caricato una volta (es. gli elenchi del glossario del corso).
+    @concurrent
+    static func rispondi(_ richieste: [String], istruzioni: String, massimo: Int,
+                         progresso: @escaping @Sendable (Double) -> Void) async throws -> [String] {
+        guard installato else { throw Errore.nonInstallato }
+        guard PrimoPiano.attivo || EsecuzioneEstesa.gpuConcessa else { throw Errore.inPausa }
+        #if os(iOS)
+        guard UInt64(os_proc_available_memory()) >= memoriaNecessaria else { throw Errore.memoriaInsufficiente }
+        #endif
+        Memory.cacheLimit = 256 * 1024 * 1024
+        defer { Memory.clearCache() }
+        let modello = try await LLMModelFactory.shared.loadContainer(from: cartella, using: CaricatoreTokenizer())
+        var risposte: [String] = []
+        for (i, r) in richieste.enumerated() {
+            progresso(Double(i) / Double(max(richieste.count, 1)))
+            risposte.append(try await genera(r, massimo: massimo, con: modello, istruzioni: istruzioni, temperatura: 0.3))
         }
-        if !corrente.isEmpty { blocchi.append(corrente.joined(separator: "\n\n")) }
-        return blocchi
+        progresso(1)
+        return risposte
     }
 
     /// Una risposta del modello (senza il "ragionamento" di Qwen 3.5). Si ferma se l'app esce dal primo piano.
-    private static func genera(_ richiesta: String, massimo: Int, con modello: ModelContainer) async throws -> String {
+    private static func genera(_ richiesta: String, massimo: Int, con modello: ModelContainer,
+                               istruzioni: String = RiassuntoASezioni.istruzioni, temperatura: Float = 0.7) async throws -> String {
         let input = try await modello.prepare(input: UserInput(
             chat: [.system(istruzioni), .user(richiesta)],
             additionalContext: ["enable_thinking": false]))
-        let parametri = GenerateParameters(maxTokens: massimo, temperature: 0.7, topP: 0.8, topK: 20,
+        let parametri = GenerateParameters(maxTokens: massimo, temperature: temperatura, topP: 0.8, topK: 20,
                                            repetitionPenalty: 1.05, repetitionContextSize: 256)
         var testo = ""
         for await evento in try await modello.generate(input: input, parameters: parametri) {
-            guard PrimoPiano.attivo else { throw Errore.inPausa }
+            guard PrimoPiano.attivo || EsecuzioneEstesa.gpuConcessa else { throw Errore.inPausa }
             try Task.checkCancellation()
             if case .chunk(let pezzo) = evento { testo += pezzo }
         }
         return testo.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-}
-
-/// Sezioni già scritte per una trascrizione: se il riassunto si interrompe (app in background) riprende da lì.
-private actor Sezioni {
-    static let shared = Sezioni()
-    private var archivio: [Int: [String]] = [:]
-    func fatte(_ chiave: Int) -> [String] { archivio[chiave] ?? [] }
-    func salva(_ chiave: Int, _ sezioni: [String]) { archivio[chiave] = sezioni }
-    func svuota(_ chiave: Int) { archivio[chiave] = nil }
-    func svuota() { archivio = [:] }
 }
 
 /// Il tokenizer di swift-transformers adattato al protocollo di mlx-swift-lm (come la macro di MLXHuggingFace, scritto

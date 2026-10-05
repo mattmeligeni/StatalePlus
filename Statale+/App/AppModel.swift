@@ -25,6 +25,8 @@ final class AppModel {
     let parakeet = GestoreModello(.parakeet,
                                   dopoDownload: { Preferenze.motoreTrascrizione = .parakeet },
                                   dopoEliminazione: { if Preferenze.motoreTrascrizione == .parakeet { Preferenze.motoreTrascrizione = .apple } })
+    /// Glossario del corso per correggere le trascrizioni.
+    let glossario = GestoreGlossario()
     let qwen = GestoreModello(.qwen,
                               dopoDownload: { Preferenze.motoreRiassunto = .qwen },
                               dopoEliminazione: { if Preferenze.motoreRiassunto == .qwen { Preferenze.motoreRiassunto = .apple } })
@@ -95,6 +97,8 @@ final class AppModel {
     func start() async {
         guard phase == .launching else { return }
         Task.detached(priority: .background) { ModelliDismessi.elimina() }
+        glossario.codiceCorso = { [weak self] in self?.studente?.codiceCorso }
+        elaborazioni.correggiTesto = { [weak self] testo in self?.glossario.correggi(testo).testo ?? testo }
         // Credenziali salvate con un dominio non ammesso: si torna all'onboarding.
         guard let saved = KeychainStore.load(), case .success = Credentials.normalizzaEmail(saved.email) else {
             KeychainStore.delete()

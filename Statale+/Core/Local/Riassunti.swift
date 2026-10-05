@@ -73,6 +73,26 @@ nonisolated enum AppleIntelligence {
         #endif
     }
 
+    /// Più risposte brevi (es. gli elenchi del glossario del corso), una sessione per richiesta.
+    @concurrent
+    static func rispondi(_ richieste: [String], istruzioni: String,
+                         progresso: @escaping @Sendable (Double) -> Void) async throws -> [String] {
+        #if canImport(FoundationModels)
+        guard #available(iOS 26.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
+        var risposte: [String] = []
+        for (i, r) in richieste.enumerated() {
+            try Task.checkCancellation()
+            progresso(Double(i) / Double(max(richieste.count, 1)))
+            let sessione = LanguageModelSession(instructions: istruzioni)
+            if let testo = try? await sessione.respond(to: r).content { risposte.append(testo) }
+        }
+        progresso(1)
+        return risposte
+        #else
+        throw Errore.nonDisponibile
+        #endif
+    }
+
     #if canImport(FoundationModels)
     @available(iOS 26.0, *)
     @Generable

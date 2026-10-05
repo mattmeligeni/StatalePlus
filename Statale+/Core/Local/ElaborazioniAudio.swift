@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import UIKit
 
 /// Trascrizioni, riassunti e miglioramenti in corso, indipendenti dalla schermata aperta. Girano in
@@ -33,6 +34,11 @@ final class ElaborazioniAudio {
     @ObservationIgnored private var daRiprendere: [(Tipo, UUID)] = []
     @ObservationIgnored private weak var archivio: RecordingStore?
     @ObservationIgnored private var osservatori: [NSObjectProtocol] = []
+    /// Correzione delle trascrizioni con il glossario del corso (impostata da `AppModel`).
+    @ObservationIgnored var correggiTesto: (String) -> String = { $0 }
+    /// Lavori annullati dall'utente: le altre interruzioni (iOS) si mostrano come errore, non come annullamento.
+    @ObservationIgnored private var annullatiDallUtente: Set<String> = []
+    @ObservationIgnored private let log = Logger(subsystem: "com.mattiameligeni.Statale", category: "elaborazioni")
 
     init() {
         let nc = NotificationCenter.default
@@ -129,14 +135,15 @@ final class ElaborazioniAudio {
                         Task { @MainActor in self.trascrizioni[id]?.progresso = p; self.trascrizioni[id]?.messaggio = m }
                     }
                 }
-                store.salvaTrascrizione(id, testo)
-            } catch is CancellationError {
+                store.salvaTrascrizione(id, correggiTesto(testo))
+            } catch is CancellationError where annullatiDallUtente.remove("t\(id)") != nil || trascrizioni[id]?.inPausa == true {
                 tasks["t\(id)"] = nil
                 if trascrizioni[id]?.inPausa != true { trascrizioni[id] = nil }
                 return
             } catch {
+                log.error("Trascrizione non riuscita (\(motore.rawValue, privacy: .public)): \(String(describing: error), privacy: .public)")
                 if sospendi(.trascrizione, id, error) { return }
-                errori[id] = Self.messaggio(error)
+                errori[id] = error is CancellationError ? Self.interrotto : Self.messaggio(error)
             }
             trascrizioni[id] = nil
             tasks["t\(id)"] = nil
@@ -156,24 +163,27 @@ final class ElaborazioniAudio {
         let titolo = r.titolo
         tasks["r\(id)"] = Task {
             do {
-                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo) { sistema in
+                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo,
+                                                           gpu: motore == .qwen) { sistema in
                     let aggiorna: @Sendable (Double, String) -> Void = { p, m in
                         sistema(p, fase: m)
                         Task { @MainActor in self.riassunti[id]?.progresso = p; self.riassunti[id]?.messaggio = m }
                     }
                     return switch motore {
                     case .qwen: try await QwenLocale.riassumi(testo, progresso: aggiorna)
+                    case .cloud: try await NuvolaApple.riassumi(testo, progresso: aggiorna)
                     case .apple: try await AppleIntelligence.riassumi(testo, progresso: aggiorna)
                     }
                 }
                 store.salvaRiassunto(id, md)
-            } catch is CancellationError {
+            } catch is CancellationError where annullatiDallUtente.remove("r\(id)") != nil || riassunti[id]?.inPausa == true {
                 tasks["r\(id)"] = nil
                 if riassunti[id]?.inPausa != true { riassunti[id] = nil }
                 return
             } catch {
+                log.error("Riassunto non riuscito (\(motore.rawValue, privacy: .public)): \(String(describing: error), privacy: .public)")
                 if sospendi(.riassunto, id, error) { return }
-                errori[id] = Self.messaggio(error)
+                errori[id] = error is CancellationError ? Self.interrotto : Self.messaggio(error)
             }
             riassunti[id] = nil
             tasks["r\(id)"] = nil
@@ -213,6 +223,8 @@ final class ElaborazioniAudio {
         }
     }
 
+    private static let interrotto = "Interrotto da iOS prima della fine. Riprova tenendo l'app aperta."
+
     private static func messaggio(_ error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
@@ -220,6 +232,7 @@ final class ElaborazioniAudio {
     func annulla(_ tipo: Tipo, _ id: UUID) {
         let prefisso = switch tipo { case .trascrizione: "t"; case .riassunto: "r"; case .miglioramento: "m" }
         let key = prefisso + id.uuidString
+        if tasks[key] != nil { annullatiDallUtente.insert(key) }
         tasks[key]?.cancel()
         tasks[key] = nil
         automatiche.remove(id)
@@ -232,6 +245,7 @@ final class ElaborazioniAudio {
     }
 
     func annullaTutto() {
+        annullatiDallUtente.formUnion(tasks.keys)
         tasks.values.forEach { $0.cancel() }
         tasks = [:]
         automatiche = []
@@ -246,6 +260,7 @@ extension MotoreRiassunto {
     /// Il motore che si userà ora: Qwen se scelto, scaricato e supportato; altrimenti Apple Intelligence se
     /// disponibile; nil se nessuno dei due.
     nonisolated static var disponibile: MotoreRiassunto? {
+        if Preferenze.motoreRiassunto == .cloud, NuvolaApple.stato == .disponibile { return .cloud }
         if Preferenze.motoreRiassunto == .qwen, QwenLocale.installato, QwenLocale.supportato { return .qwen }
         return AppleIntelligence.stato == .disponibile ? .apple : nil
     }

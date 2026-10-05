@@ -414,9 +414,9 @@ struct RegistrazioneDetailView: View {
                         }
                     }
                     MiglioramentoSection(registrazione: r)
-                    TrascrizioneSection(registrazione: r)
+                    TrascrizioneSection(registrazione: r, player: player)
                     if AppleIntelligence.stato != .nonSupportata || MotoreRiassunto.disponibile != nil {
-                        RiassuntoSection(registrazione: r)
+                        RiassuntoSection(registrazione: r, player: player)
                     }
                     if !r.segnalibri.isEmpty {
                         Section("Segnalibri") {
@@ -451,7 +451,8 @@ struct RegistrazioneDetailView: View {
         .onChange(of: app.recordings.item(id)?.migliorata) {
             if let r = app.recordings.item(id) { player.ricarica(app.recordings.url(for: r)) }
         }
-        .onDisappear { player.stop() }
+        // Aprendo trascrizione o riassunto l'audio continua (quelle schermate "tengono" il player).
+        .onDisappear { player.chiudiSeInutilizzato() }
         .confermaEliminazione(Binding(get: { confermaElimina ? app.recordings.item(id) : nil },
                                       set: { if $0 == nil { confermaElimina = false } })) { r in
             player.stop()

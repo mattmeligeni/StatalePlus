@@ -24,10 +24,13 @@ struct IAView: View {
 
             Section {
                 NavigationLink { ImpostazioniTrascrizioneView() } label: {
-                    LabeledContent("Modello", value: motore.nome)
+                    LabeledContent("Trascrizione", value: motore.nome)
                 }
                 NavigationLink { ImpostazioniRiassuntiView() } label: {
                     LabeledContent("Riassunti", value: MotoreRiassunto.disponibile?.nome ?? "Non disponibile")
+                }
+                NavigationLink { GlossarioView() } label: {
+                    LabeledContent("Glossario del corso", value: app.glossario.attuale.map { "\($0.termini.count) termini" } ?? "Da creare")
                 }
             } header: {
                 Text("Modelli")

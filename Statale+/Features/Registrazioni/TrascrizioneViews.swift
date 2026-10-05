@@ -5,6 +5,7 @@ import SwiftUI
 /// Trascrizione con Speech: avvio, avanzamento, anteprima e accesso al testo completo.
 struct TrascrizioneSection: View {
     let registrazione: Registrazione
+    var player: AudioPlayer? = nil
     @Environment(AppModel.self) private var app
     @State private var anteprima: String?
     @State private var mostraMotori = false
@@ -17,7 +18,7 @@ struct TrascrizioneSection: View {
                 StatoElaborazione(stato: s) { app.elaborazioni.annulla(.trascrizione, id) }
             } else if registrazione.trascrittaIl != nil {
                 if let anteprima { Text(anteprima).font(.callout).lineLimit(4).foregroundStyle(.secondary) }
-                NavigationLink { TrascrizioneView(id: id) } label: {
+                NavigationLink { TrascrizioneView(id: id, player: player) } label: {
                     Label("Leggi e modifica la trascrizione", systemImage: "text.alignleft")
                 }
             } else if let motivo = LimitiElaborazione.bloccoTrascrizione(registrazione) {
@@ -61,6 +62,7 @@ struct TrascrizioneSection: View {
 /// Riassunto con Apple Intelligence o Qwen (visibile se almeno uno dei due può funzionare su questo iPhone).
 struct RiassuntoSection: View {
     let registrazione: Registrazione
+    var player: AudioPlayer? = nil
     @Environment(AppModel.self) private var app
     @State private var testo: String?
     @State private var trascrizione: String?
@@ -83,7 +85,7 @@ struct RiassuntoSection: View {
                     StatoElaborazione(stato: s) { app.elaborazioni.annulla(.riassunto, id) }
                 } else if registrazione.riassuntoIl != nil, let testo {
                     MarkdownTesto(markdown: testo).lineLimit(8)
-                    NavigationLink { RiassuntoView(id: id) } label: { Label("Apri riassunto", systemImage: "doc.text.magnifyingglass") }
+                    NavigationLink { RiassuntoView(id: id, player: player) } label: { Label("Apri riassunto", systemImage: "doc.text.magnifyingglass") }
                 } else if let blocco {
                     Label(blocco, systemImage: "clock.badge.exclamationmark").font(.callout).foregroundStyle(.secondary)
                 } else {
@@ -133,6 +135,7 @@ private struct StatoElaborazione: View {
 /// Testo completo modificabile, con Writing Tools (iOS 18+) per correggere, riscrivere o riassumere.
 struct TrascrizioneView: View {
     let id: UUID
+    var player: AudioPlayer? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var testo = ""
@@ -148,10 +151,16 @@ struct TrascrizioneView: View {
             .tastieraConChiudi()
             .navigationTitle("Trascrizione")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { player?.utilizzatori += 1 }
+            .onDisappear { player?.utilizzatori -= 1 }
             .safeAreaInset(edge: .bottom) {
-                Text("\(testo.split(whereSeparator: \.isWhitespace).count) parole")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity).padding(6).background(.bar)
+                VStack(spacing: 0) {
+                    if let player { MiniPlayer(player: player) }
+                    Text("\(testo.split(whereSeparator: \.isWhitespace).count) parole")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity).padding(6)
+                }
+                .background(.bar)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { ShareLink(item: testo) }
@@ -202,6 +211,7 @@ struct TrascrizioneView: View {
 
 struct RiassuntoView: View {
     let id: UUID
+    var player: AudioPlayer? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var testo = ""
@@ -226,8 +236,13 @@ struct RiassuntoView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if let player { MiniPlayer(player: player).background(.bar) }
+        }
         .navigationTitle("Riassunto")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { player?.utilizzatori += 1 }
+        .onDisappear { player?.utilizzatori -= 1 }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(modifica ? "Fine" : "Modifica") {
@@ -317,5 +332,35 @@ extension View {
     @ViewBuilder
     func strumentiScrittura() -> some View {
         if #available(iOS 18.0, *) { writingToolsBehavior(.complete) } else { self }
+    }
+}
+
+/// Controlli essenziali dell'audio della registrazione mentre si legge trascrizione o riassunto (l'audio non si
+/// ferma aprendo queste schermate). Compare solo se l'audio è stato avviato.
+private struct MiniPlayer: View {
+    let player: AudioPlayer
+
+    var body: some View {
+        if player.isPlaying || player.currentTime > 0 {
+            HStack(spacing: 18) {
+                Button { player.skip(-15) } label: { Image(systemName: "gobackward.15") }
+                Button { player.toggle() } label: {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.title3)
+                }
+                Button { player.skip(30) } label: { Image(systemName: "goforward.30") }
+                Spacer()
+                Text("\(durata(player.currentTime)) / \(durata(player.duration))")
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private func durata(_ t: TimeInterval) -> String {
+        let s = Int(max(t, 0))
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%02d:%02d", s / 60, s % 60)
     }
 }

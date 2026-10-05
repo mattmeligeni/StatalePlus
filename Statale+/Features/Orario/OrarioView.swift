@@ -292,7 +292,7 @@ struct LezioneDetail: View {
                     }
                     .tint(.red)
                     Button { modifica = true } label: {
-                        Label("Modifica aula, sede o docente", systemImage: "pencil")
+                        Text("Modifica aula, sede o docente")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 4)

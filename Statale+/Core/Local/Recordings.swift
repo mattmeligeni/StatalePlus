@@ -677,6 +677,7 @@ final class AudioPlayer {
     func ricarica(_ url: URL) {
         stop()
         self.url = url
+        ultimoURL = url
         let t = UUID()
         token = t
         Task {
@@ -690,7 +691,35 @@ final class AudioPlayer {
 
     func toggle() { isPlaying ? pause() : play() }
 
+    /// Schermate (trascrizione, riassunto) aperte sopra il dettaglio che usano questo player: finché ce n'è una,
+    /// uscire dal dettaglio non ferma l'audio.
+    var utilizzatori = 0
+    /// Ultimo file caricato, per riaprirlo se il player è stato chiuso.
+    private var ultimoURL: URL?
+
+    /// Ferma e chiude l'audio poco dopo, se nel frattempo nessuna schermata lo sta usando.
+    func chiudiSeInutilizzato() {
+        Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            if utilizzatori == 0 { stop() }
+        }
+    }
+
     func play() {
+        // Chiuso (es. uscendo dal dettaglio): si riapre il file e si riparte dal punto in cui era.
+        if token == nil, let u = ultimoURL, !illeggibile {
+            let t = UUID(), da = currentTime
+            token = t
+            url = u
+            isPlaying = true
+            Task {
+                guard await MotoreAudio.shared.carica(u, token: t) != nil, token == t else { isPlaying = false; return }
+                let ok = await MotoreAudio.shared.riproduci(token: t, da: da, velocità: rate)
+                guard token == t, isPlaying else { return }
+                if ok { avviaTick(t) } else { isPlaying = false }
+            }
+            return
+        }
         guard let t = token, !isPlaying, !illeggibile else { return }
         isPlaying = true
         let da = currentTime >= duration - 0.2 ? 0 : currentTime

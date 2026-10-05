@@ -103,18 +103,38 @@ struct ImpostazioniRiassuntiView: View {
                 }
                 .tint(.primary)
                 .disabled(!QwenLocale.supportato)
-                RigaMotore(nome: "Remoto Pro", simbolo: "cloud", caratteristiche: ["Online", "A pagamento", "Presto"],
-                           descrizione: "Più veloce e potente, ma il testo della lezione viene inviato fuori dal telefono.",
-                           selezionato: false, nota: nil, avanzamento: nil, pro: true)
-                    .foregroundStyle(.secondary)
+                if NuvolaApple.autorizzata {
+                    Button { scelto = MotoreRiassunto.cloud.rawValue } label: {
+                        RigaMotore(nome: "Apple Intelligence online", simbolo: "icloud",
+                                   caratteristiche: ["Online", "Più veloce", "Più preciso"],
+                                   descrizione: "Il modello più grande di Apple, sui suoi server: riassunti più rapidi e completi. Il testo della lezione viene inviato ad Apple, che non lo conserva. Numero di riassunti al giorno limitato.",
+                                   selezionato: effettivo == .cloud, nota: notaCloud, avanzamento: nil, pro: false)
+                    }
+                    .tint(.primary)
+                    .disabled(NuvolaApple.stato != .disponibile)
+                } else {
+                    RigaMotore(nome: "Remoto Pro", simbolo: "cloud", caratteristiche: ["Online", "Presto"],
+                               descrizione: "Più veloce e potente, ma il testo della lezione viene inviato fuori dal telefono.",
+                               selezionato: false, nota: nil, avanzamento: nil, pro: true)
+                        .foregroundStyle(.secondary)
+                }
             } footer: {
                 Text("Con Qwen, se esci dall'app il riassunto si mette in pausa e riprende quando torni.")
+            }
+            if effettivo == .cloud, NuvolaApple.puòAumentareLimite {
+                Section {
+                    Button("Più riassunti al giorno con iCloud+") { NuvolaApple.mostraAumentoLimite() }
+                }
             }
             SezioneModello(gestore: app.qwen)
         }
         .navigationTitle("Riassunti")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { app.qwen.ricontrolla() }
+        // Appena Qwen è pronto si crea il glossario del corso, se manca: serve a correggere le trascrizioni.
+        .onChange(of: app.qwen.stato) { _, nuovo in
+            if nuovo == .installato, app.glossario.attuale == nil { app.creaGlossario() }
+        }
         .sheet(isPresented: $confermaDownload) {
             ConfermaDownloadModello(
                 modello: app.qwen.modello,
@@ -126,7 +146,16 @@ struct ImpostazioniRiassuntiView: View {
         }
     }
 
+    private var notaCloud: String? {
+        switch NuvolaApple.stato {
+        case .nonDisponibile(let motivo): return motivo
+        case .nonAutorizzata: return nil
+        case .disponibile: return NuvolaApple.notaLimite
+        }
+    }
+
     private var effettivo: MotoreRiassunto? {
+        if scelto == MotoreRiassunto.cloud.rawValue, NuvolaApple.stato == .disponibile { return .cloud }
         if scelto == MotoreRiassunto.qwen.rawValue, app.qwen.stato == .installato, QwenLocale.supportato { return .qwen }
         return AppleIntelligence.stato == .disponibile ? .apple : nil
     }
