@@ -48,9 +48,6 @@ struct CarrieraView: View {
     @State private var recapiti = Live<Recapiti>()
     @State private var libretto = Live<Libretto>()
     @State private var esiti = Live<EsitiInAttesa>()
-    @State private var pdf: URL?
-    @State private var pdfLoading = false
-    @State private var pdfError: String?
 
     var body: some View {
         List {
@@ -90,12 +87,6 @@ struct CarrieraView: View {
                       systemImage: e.inAttesa ? "exclamationmark.circle" : "checkmark.circle")
                     .foregroundStyle(e.inAttesa ? .orange : .green)
             }
-            Section("Documenti") {
-                Button { Task { await apriPDF() } } label: {
-                    HStack { Label("PDF prossimi appelli del corso", systemImage: "doc.richtext"); Spacer(); if pdfLoading { ProgressView() } }
-                }
-                if let pdfError { Text(pdfError).font(.caption).foregroundStyle(.red) }
-            }
         }
         .navigationTitle("Carriera")
         .refreshable { await loadAll() }
@@ -105,7 +96,6 @@ struct CarrieraView: View {
             async let c: Void = esiti.loadIfNeeded { try await app.services.unimia.esitiInAttesa() }
             _ = await (a, b, c)
         }
-        .quickLookPreview($pdf)
     }
 
     private func libr() async throws -> Libretto {
@@ -118,12 +108,6 @@ struct CarrieraView: View {
     private func loadAll() async {
         async let a: Void = loadRecapiti(); async let b: Void = loadLibretto(); async let c: Void = loadEsiti()
         _ = await (a, b, c)
-    }
-    private func apriPDF() async {
-        guard let codice = app.studente?.codiceCorso else { return }
-        pdfLoading = true; defer { pdfLoading = false }
-        do { pdf = try await app.services.unimia.pdfProssimiAppelli(codiceCorso: codice); pdfError = nil }
-        catch { pdfError = app.message(error) }
     }
 }
 

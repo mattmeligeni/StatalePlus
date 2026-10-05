@@ -136,11 +136,4 @@ actor CASSession {
         guard SifaParser.isAuthenticated(html: r.text, finalURL: r.url, app: app) else { throw NetError.sessionExpired }
         return r
     }
-
-    /// Download autenticato su studente.unimi.it (PDF prossimi appelli).
-    func studenteDownload(_ url: URL) async throws -> HTTPResponse {
-        try await ensureLoggedIn()
-        await warmupStudente()
-        return try await http.get(url, headers: ["Accept": "application/pdf,*/*"])
-    }
 }

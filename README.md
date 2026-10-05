@@ -171,7 +171,7 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 
 ### Altro
 
-- **Carriera e libretto**: profilo, recapiti, libretto, esiti da accettare, PDF "prossimi appelli" del corso. Nomi,
+- **Carriera e libretto**: profilo, recapiti, libretto, esiti da accettare. Nomi,
   stato d'iscrizione e indirizzi sono normalizzati ("via mario rossi 10 20100 milano MI italia" → "Via Mario Rossi 10,
   20100 Milano (MI), Italia").
 - **Tasse e pagamenti**: righe della situazione amministrativa con voci leggibili ("CONTRIB. REGIONE LOMBARDIA" →
@@ -192,7 +192,9 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   proiettati lontano; dopo la scansione la richiesta parte subito, perché il QR in aula cambia di continuo).
   Esiti: `ok` → "Presenza registrata", `warning` → "Presenza già registrata" (conta come confermata), `failure` →
   "Rilevazione non riuscita" con spiegazione (docente che ha chiuso la rilevazione, codice sbagliato o scaduto: il
-  server usa lo stesso messaggio per tutti i casi); l'esito sta in una sezione a parte sotto il pulsante;
+  server usa lo stesso messaggio per tutti i casi). Per `ok` e `failure` l'esito si apre **a tutto schermo** (verde
+  "Presenza registrata" / rosso "Presenza NON registrata", con vibrazione e, se fallita, "Scansiona di nuovo"):
+  prima era troppo discreto e gli studenti riprovavano per sicurezza. L'esito resta anche in una sezione sotto il pulsante;
   frequenza per corso con barra e **tacca sulla soglia**, dettaglio con riepilogo ("mancano 18 h per la soglia del 50%")
   e lezioni future attenuate.
   - **Soglia di frequenza**: EasyBadge restituisce un proprio valore (`percentuale_conseguimento`, es. 0,7) che non
@@ -306,7 +308,6 @@ CAS riuscito. Re-login trasparente quando una sessione scade.
 | Tasse                           | `/gateway/PTARGS_6_0_219_207_8993_43/` (header `X-Requested-With`, `Referer`)                                                                                                                     |
 | Esiti in attesa / iscrizioni    | portlet `240` / `310` (stesso schema)                                                                                                                                                             |
 | Libretto                        | `/gateway/PTARGS_0_0_209_207_0_43/http%3B/portlets.alui.unimi.it%3B8880/portale_utenti_cocoon_portlet/carriera.html?modalita=dettaglio&…&matricola=<M>&dottorato=` (niente quote totale del path) |
-| PDF prossimi appelli            | `https://studente.unimi.it/foProssimiEsami/pdf/<CODICE_CORSO>`                                                                                                                                    |
 
 ### SIFA — `https://studente.unimi.it`
 
@@ -379,8 +380,6 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 - **QR della lezione**: testo Base64 (`UVJfOXRwNG02YW4tMTc5MDc3MzY2MDAwMA==` → `QR_9tp4m6an-1790773660000`); il codice
   lezione è la parte prima del trattino, il numero è un istante in ms che cambia a ogni rotazione del QR e non serve
   (la richiesta usa l'ora attuale). Risposte della timbratura: `{"result":"ok"|"warning"|"failure","message":…}`.
-- **Debug timbratura** (solo build Debug, `DebugNtfy`): ogni chiamata invia esito, codice lezione e risposta del
-  server a `ntfy.sh/StatalePlus` (topic pubblico: niente matricola né dati personali).
 - **EasyBadge**: i campi `Frequentate`, `OreFatte`, `OreDaFare`, `OreLimite` sono **minuti**; `OreDaFare` è il residuo
   (totale = fatte + da fare; soglia EasyBadge = `percentuale_conseguimento` × totale, sostituita in app da quella del
   manifesto).
@@ -472,6 +471,12 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-05
+
+- Presenze: esito `ok`/`failure` a tutto schermo con vibrazione; tolta la notifica di debug su ntfy.sh.
+- Carriera: tolto il PDF "prossimi appelli" del corso (non aggiornato).
+- Storia dei commit ripulita dalle righe di attribuzione.
 
 ### 2026-09-30 (12)
 

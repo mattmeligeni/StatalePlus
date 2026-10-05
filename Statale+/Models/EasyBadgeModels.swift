@@ -102,7 +102,8 @@ nonisolated struct TimbraturaRequest: Encodable, Sendable {
 /// - `{"result":"warning","message":"La tua presenza alla lezione è già stata registrata"}`;
 /// - `{"result":"failure","message":"Il processo di rilevazione è stato interrotto dal docente, …"}`: messaggio
 ///   generico, uguale anche per codice vuoto, sbagliato o scaduto.
-nonisolated struct TimbraturaResult: Decodable, Sendable {
+nonisolated struct TimbraturaResult: Decodable, Sendable, Identifiable {
+    var id: String { result + message }
     let result: String
     let message: String
 

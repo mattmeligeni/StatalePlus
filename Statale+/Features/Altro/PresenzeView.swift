@@ -8,6 +8,8 @@ struct PresenzeView: View {
     @State private var inviando = false
     @State private var risposta: TimbraturaResult?
     @State private var erroreInvio: String?
+    /// Esito "ok" o "failure": schermata a tutto schermo, impossibile da non notare (gli utenti riprovavano per sicurezza).
+    @State private var esitoGrande: TimbraturaResult?
     @FocusState private var focus: Bool
     @AppStorage("sogliaFrequenzaManuale") private var sogliaManuale = 0
 
@@ -84,6 +86,15 @@ struct PresenzeView: View {
         .navigationTitle("Presenze")
         .refreshable { app.segnaRefresh(); await load() }
         .task { if app.frequenze.updatedAt == nil { await load() } }
+        .fullScreenCover(item: $esitoGrande) { r in
+            EsitoPresenzaSchermata(esito: r, lezione: app.presenzaTarget?.insegnamento) {
+                esitoGrande = nil
+            } riprova: {
+                esitoGrande = nil
+                codice = ""
+                Task { try? await Task.sleep(for: .milliseconds(400)); showScanner = true }
+            }
+        }
         .sheet(isPresented: $showScanner) {
             QRScannerSheet { payload in
                 codice = QRLezione.codice(from: payload)
@@ -123,6 +134,10 @@ struct PresenzeView: View {
         do {
             let r = try await app.services.easyBadge.timbra(TimbraturaRequest(matricola: m, codiceLezione: codice.trimmed))
             risposta = r
+            if r.esito == .registrata || r.esito == .fallita {
+                UINotificationFeedbackGenerator().notificationOccurred(r.esito == .registrata ? .success : .error)
+                esitoGrande = r
+            }
             if r.ok {
                 app.registraPresenzaConfermata()
                 await load()
@@ -130,6 +145,60 @@ struct PresenzeView: View {
         } catch {
             erroreInvio = app.message(error)
         }
+    }
+}
+
+/// Esito della timbratura a tutto schermo: verde con sigillo se registrata, rosso se fallita.
+private struct EsitoPresenzaSchermata: View {
+    let esito: TimbraturaResult
+    let lezione: String?
+    let chiudi: () -> Void
+    let riprova: () -> Void
+
+    private var riuscita: Bool { esito.esito == .registrata }
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Image(systemName: riuscita ? "checkmark.seal.fill" : "xmark.octagon.fill")
+                .font(.system(size: 110, weight: .semibold))
+                .symbolEffect(.bounce, value: riuscita)
+            Text(riuscita ? "Presenza registrata" : "Presenza NON registrata")
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+            if let lezione {
+                Text(lezione).font(.title3.weight(.medium)).multilineTextAlignment(.center).opacity(0.9)
+            }
+            Text(riuscita ? "Non serve ripetere la scansione: la tua presenza è già sul server dell'Università."
+                          : esito.spiegazione)
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .opacity(0.9)
+                .padding(.horizontal)
+            Spacer()
+            VStack(spacing: 12) {
+                if !riuscita {
+                    Button(action: riprova) {
+                        Label("Scansiona di nuovo", systemImage: "qrcode.viewfinder")
+                            .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.white)
+                    .foregroundStyle(.red)
+                }
+                Button(action: chiudi) {
+                    Text(riuscita ? "Fatto" : "Chiudi").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .tint(.white)
+            }
+            .padding(.horizontal, 32)
+            .padding(.bottom, 24)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background((riuscita ? Color.green : Color.red).gradient)
+        .accessibilityElement(children: .contain)
     }
 }
 

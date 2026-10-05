@@ -41,16 +41,6 @@ actor UnimiaService {
         return try UnimiaParser.libretto(html: r.text)
     }
 
-    /// PDF "prossimi appelli" del corso (dinamico): richiede la sessione studente.unimi.it.
-    func pdfProssimiAppelli(codiceCorso: String) async throws -> URL {
-        let url = URL(string: "https://studente.unimi.it/foProssimiEsami/pdf/\(codiceCorso)")!
-        let r = try await cas.studenteDownload(url)
-        guard r.isPDF else { throw NetError.unexpectedPage("studente.unimi.it (PDF appelli)") }
-        let dest = FileManager.default.temporaryDirectory.appending(path: "Prossimi appelli \(codiceCorso).pdf")
-        try r.data.write(to: dest, options: [.atomic, .completeFileProtection])
-        return dest
-    }
-
     private func asyncPortlet(_ pid: Int) async throws -> String {
         let url = URL(string: "\(Self.portal)/gateway/PTARGS_6_0_\(pid)_207_8993_43/")!
         return try await cas.unimia(url, headers: [
