@@ -1,0 +1,16 @@
+name: Idea
+description: Una funzione nuova o un miglioramento.
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: L'idea
+      description: Cosa vorresti poter fare e perché ti sarebbe utile.
+    validations:
+      required: true
+  - type: textarea
+    id: dettagli
+    attributes:
+      label: Dettagli
+      description: Esempi, schermate di riferimento (senza dati personali), servizi dell'Ateneo coinvolti.

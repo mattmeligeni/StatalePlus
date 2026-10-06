@@ -11,6 +11,13 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 
 > Progetto indipendente, non affiliato all'Ateneo.
 
+> **In English.** Statale Plus is a native iOS app (SwiftUI, Swift 6, iOS 26+) for students of the University of
+> Milan (Università degli Studi di Milano): timetable, exams, attendance, course sites and lecture recordings with
+> on-device transcription and summaries. It is an independent, unofficial project. The source code is
+> **source-available, not open source**: you may read it, build it and run it locally for non-commercial purposes,
+> and propose contributions, but you may not redistribute it or publish apps based on it. See
+> [LICENSE](LICENSE) (PolyForm Strict 1.0.0) and [ADDITIONAL-PERMISSIONS.md](ADDITIONAL-PERMISSIONS.md).
+
 ---
 
 ## Indice
@@ -25,6 +32,7 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - [Aggiornamento dei dati](#aggiornamento-dei-dati)
 - [Permessi](#permessi)
 - [Stato dei lavori](#stato-dei-lavori)
+- [Licenza](#licenza)
 - [Contribuire](#contribuire)
 - [Changelog](#changelog)
 
@@ -713,9 +721,32 @@ Da completare:
 
 ---
 
+## Licenza
+
+Codice **visibile ma non open source** (*source-available*): [PolyForm Strict License 1.0.0](LICENSE) con i permessi
+aggiuntivi di [ADDITIONAL-PERMISSIONS.md](ADDITIONAL-PERMISSIONS.md).
+
+- **Si può**: leggere il codice, scaricarlo, compilarlo e usarlo sui propri dispositivi per scopi non commerciali
+  (studio, prova, uso personale), con le sole modifiche necessarie a compilarlo; modificarlo per proporre contributi
+  al repository ufficiale ([CONTRIBUTING.md](CONTRIBUTING.md)).
+- **Non si può**, senza permesso scritto: ridistribuirlo in qualunque forma (App Store, TestFlight, altri store o
+  siti), pubblicare app o servizi basati sul codice, usarlo per scopi commerciali.
+- **Nome e icona** ("Statale Plus", "Statale+", l'icona e i sorgenti in `Grafica/`) sono riservati e non coperti
+  dalla licenza.
+- I contributi passano da un accordo (CLA, in [CONTRIBUTING.md](CONTRIBUTING.md)) che ne permette l'uso anche nelle
+  versioni a pagamento dell'app.
+- Componenti di terzi con le loro licenze: [NOTICE](NOTICE) (FluidAudio, Apache 2.0; modello Parakeet, CC BY 4.0).
+- Sicurezza: segnalazioni private come da [SECURITY.md](SECURITY.md).
+
+Scelta della licenza: PolyForm Strict è una licenza standard scritta da avvocati per questo caso (uso non commerciale,
+niente modifiche né ridistribuzione); i due permessi aggiuntivi coprono la compilazione in locale e i contributi.
+Scartate: le licenze open source (permettono di ridistribuire e vendere copie), la Business Source License (permette
+di ridistribuire per usi non di produzione e diventa open source da sola entro quattro anni), PolyForm Noncommercial
+(permette di ridistribuire gratis), una licenza scritta da zero (più rischi di formulazione).
+
 ## Copyright
 
-© 2026 Mattia Meligeni. Tutti i diritti riservati.
+© 2026 Mattia Meligeni. Tutti i diritti riservati, salvo quanto concesso dalla licenza.
 
 Statale Plus è un'app indipendente e non ufficiale: non è affiliata, sponsorizzata né approvata dall'Università degli Studi
 di Milano. Nomi e marchi dei servizi citati appartengono ai rispettivi titolari. I dati sono letti dai servizi
@@ -725,15 +756,28 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 
 ## Contribuire
 
+Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUTING.md](CONTRIBUTING.md). In breve:
+
 - Ogni modifica va accompagnata dall'aggiornamento di questo README (funzionalità, endpoint, formati, stato dei lavori)
   e da una voce nel [Changelog](#changelog).
 - Nessuna dipendenza esterna senza una ragione forte (oggi solo FluidAudio, per Parakeet).
 - Mai dati personali reali (nomi, matricole, indirizzi) nel codice, nei commenti o nei test: usare segnaposto
   (`MARIO ROSSI`, `12345A`).
+- Commit firmati con `git commit -s` (accettazione dell'accordo per i contributi).
+- La GitHub Action `Compila` (`.github/workflows/compila.yml`) compila l'app per il simulatore, senza firma, a ogni push
+  e pull request su `main`; lo schema `StatalePlus` è condiviso in `xcshareddata`. Modelli per segnalazioni (_Problema_,
+  _Idea_) e pull request in `.github/`.
 
 ---
 
 ## Changelog
+
+### 2026-10-06 (5)
+
+- Licenza **PolyForm Strict 1.0.0** con permessi aggiuntivi (compilazione in locale, contributi), nome e icona
+  riservati; `NOTICE`, `CONTRIBUTING.md` con accordo per i contributi, `SECURITY.md`.
+- GitHub: Action di compilazione, schema condiviso, modelli per segnalazioni e pull request; sintesi in inglese nel
+  README. La cartella del progetto ora si chiama `StatalePlus`.
 
 ### 2026-10-06 (4)
 

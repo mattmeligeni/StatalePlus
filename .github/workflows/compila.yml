@@ -1,0 +1,40 @@
+# Compila l'app per il simulatore (senza firma) a ogni push e pull request su main.
+name: Compila
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: compila-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compila:
+    # Serve Xcode 27 (SDK di iOS 27): se l'immagine del runner non lo ha ancora, il passo "Xcode" fallisce con un
+    # messaggio chiaro. Aggiornare qui il runner quando GitHub pubblica immagini più recenti.
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then
+            echo "::error::Xcode 27 non è disponibile su questo runner"; ls -d /Applications/Xcode*.app; exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Pacchetti
+        run: xcodebuild -resolvePackageDependencies -project StatalePlus.xcodeproj -scheme StatalePlus
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -project StatalePlus.xcodeproj -scheme StatalePlus \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -40

@@ -1,0 +1,31 @@
+Statale Plus
+Copyright (c) 2026 Mattia Meligeni
+Licensed under the PolyForm Strict License 1.0.0 with additional permissions: see LICENSE and
+ADDITIONAL-PERMISSIONS.md.
+
+Statale Plus is an independent, unofficial project, not affiliated with, sponsored by or endorsed by the
+Università degli Studi di Milano.
+
+This software includes or uses the following third-party components, each under its own license.
+
+------------------------------------------------------------------------------------------------------------------------
+FluidAudio
+https://github.com/FluidInference/FluidAudio
+Copyright Fluid Inference and contributors
+Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+Used as a Swift package to run speech recognition with Core ML. The third-party licenses bundled with FluidAudio
+(its ThirdPartyLicenses folder) also apply to the parts of it included in the app.
+
+------------------------------------------------------------------------------------------------------------------------
+Parakeet TDT 0.6B v3 (NVIDIA), "Ultra" post-training by moondream, Core ML conversion by Fluid Inference
+https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+https://huggingface.co/moondream/parakeet-ultra
+https://huggingface.co/FluidInference/parakeet-ultra-coreml
+Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+The model is not part of this repository: the app downloads it on request. Attribution is also shown in the app
+(Altro › Crediti).
+
+------------------------------------------------------------------------------------------------------------------------
+Apple frameworks (SwiftUI, Speech, Foundation Models, AVFoundation, BackgroundTasks and others) are provided by the
+operating system and are not redistributed.

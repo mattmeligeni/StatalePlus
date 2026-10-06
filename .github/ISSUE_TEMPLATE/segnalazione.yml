@@ -1,0 +1,35 @@
+name: Problema
+description: Qualcosa non funziona come dovrebbe.
+labels: [problema]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Grazie della segnalazione! **Non inserire dati personali reali** (nome, matricola, email, credenziali) né
+        screenshot che li mostrano. Per problemi di sicurezza usa la segnalazione privata (vedi SECURITY.md).
+  - type: textarea
+    id: cosa
+    attributes:
+      label: Cosa succede
+      description: Cosa hai fatto, cosa ti aspettavi e cosa è successo invece.
+    validations:
+      required: true
+  - type: textarea
+    id: passi
+    attributes:
+      label: Come riprodurlo
+      placeholder: |
+        1. Apri…
+        2. Tocca…
+  - type: input
+    id: versione
+    attributes:
+      label: Versione dell'app e di iOS
+      placeholder: "Statale Plus 1.0 (2), iOS 26.x, iPhone 15"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Sezione
+      options: [Accesso, Oggi, Orario, Esami, Presenze, Ariel, Registrazioni, Trascrizione e riassunti, Altro]
