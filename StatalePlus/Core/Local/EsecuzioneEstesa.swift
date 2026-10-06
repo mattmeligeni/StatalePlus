@@ -1,5 +1,6 @@
 import BackgroundTasks
 import Foundation
+import OSLog
 import UIKit
 
 /// Lavori lunghi avviati dall'utente (trascrizione, riassunto, miglioramento dell'audio, download dei modelli)
@@ -15,6 +16,18 @@ import UIKit
 ///   (circa 30 secondi), poi il lavoro si sospende con l'app e riprende al ritorno.
 nonisolated enum EsecuzioneEstesa {
     static let prefisso = (Bundle.main.bundleIdentifier ?? "com.mattiameligeni.StatalePlus") + ".elaborazione."
+    /// Registro dei lavori lunghi (Console di macOS, sottosistema `com.mattiameligeni.StatalePlus`, categoria `lavori`).
+    static let log = Logger(subsystem: "com.mattiameligeni.StatalePlus", category: "lavori")
+
+    /// Scrive nel registro e, nelle build di sviluppo, anche in `Library/Caches/registro-lavori.txt` (ultime 300
+    /// righe): si legge dal Mac con `devicectl device copy from` anche se il collegamento con l'iPhone è caduto, ad
+    /// esempio con lo schermo bloccato.
+    static func traccia(_ messaggio: String, errore: Bool = false) {
+        if errore { log.error("\(messaggio, privacy: .public)") } else { log.info("\(messaggio, privacy: .public)") }
+        #if DEBUG
+        RegistroSuFile.aggiungi(messaggio)
+        #endif
+    }
 
     /// Esegue `operazione`; `avanzamento(p, fase)` (p in 0…1) aggiorna l'attività di sistema.
     /// `sottotitolo` si vede solo finché non arriva la prima fase.
@@ -40,25 +53,37 @@ nonisolated enum EsecuzioneEstesa {
                         return
                     }
                     task.progress.totalUnitCount = 1000
+                    let inizio = Date()
+                    traccia("Attività avviata: \(titolo) [\(identificativo)]")
                     let sistema = CompitoDiSistema(task, titolo: titolo, sottotitolo: sottotitolo)
                     let lavoro = Task {
                         do {
                             let valore = try await operazione(Avanzamento { p, fase in sistema.avanzamento(p, fase: fase) })
+                            traccia("Attività conclusa: \(titolo) dopo \(Int(Date().timeIntervalSince(inizio)))s")
                             sistema.concluso(true)
                             stato.concludi(.success(Risultato(valore: valore)))
                         } catch {
+                            traccia("Attività non riuscita: \(titolo) dopo \(Int(Date().timeIntervalSince(inizio)))s: \(String(describing: error))", errore: true)
                             sistema.concluso(false)
                             stato.concludi(.failure(error))
                         }
                     }
                     stato.lavoro(lavoro)
                     // Annullato dall'attività in tempo reale o dal sistema.
-                    task.expirationHandler = { lavoro.cancel() }
+                    task.expirationHandler = {
+                        traccia("Attività scaduta (iOS o utente): \(titolo) dopo \(Int(Date().timeIntervalSince(inizio)))s, avanzamento \(task.progress.completedUnitCount)/1000", errore: true)
+                        lavoro.cancel()
+                    }
                 }
-                guard registrato else { stato.concludi(.success(nil)); return }
+                guard registrato else { traccia("Registrazione dell'attività non riuscita", errore: true); stato.concludi(.success(nil)); return }
                 let richiesta = BGContinuedProcessingTaskRequest(identifier: identificativo, title: titolo, subtitle: sottotitolo)
                 richiesta.strategy = .fail
-                do { try BGTaskScheduler.shared.submit(richiesta) } catch { stato.concludi(.success(nil)) }
+                do {
+                    try BGTaskScheduler.shared.submit(richiesta)
+                } catch {
+                    traccia("Richiesta dell'attività rifiutata: \(String(describing: error))", errore: true)
+                    stato.concludi(.success(nil))
+                }
             }
         } onCancel: {
             stato.annulla()
@@ -90,6 +115,7 @@ private nonisolated final class CompitoDiSistema: @unchecked Sendable {
     private var fase: String?
     private var ultimoSottotitolo = ""
     private var ultimoAggiornamento = Date.distantPast
+    private var ultimaTraccia = Date()
 
     init(_ task: BGContinuedProcessingTask, titolo: String, sottotitolo: String) {
         self.task = task
@@ -103,6 +129,10 @@ private nonisolated final class CompitoDiSistema: @unchecked Sendable {
         task.progress.completedUnitCount = Int64(p * 1000)
         let cambiata = nuova != nil && nuova != fase
         if let nuova { fase = nuova }
+        if Date().timeIntervalSince(ultimaTraccia) >= 10 {
+            ultimaTraccia = Date()
+            EsecuzioneEstesa.traccia("Avanzamento \(Int(p * 1000))/1000 · \(fase ?? base)")
+        }
         guard cambiata || Date().timeIntervalSince(ultimoAggiornamento) >= 3 else { return }
         // L'attività di sistema mostra una sola riga di sottotitolo: fase e tempo rimanente, senza ripetere il titolo.
         let sottotitolo = [fase ?? base, Self.rimanente(p, trascorso: Date().timeIntervalSince(inizio))]
@@ -166,3 +196,19 @@ private nonisolated final class StatoContinuato<T: Sendable>: @unchecked Sendabl
         c?.resume(with: r)
     }
 }
+
+#if DEBUG
+/// Registro dei lavori su file, solo nelle build di sviluppo (vedi `EsecuzioneEstesa.traccia`).
+private nonisolated enum RegistroSuFile {
+    private static let lock = NSLock()
+    private static let url = URL.cachesDirectory.appending(path: "registro-lavori.txt")
+
+    static func aggiungi(_ messaggio: String) {
+        let riga = "\(Date().formatted(.iso8601.time(includingFractionalSeconds: false))) \(messaggio)\n"
+        lock.lock(); defer { lock.unlock() }
+        var righe = ((try? String(contentsOf: url, encoding: .utf8)) ?? "").split(separator: "\n", omittingEmptySubsequences: true)
+        righe.append(Substring(riga.dropLast()))
+        try? righe.suffix(300).joined(separator: "\n").appending("\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+}
+#endif

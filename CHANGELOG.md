@@ -2,6 +2,13 @@
 
 Storico delle modifiche di Statale Plus (fino al 2026-10-06 "Statale+"), dal più recente. Documentazione completa in [README.it.md](README.it.md).
 
+## 2026-10-06 (9)
+
+- Parakeet trascrive a blocchi di circa 10 minuti, tagliati nei silenzi: le lezioni lunghe non vengono più chiuse da
+  iOS in background o a schermo bloccato (prima la barra restava ferma durante la conversione di tutto il file).
+  Un lavoro interrotto riprende dal blocco successivo, non da zero.
+- Avanzamento regolare dentro ogni blocco, stimato dal tempo; registro dei lavori su file nelle build di sviluppo.
+
 ## 2026-10-06 (8)
 
 - GitHub Action: runner `xcode-27` (l'immagine `macos-26` non ha Xcode 27 e la prima esecuzione falliva), Xcode 27.0

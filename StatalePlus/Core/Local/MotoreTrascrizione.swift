@@ -1,6 +1,8 @@
+import AVFoundation
 import CoreML
 import FluidAudio
 import Foundation
+import OSLog
 
 /// Motori di trascrizione selezionabili in Altro › IA › Trascrizione.
 nonisolated enum MotoreTrascrizione: String, CaseIterable, Sendable {
@@ -141,7 +143,14 @@ nonisolated enum ParakeetLocale {
         }
     }
 
-    /// Trascrive in italiano leggendo il file a blocchi dal disco (memoria costante anche per lezioni di ore).
+    /// Trascrive in italiano a blocchi di circa 10 minuti (`SegmentiAudio`), tagliati nel punto più silenzioso vicino al
+    /// confine. Prima FluidAudio convertiva l'intera lezione in un file temporaneo prima di iniziare, senza avanzamento:
+    /// su 2 h 25 min la barra restava ferma abbastanza perché iOS chiudesse l'attività di sistema (dopo circa 30 s
+    /// senza avanzamento), e la trascrizione ripartiva da zero. A blocchi:
+    /// - l'avanzamento si muove anche durante la preparazione dell'audio di ogni blocco (pochi secondi);
+    /// - il testo di ogni blocco si salva in `Caches/TrascrizioniInCorso`: un lavoro interrotto riprende dal blocco
+    ///   successivo invece che da capo;
+    /// - il file temporaneo è di un blocco (circa 38 MB) invece che di tutta la lezione.
     @concurrent
     static func trascrivi(_ url: URL, durata: TimeInterval,
                           progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
@@ -163,32 +172,218 @@ nonisolated enum ParakeetLocale {
         do {
             (asr, condiviso) = try await pronto.prendi()
             attesa.cancel()
+            EsecuzioneEstesa.traccia("Parakeet pronto (condiviso: \(condiviso)), in primo piano: \(PrimoPiano.attivo)")
         } catch {
             attesa.cancel()
+            EsecuzioneEstesa.traccia("Parakeet non caricato: \(String(describing: error))", errore: true)
             throw error
         }
         defer { Task { if condiviso { await pronto.restituisci() } else { await asr.cleanup() } } }
-        let flusso = await asr.transcriptionProgressStream
-        let osserva = Task {
-            for try await p in flusso where durata > 0 {
-                progresso(Self.quotaCaricamento + min(p, 0.99) * (1 - Self.quotaCaricamento), faseTrascrizione(p * durata, di: durata))
+
+        let blocchi = try SegmentiAudio.piano(url)
+        let totale = blocchi.last?.fine ?? durata
+        let cartella = try SegmentiAudio.cartellaLavoro(per: url)
+        let quota = Self.quotaCaricamento
+        let n = Double(blocchi.count)
+        var testi: [String] = []
+        // Secondi di lavoro per minuto di audio, misurati sui blocchi già fatti (prima stima prudente: 4 s/min; su
+        // iPhone 17 Pro Max in background circa 3,6).
+        var secondiLavoro: Double = 0
+        var minutiFatti: Double = 0
+        for (i, blocco) in blocchi.enumerated() {
+            try Task.checkCancellation()
+            let base = Double(i)
+            let fatto = cartella.appending(path: "blocco-\(i).txt")
+            if let t = try? String(contentsOf: fatto, encoding: .utf8) {
+                testi.append(t)
+                progresso(quota + (base + 1) / n * (1 - quota), faseTrascrizione(blocco.fine, di: totale))
+                continue
             }
+            let audio = cartella.appending(path: "blocco-\(i).caf")
+            defer { try? FileManager.default.removeItem(at: audio) }
+            let inizioBlocco = Date()
+            try SegmentiAudio.converti(url, blocco, in: audio) { f in
+                progresso(quota + (base + f * 0.02) / n * (1 - quota),
+                          "Preparazione dell'audio · " + faseTrascrizione(blocco.inizio, di: totale))
+            }
+            // L'avanzamento di FluidAudio conta i pezzi inviati al Neural Engine (4 in parallelo), non quelli finiti:
+            // arriva quasi alla fine del blocco quando partono gli ultimi e poi resta fermo finché non finiscono (sul
+            // telefono "Trascritti 40 di 145 min" fermo per mezzo minuto). Dentro il blocco l'avanzamento si stima
+            // quindi dal tempo, con la velocità dei blocchi già fatti, e si aggiorna ogni secondo.
+            let minutiBlocco = (blocco.fine - blocco.inizio) / 60
+            let atteso = max(5, (minutiFatti > 0 ? secondiLavoro / minutiFatti : 4) * minutiBlocco)
+            let inviati = AvanzamentoInviato()
+            let riporta: @Sendable () -> Void = {
+                let f = min(0.97, max(inviati.valore * 0.5, Date().timeIntervalSince(inizioBlocco) / atteso))
+                progresso(quota + (base + 0.02 + f * 0.98) / n * (1 - quota),
+                          faseTrascrizione(blocco.inizio + f * (blocco.fine - blocco.inizio), di: totale))
+            }
+            let flusso = await asr.transcriptionProgressStream
+            let osserva = Task {
+                for try await p in flusso { inviati.valore = min(max(p, 0), 1) }
+            }
+            let battito = Task {
+                while !Task.isCancelled {
+                    riporta()
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+            defer { osserva.cancel(); battito.cancel() }
+            var stato = TdtDecoderState.make()
+            let risultato: ASRResult
+            do {
+                risultato = try await asr.transcribe(audio, decoderState: &stato, language: .italian)
+            } catch {
+                EsecuzioneEstesa.traccia("Parakeet interrotto al blocco \(i + 1) di \(blocchi.count) (in primo piano: \(PrimoPiano.attivo)): \(String(describing: error))", errore: true)
+                // Un modello caricato da tempo può non essere più valido (es. dopo il background): si ricarica la volta dopo.
+                if condiviso, !(error is CancellationError) { await pronto.rilascia() }
+                throw error
+            }
+            try Task.checkCancellation()
+            secondiLavoro += Date().timeIntervalSince(inizioBlocco)
+            minutiFatti += minutiBlocco
+            let t = risultato.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            try? t.write(to: fatto, atomically: true, encoding: .utf8)
+            testi.append(t)
+            EsecuzioneEstesa.traccia("Blocco \(i + 1) di \(blocchi.count) trascritto (\(t.count) caratteri), in primo piano: \(PrimoPiano.attivo)")
         }
-        defer { osserva.cancel() }
-        progresso(Self.quotaCaricamento, "Trascrizione…")
-        var stato = TdtDecoderState.make()
-        let risultato: ASRResult
-        do {
-            risultato = try await asr.transcribe(url, decoderState: &stato, language: .italian)
-        } catch {
-            // Un modello caricato da tempo può non essere più valido (es. dopo il background): si ricarica la volta dopo.
-            if condiviso, !(error is CancellationError) { await pronto.rilascia() }
-            throw error
-        }
-        try Task.checkCancellation()
-        let testo = senzaRipetizioni(risultato.text.trimmingCharacters(in: .whitespacesAndNewlines))
+        try? FileManager.default.removeItem(at: cartella)
+        let testo = senzaRipetizioni(testi.filter { !$0.isEmpty }.joined(separator: " "))
         guard !testo.isEmpty else { throw Errore.vuota }
         return testo
+    }
+}
+
+/// Ultimo avanzamento comunicato da FluidAudio per il blocco in corso (letto dal battito di ogni secondo).
+private nonisolated final class AvanzamentoInviato: @unchecked Sendable {
+    private let lock = NSLock()
+    private var p: Double = 0
+    var valore: Double {
+        get { lock.lock(); defer { lock.unlock() }; return p }
+        set { lock.lock(); p = newValue; lock.unlock() }
+    }
+}
+
+/// Divisione di una registrazione in blocchi per Parakeet e conversione di un blocco nel formato del modello
+/// (16 kHz, mono, Float32), leggendo un secondo di audio alla volta.
+nonisolated enum SegmentiAudio {
+    struct Blocco: Sendable {
+        let inizio: TimeInterval
+        let fine: TimeInterval
+    }
+
+    enum Errore: LocalizedError {
+        case conversione
+        var errorDescription: String? { "Non è stato possibile preparare l'audio per la trascrizione." }
+    }
+
+    static let durataBlocco: TimeInterval = 600
+
+    /// Blocchi di circa 10 minuti; i confini cadono nel punto più silenzioso entro 5 secondi, per non tagliare parole.
+    /// Una registrazione fino a 15 minuti resta in un blocco solo.
+    static func piano(_ url: URL) throws -> [Blocco] {
+        let file = try AVAudioFile(forReading: url)
+        let sr = file.processingFormat.sampleRate
+        let totale = Double(file.length) / sr
+        guard totale > durataBlocco * 1.5 else { return [Blocco(inizio: 0, fine: totale)] }
+        var confini: [TimeInterval] = [0]
+        var prossimo = durataBlocco
+        while totale - prossimo > durataBlocco / 2 {
+            let confine = puntoSilenzioso(file, vicino: prossimo) ?? prossimo
+            confini.append(confine)
+            prossimo = confine + durataBlocco
+        }
+        confini.append(totale)
+        return zip(confini, confini.dropFirst()).map { Blocco(inizio: $0, fine: $1) }
+    }
+
+    /// Cartella dei blocchi di una registrazione: resta fra un tentativo e l'altro e si cancella a lavoro finito.
+    static func cartellaLavoro(per url: URL) throws -> URL {
+        let byte = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let nome = "\(url.deletingPathExtension().lastPathComponent)-\(byte)-\(Int(durataBlocco))"
+        let cartella = URL.cachesDirectory.appending(path: "TrascrizioniInCorso/\(nome)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: cartella, withIntermediateDirectories: true)
+        return cartella
+    }
+
+    /// Centro della finestra di 50 ms più silenziosa fra 5 secondi prima e 5 secondi dopo `t`.
+    private static func puntoSilenzioso(_ file: AVAudioFile, vicino t: TimeInterval) -> TimeInterval? {
+        let sr = file.processingFormat.sampleRate
+        let inizio = max(0, t - 5)
+        let quanti = AVAudioFrameCount(10 * sr)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: quanti) else { return nil }
+        file.framePosition = AVAudioFramePosition(inizio * sr)
+        guard (try? file.read(into: buffer, frameCount: quanti)) != nil, let canale = buffer.floatChannelData?[0] else { return nil }
+        let finestra = max(1, Int(0.05 * sr))
+        var migliore = (energia: Float.greatestFiniteMagnitude, indice: 0)
+        var i = 0
+        while i + finestra <= Int(buffer.frameLength) {
+            var energia: Float = 0
+            for k in i..<(i + finestra) { energia += canale[k] * canale[k] }
+            if energia < migliore.energia { migliore = (energia, i) }
+            i += finestra
+        }
+        return inizio + Double(migliore.indice + finestra / 2) / sr
+    }
+
+    /// Converte il blocco in un file CAF a 16 kHz mono Float32; `progresso` riceve 0…1 (circa una volta al secondo
+    /// di lavoro, non a ogni buffer).
+    static func converti(_ url: URL, _ blocco: Blocco, in destinazione: URL, progresso: (Double) -> Void) throws {
+        let file = try AVAudioFile(forReading: url)
+        let sr = file.processingFormat.sampleRate
+        guard let formato = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false),
+              let convertitore = AVAudioConverter(from: file.processingFormat, to: formato),
+              let ingresso = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(sr)),
+              let uscitaBuffer = AVAudioPCMBuffer(pcmFormat: formato, frameCapacity: 17_600) else { throw Errore.conversione }
+        try? FileManager.default.removeItem(at: destinazione)
+        let uscita = try AVAudioFile(forWriting: destinazione, settings: formato.settings,
+                                     commonFormat: .pcmFormatFloat32, interleaved: false)
+        let primo = AVAudioFramePosition(blocco.inizio * sr)
+        let ultimo = min(AVAudioFramePosition(blocco.fine * sr), file.length)
+        file.framePosition = primo
+        let lettore = LettoreBlocco(file: file, buffer: ingresso, fine: ultimo)
+        var ultimoAvviso = Date.distantPast
+        while true {
+            try Task.checkCancellation()
+            uscitaBuffer.frameLength = 0
+            var errore: NSError?
+            let stato = convertitore.convert(to: uscitaBuffer, error: &errore) { _, statoIngresso in
+                lettore.prossimo(statoIngresso)
+            }
+            if let errore { throw errore }
+            if uscitaBuffer.frameLength > 0 { try uscita.write(from: uscitaBuffer) }
+            if Date().timeIntervalSince(ultimoAvviso) >= 1 {
+                ultimoAvviso = Date()
+                progresso(Double(file.framePosition - primo) / Double(max(ultimo - primo, 1)))
+            }
+            if stato == .endOfStream || stato == .error { break }
+        }
+        progresso(1)
+    }
+
+    /// Fornisce al convertitore un secondo di audio alla volta fino alla fine del blocco.
+    private final class LettoreBlocco: @unchecked Sendable {
+        let file: AVAudioFile
+        let buffer: AVAudioPCMBuffer
+        let fine: AVAudioFramePosition
+
+        init(file: AVAudioFile, buffer: AVAudioPCMBuffer, fine: AVAudioFramePosition) {
+            self.file = file
+            self.buffer = buffer
+            self.fine = fine
+        }
+
+        func prossimo(_ stato: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? {
+            let restanti = fine - file.framePosition
+            guard restanti > 0,
+                  (try? file.read(into: buffer, frameCount: min(buffer.frameCapacity, AVAudioFrameCount(restanti)))) != nil,
+                  buffer.frameLength > 0 else {
+                stato.pointee = .endOfStream
+                return nil
+            }
+            stato.pointee = .haveData
+            return buffer
+        }
     }
 }
 

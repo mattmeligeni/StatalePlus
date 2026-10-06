@@ -330,6 +330,23 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
     - Whisper è stato tolto (il modello scaricato si cancella da solo, 626 MB): è lento e su audio registrato da
       lontano inventa ("Grazie.") e ripete.
     - Qwen3-ASR è il più preciso, ma più lento, usa la GPU e ogni tanto ripete a lungo: per ora non incluso.
+  - **Trascrizione a blocchi** (`SegmentiAudio`): la registrazione si divide in blocchi di circa 10 minuti, con il
+    confine nel punto più silenzioso entro 5 secondi (finestre di 50 ms), così non si tagliano parole. Ogni blocco si
+    converte a 16 kHz mono Float32 un secondo di audio alla volta (meno di un secondo per blocco) e poi va a
+    FluidAudio.
+    - Prima FluidAudio convertiva tutta la lezione in un file temporaneo prima di iniziare, senza avanzamento: su
+      2 h 25 min iOS chiudeva l'attività di sistema dopo circa 30 secondi di barra ferma, anche in un'altra app o a
+      schermo bloccato, e la trascrizione ripartiva da zero.
+    - Il testo di ogni blocco si salva in `Caches/TrascrizioniInCorso`: un lavoro interrotto riprende dal blocco
+      successivo. Il file temporaneo è di un blocco (circa 38 MB) invece che di tutta la lezione.
+    - L'avanzamento di FluidAudio conta i pezzi inviati al Neural Engine (4 in parallelo), non quelli finiti: dentro
+      il blocco si stima dal tempo, con la velocità misurata sui blocchi già fatti, e si aggiorna ogni secondo.
+    - Fare due blocchi insieme o convertire in anticipo non accelera: la conversione dura meno di un secondo e il
+      Neural Engine è già occupato dai 4 pezzi in parallelo di FluidAudio.
+    - Prova su iPhone 17 Pro Max, lezione di 2 h 25 min, in background e a schermo bloccato: 14 blocchi in 8 min 40 s
+      più il caricamento del modello (circa 3,6 s per minuto di audio, come la trascrizione in un file unico).
+    - Nelle build di sviluppo il registro dei lavori va anche in `Library/Caches/registro-lavori.txt`
+      (`EsecuzioneEstesa.traccia`), da copiare dall'iPhone con `xcrun devicectl device copy from`.
   - **Pre-riscaldamento** di Parakeet: il modello si carica sul Neural Engine all'inizio di ogni registrazione (con la
     catena automatica attiva), così alla fine la trascrizione parte subito. Resta in memoria tre minuti dopo l'ultima
     trascrizione, poi si libera; si libera subito se iOS segnala memoria scarsa. Due trascrizioni insieme usano due

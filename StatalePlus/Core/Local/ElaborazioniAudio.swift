@@ -52,12 +52,17 @@ final class ElaborazioniAudio {
         let nc = NotificationCenter.default
         osservatori.append(nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in
             PrimoPiano.imposta(false)
+            EsecuzioneEstesa.traccia("App fuori dal primo piano")
+        })
+        osservatori.append(nc.addObserver(forName: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil, queue: .main) { _ in
+            EsecuzioneEstesa.traccia("Schermo bloccato (dati protetti non disponibili)")
         })
         osservatori.append(nc.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
             ParakeetLocale.libera()
         })
         osservatori.append(nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             PrimoPiano.imposta(true)
+            EsecuzioneEstesa.traccia("App in primo piano")
             MainActor.assumeIsolated { self?.riprendi() }
         })
     }
@@ -157,7 +162,7 @@ final class ElaborazioniAudio {
                 store.salvaTrascrizione(id, correggiTesto(testo))
             } catch {
                 guard corrente(chiave, gen) else { return }
-                log.error("Trascrizione non riuscita (\(motore.rawValue, privacy: .public)): \(String(describing: error), privacy: .public)")
+                EsecuzioneEstesa.traccia("Trascrizione non riuscita (\(motore.rawValue), in primo piano: \(PrimoPiano.attivo)): \(String(describing: error))", errore: true)
                 if sospendi(.trascrizione, id, error) { return }
                 errori[id] = error is CancellationError ? Self.interrotto : Self.messaggio(error)
             }
@@ -248,6 +253,7 @@ final class ElaborazioniAudio {
     /// in background) mette il lavoro in pausa.
     private func sospendi(_ tipo: Tipo, _ id: UUID, _ error: Error) -> Bool {
         guard !PrimoPiano.attivo else { return false }
+        EsecuzioneEstesa.traccia("In pausa fino al ritorno nell'app: \(String(describing: error))")
         let pausa = Stato(progresso: stato(tipo, id)?.progresso ?? 0, messaggio: "In pausa: riprende quando torni nell'app",
                           motore: stato(tipo, id)?.motore, inPausa: true)
         switch tipo {
