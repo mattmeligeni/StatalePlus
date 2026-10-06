@@ -104,6 +104,9 @@ final class AppModel {
             self?.glossario.ricarica()
             return self?.glossario.glossario?.termini ?? []
         }
+        #if DEBUG
+        if await opzioniSviluppo() { return }
+        #endif
         // Credenziali salvate con un dominio non ammesso: si torna all'onboarding.
         guard let saved = KeychainStore.load(), case .success = Credentials.normalizzaEmail(saved.email) else {
             KeychainStore.delete()
@@ -118,6 +121,23 @@ final class AppModel {
             await bootstrap()
         }
     }
+
+    #if DEBUG
+    /// Solo nelle build di sviluppo, per gli screenshot del README (argomenti di avvio, es. con `simctl launch`):
+    /// `-accessoDemo YES` entra nella versione dimostrativa, `-schermata registrazioni` apre una scheda,
+    /// `-altro esami` una pagina di Altro. Restituisce true se ha già avviato l'accesso.
+    private func opzioniSviluppo() async -> Bool {
+        let d = UserDefaults.standard
+        let schede: [String: AppTab] = ["oggi": .oggi, "orario": .orario, "ariel": .ariel, "registrazioni": .registrazioni, "altro": .altro]
+        let pagine: [String: AltroRoute] = ["carriera": .carriera, "tasse": .tasse, "esami": .esami, "aule": .aule,
+                                            "presenze": .presenze, "ia": .ia, "impostazioni": .impostazioni, "crediti": .crediti]
+        if let s = d.string(forKey: "schermata").flatMap({ schede[$0] }) { tab = s }
+        if let p = d.string(forKey: "altro").flatMap({ pagine[$0] }) { tab = .altro; altroPath = [p] }
+        guard d.bool(forKey: "accessoDemo"), KeychainStore.load()?.email != Demo.email else { return false }
+        await login(email: Demo.email, password: Demo.password)
+        return true
+    }
+    #endif
 
     /// Le credenziali vanno in Keychain dopo un login CAS riuscito.
     func login(email: String, password: String) async {

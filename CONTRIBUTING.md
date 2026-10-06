@@ -7,8 +7,9 @@ contributi con una pull request al repository ufficiale; non si possono pubblica
 ## Prima di aprire una pull request
 
 1. **Una cosa per volta.** Per modifiche grandi apri prima una segnalazione e parliamone.
-2. **README aggiornato.** Ogni modifica aggiorna `README.md` (funzionalità, endpoint, formati, stato dei lavori) e
-   aggiunge una voce nel *Changelog*.
+2. **Documentazione aggiornata.** Ogni modifica aggiorna la documentazione tecnica in `README.it.md` (funzionalità,
+   endpoint, formati, stato dei lavori), la vetrina in inglese `README.md` se cambia qualcosa di visibile, e aggiunge
+   una voce in `CHANGELOG.md`.
 3. **Mai dati personali reali** (nomi, matricole, email, codici fiscali, indirizzi, registrazioni di lezioni) nel
    codice, nei commenti, nei test, negli screenshot o nei messaggi dei commit: usa i segnaposto `MARIO ROSSI`,
    `12345A`, `mario.rossi@studenti.unimi.it`. Niente catture di traffico (`.har`) né credenziali.
