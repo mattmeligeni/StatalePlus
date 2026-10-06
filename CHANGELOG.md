@@ -2,6 +2,11 @@
 
 Storico delle modifiche di Statale Plus (fino al 2026-10-06 "Statale+"), dal più recente. Documentazione completa in [README.it.md](README.it.md).
 
+## 2026-10-06 (8)
+
+- GitHub Action: runner `xcode-27` (l'immagine `macos-26` non ha Xcode 27 e la prima esecuzione falliva), Xcode 27.0
+  scelto esplicitamente invece delle beta, `actions/checkout@v5` (Node 24).
+
 ## 2026-10-06 (7)
 
 - README rifatto per GitHub: vetrina in inglese (`README.md`) con icona, badge di versione e requisiti, galleria di

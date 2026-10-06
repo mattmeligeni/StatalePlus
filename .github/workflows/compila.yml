@@ -13,18 +13,22 @@ concurrency:
 
 jobs:
   compila:
-    # Serve Xcode 27 (SDK di iOS 27): se l'immagine del runner non lo ha ancora, il passo "Xcode" fallisce con un
-    # messaggio chiaro. Aggiornare qui il runner quando GitHub pubblica immagini più recenti.
-    runs-on: macos-26
+    # Serve Xcode 27 (SDK di iOS 27): l'immagine macos-26 ha solo Xcode 26, Xcode 27 sta nell'immagine dedicata
+    # `xcode-27` (anteprima pubblica di GitHub, https://github.com/actions/runner-images/issues/14404).
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Xcode
         run: |
-          XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
+          # La stessa versione usata in locale (27.0), non le beta che l'immagine installa accanto.
+          XCODE=""
+          for candidato in /Applications/Xcode_27.0.app /Applications/Xcode_27.app; do
+            if [ -d "$candidato" ]; then XCODE="$candidato"; break; fi
+          done
           if [ -z "$XCODE" ]; then
-            echo "::error::Xcode 27 non è disponibile su questo runner"; ls -d /Applications/Xcode*.app; exit 1
+            echo "::error::Xcode 27.0 non è disponibile su questo runner"; ls -d /Applications/Xcode*.app; exit 1
           fi
           sudo xcode-select -s "$XCODE"
           xcodebuild -version

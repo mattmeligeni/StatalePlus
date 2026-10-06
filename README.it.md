@@ -112,7 +112,7 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
 - Mai dati personali reali (nomi, matricole, indirizzi) nel codice, nei commenti o nei test: usare segnaposto
   (`MARIO ROSSI`, `12345A`).
 - Commit firmati con `git commit -s` (accettazione dell'accordo per i contributi).
-- La GitHub Action `Compila` (`.github/workflows/compila.yml`) compila l'app per il simulatore, senza firma, a ogni push
+- La GitHub Action `Compila` (`.github/workflows/compila.yml`) compila l'app per il simulatore, senza firma, sul runner `xcode-27` di GitHub (Xcode 27.0, in anteprima pubblica; l'immagine `macos-26` ha solo Xcode 26), a ogni push
   e pull request su `main`; lo schema `StatalePlus` è condiviso in `xcshareddata`. Modelli per segnalazioni (_Problema_,
   _Idea_) e pull request in `.github/`.
 
