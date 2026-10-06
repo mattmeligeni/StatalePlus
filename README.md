@@ -239,6 +239,12 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     catena automatica attiva), così alla fine la trascrizione parte subito. Resta in memoria tre minuti dopo l'ultima
     trascrizione, poi si libera; si libera subito se iOS segnala memoria scarsa. Due trascrizioni insieme usano due
     copie, perché FluidAudio segue l'avanzamento di una sola per volta.
+    - Alla prima apertura dopo un'installazione o un aggiornamento (anche da TestFlight) Core ML ricompila il modello
+      per il Neural Engine, anche per qualche minuto: si fa subito, in primo piano (`preparaDopoAggiornamento`).
+    - Il caricamento di Core ML non si può interrompere, ma chi lo aspetta sì (`attendiAnnullabile`): annullando, la
+      trascrizione si ferma subito e il caricamento finisce in sottofondo, pronto per il tentativo successivo.
+    - Durante il caricamento la barra avanza di poco (fino al 3%) con "Preparazione del modello": con l'avanzamento
+      fermo iOS considerava bloccata l'attività di sistema e la chiudeva ("non riuscita").
   - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
     conteggio parole, condivisione, nuova trascrizione.
 - **Riassunto** con Apple Intelligence, in _Altro › IA › Riassunti_: online (predefinita, quando Apple la abilita
@@ -337,6 +343,11 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     - Parakeet nel simulatore continua in background.
   - Se iOS non può avviare subito il lavoro c'è il tempo extra di `beginBackgroundTask`.
   - Il lavoro pesante gira fuori dal main thread (attori e funzioni `@concurrent`).
+  - Ogni avvio di un lavoro ha un identificativo (`ElaborazioniAudio.generazioni`): un lavoro annullato o sostituito
+    che finisce più tardi non tocca più lo stato e non salva risultati. Prima, annullando e rilanciando una
+    trascrizione, il lavoro vecchio cancellava lo stato di quello nuovo: l'app tornava a "Trascrivi" mentre l'attività
+    di sistema andava avanti e alla fine compariva la trascrizione. Annullamento dell'utente e interruzione di iOS si
+    distinguono così: il primo toglie l'identificativo, la seconda no (errore o pausa).
 - **Protezioni** contro elaborazioni inutili e riassunti inventati:
   - trascrizione solo per registrazioni di almeno **1 minuto**, riassunto solo da **5 minuti** (controllo sia nell'interfaccia
     sia nel gestore dei lavori, con il motivo mostrato al posto del pulsante);
@@ -771,6 +782,12 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
 ---
 
 ## Changelog
+
+### 2026-10-06 (6)
+
+- Trascrizioni: corretto lo stato non sincronizzato con l'attività di sistema (lavoro annullato che cancellava lo
+  stato di quello rilanciato, caricamento del modello non annullabile, attività chiusa da iOS durante il caricamento).
+  Parakeet si prepara alla prima apertura dopo ogni aggiornamento. Build 3.
 
 ### 2026-10-06 (5)
 

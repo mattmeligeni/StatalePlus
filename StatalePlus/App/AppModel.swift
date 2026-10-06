@@ -96,6 +96,7 @@ final class AppModel {
     func start() async {
         guard phase == .launching else { return }
         Task.detached(priority: .background) { ModelliDismessi.elimina() }
+        ParakeetLocale.preparaDopoAggiornamento()
         glossario.codiceCorso = { [weak self] in self?.studente?.codiceCorso }
         elaborazioni.correggiTesto = { [weak self] testo in self?.glossario.correggi(testo).testo ?? testo }
         elaborazioni.imparaTermini = { [weak self] termini, testo in self?.glossario.impara(termini, trascrizione: testo) ?? 0 }

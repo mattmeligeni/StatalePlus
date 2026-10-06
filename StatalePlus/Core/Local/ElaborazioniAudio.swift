@@ -40,8 +40,12 @@ final class ElaborazioniAudio {
     @ObservationIgnored var terminiGlossario: () -> [String] = { [] }
     /// Termini riconosciuti in una lezione riassunta → glossario; restituisce quanti sono nuovi (impostato da `AppModel`).
     @ObservationIgnored var imparaTermini: ([String], String) -> Int = { _, _ in 0 }
-    /// Lavori annullati dall'utente: le altre interruzioni (iOS) si mostrano come errore, non come annullamento.
-    @ObservationIgnored private var annullatiDallUtente: Set<String> = []
+    /// Identificativo dell'ultimo lavoro avviato per ogni chiave ("t"/"r"/"m" + id della registrazione). Un lavoro
+    /// annullato o sostituito può finire più tardi (il caricamento di un modello non si interrompe): confrontando il
+    /// suo identificativo con questo non tocca più lo stato né salva risultati. Prima un lavoro annullato, finendo,
+    /// cancellava lo stato di quello rilanciato: l'interfaccia tornava a "Trascrivi" mentre la trascrizione andava
+    /// avanti nell'attività di sistema.
+    @ObservationIgnored private var generazioni: [String: UUID] = [:]
     @ObservationIgnored private let log = Logger(subsystem: "com.mattiameligeni.StatalePlus", category: "elaborazioni")
 
     init() {
@@ -105,20 +109,22 @@ final class ElaborazioniAudio {
         miglioramenti[r.id] = Stato(progresso: 0, messaggio: "Miglioramento dell'audio…")
         let id = r.id
         let titolo = r.titolo
-        tasks["m\(id)"] = Task {
+        let (chiave, gen) = nuovoLavoro(.miglioramento, id)
+        tasks[chiave] = Task {
             do {
                 try await EsecuzioneEstesa.esegui(titolo: "Miglioramento audio", sottotitolo: titolo) { sistema in
                     try await store.migliora(id) { p in
                         sistema(p)
-                        Task { @MainActor in self.miglioramenti[id]?.progresso = p }
+                        Task { @MainActor in if self.corrente(chiave, gen) { self.miglioramenti[id]?.progresso = p } }
                     }
                 }
-            } catch is CancellationError {
             } catch {
-                erroriMiglioramento[id] = Self.messaggio(error)
+                guard corrente(chiave, gen) else { return }
+                if !(error is CancellationError) { erroriMiglioramento[id] = Self.messaggio(error) }
             }
+            guard corrente(chiave, gen) else { return }
             miglioramenti[id] = nil
-            tasks["m\(id)"] = nil
+            chiudi(chiave)
         }
     }
 
@@ -134,26 +140,29 @@ final class ElaborazioniAudio {
         let url = store.audioPerTrascrizione(r)
         let id = r.id
         let titolo = r.titolo
-        tasks["t\(id)"] = Task {
+        let (chiave, gen) = nuovoLavoro(.trascrizione, id)
+        tasks[chiave] = Task {
             do {
                 let testo = try await EsecuzioneEstesa.esegui(titolo: "Trascrizione", sottotitolo: titolo) { sistema in
                     try await Trascrittore.trascrivi(url, motore: motore) { p, m in
                         sistema(p, fase: m)
-                        Task { @MainActor in self.trascrizioni[id]?.progresso = p; self.trascrizioni[id]?.messaggio = m }
+                        Task { @MainActor in
+                            guard self.corrente(chiave, gen) else { return }
+                            self.trascrizioni[id]?.progresso = p
+                            self.trascrizioni[id]?.messaggio = m
+                        }
                     }
                 }
+                guard corrente(chiave, gen) else { return }
                 store.salvaTrascrizione(id, correggiTesto(testo))
-            } catch is CancellationError where annullatiDallUtente.remove("t\(id)") != nil || trascrizioni[id]?.inPausa == true {
-                tasks["t\(id)"] = nil
-                if trascrizioni[id]?.inPausa != true { trascrizioni[id] = nil }
-                return
             } catch {
+                guard corrente(chiave, gen) else { return }
                 log.error("Trascrizione non riuscita (\(motore.rawValue, privacy: .public)): \(String(describing: error), privacy: .public)")
                 if sospendi(.trascrizione, id, error) { return }
                 errori[id] = error is CancellationError ? Self.interrotto : Self.messaggio(error)
             }
             trascrizioni[id] = nil
-            tasks["t\(id)"] = nil
+            chiudi(chiave)
             prosegui(dopo: .trascrizione, id)
         }
     }
@@ -169,12 +178,17 @@ final class ElaborazioniAudio {
         let glossario = terminiGlossario()
         let id = r.id
         let titolo = r.titolo
-        tasks["r\(id)"] = Task {
+        let (chiave, gen) = nuovoLavoro(.riassunto, id)
+        tasks[chiave] = Task {
             do {
                 let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo) { sistema in
                     let aggiorna: @Sendable (Double, String) -> Void = { p, m in
                         sistema(p, fase: m)
-                        Task { @MainActor in self.riassunti[id]?.progresso = p; self.riassunti[id]?.messaggio = m }
+                        Task { @MainActor in
+                            guard self.corrente(chiave, gen) else { return }
+                            self.riassunti[id]?.progresso = p
+                            self.riassunti[id]?.messaggio = m
+                        }
                     }
                     switch motore {
                     case .apple:
@@ -184,30 +198,48 @@ final class ElaborazioniAudio {
                             return try await NuvolaApple.riassumi(testo, glossario: glossario, progresso: aggiorna)
                         } catch where NuvolaApple.convieneRipiegare(error) && AppleIntelligence.stato == .disponibile {
                             // Senza rete o oltre il limite giornaliero: si continua sul telefono.
-                            Task { @MainActor in self.riassunti[id]?.motore = MotoreRiassunto.apple.nome }
+                            Task { @MainActor in if self.corrente(chiave, gen) { self.riassunti[id]?.motore = MotoreRiassunto.apple.nome } }
                             return try await AppleIntelligence.riassumi(testo, glossario: glossario, progresso: aggiorna)
                         }
                     }
                 }
+                guard corrente(chiave, gen) else { return }
                 store.salvaRiassunto(id, md.testo)
                 // Il glossario impara i termini della lezione; con quelli nuovi si ricorregge la trascrizione.
                 if imparaTermini(md.termini, testo) > 0 {
                     let corretto = correggiTesto(testo)
                     if corretto != testo { store.salvaTrascrizione(id, corretto) }
                 }
-            } catch is CancellationError where annullatiDallUtente.remove("r\(id)") != nil || riassunti[id]?.inPausa == true {
-                tasks["r\(id)"] = nil
-                if riassunti[id]?.inPausa != true { riassunti[id] = nil }
-                return
             } catch {
+                guard corrente(chiave, gen) else { return }
                 log.error("Riassunto non riuscito (\(motore.rawValue, privacy: .public)): \(String(describing: error), privacy: .public)")
                 if sospendi(.riassunto, id, error) { return }
                 errori[id] = error is CancellationError ? Self.interrotto : Self.messaggio(error)
             }
             riassunti[id] = nil
-            tasks["r\(id)"] = nil
+            chiudi(chiave)
             prosegui(dopo: .riassunto, id)
         }
+    }
+
+    private static func chiave(_ tipo: Tipo, _ id: UUID) -> String {
+        let prefisso = switch tipo { case .trascrizione: "t"; case .riassunto: "r"; case .miglioramento: "m" }
+        return prefisso + id.uuidString
+    }
+
+    /// Registra un nuovo lavoro: da qui in poi solo lui aggiorna lo stato di quella registrazione.
+    private func nuovoLavoro(_ tipo: Tipo, _ id: UUID) -> (chiave: String, gen: UUID) {
+        let chiave = Self.chiave(tipo, id)
+        let gen = UUID()
+        generazioni[chiave] = gen
+        return (chiave, gen)
+    }
+
+    private func corrente(_ chiave: String, _ gen: UUID) -> Bool { generazioni[chiave] == gen }
+
+    private func chiudi(_ chiave: String) {
+        tasks[chiave] = nil
+        generazioni[chiave] = nil
     }
 
     // MARK: Pausa e ripresa
@@ -219,10 +251,11 @@ final class ElaborazioniAudio {
         let pausa = Stato(progresso: stato(tipo, id)?.progresso ?? 0, messaggio: "In pausa: riprende quando torni nell'app",
                           motore: stato(tipo, id)?.motore, inPausa: true)
         switch tipo {
-        case .trascrizione: trascrizioni[id] = pausa; tasks["t\(id)"] = nil
-        case .riassunto: riassunti[id] = pausa; tasks["r\(id)"] = nil
+        case .trascrizione: trascrizioni[id] = pausa
+        case .riassunto: riassunti[id] = pausa
         case .miglioramento: return false
         }
+        chiudi(Self.chiave(tipo, id))
         daRiprendere.append((tipo, id))
         if PrimoPiano.attivo { riprendi() }
         return true
@@ -248,12 +281,11 @@ final class ElaborazioniAudio {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
+    /// Annullato dall'utente: il lavoro si ferma appena può, e quando finisce non tocca più nulla (generazione tolta).
     func annulla(_ tipo: Tipo, _ id: UUID) {
-        let prefisso = switch tipo { case .trascrizione: "t"; case .riassunto: "r"; case .miglioramento: "m" }
-        let key = prefisso + id.uuidString
-        if tasks[key] != nil { annullatiDallUtente.insert(key) }
-        tasks[key]?.cancel()
-        tasks[key] = nil
+        let chiave = Self.chiave(tipo, id)
+        tasks[chiave]?.cancel()
+        chiudi(chiave)
         automatiche.remove(id)
         daRiprendere.removeAll { $0 == (tipo, id) }
         switch tipo {
@@ -264,9 +296,9 @@ final class ElaborazioniAudio {
     }
 
     func annullaTutto() {
-        annullatiDallUtente.formUnion(tasks.keys)
         tasks.values.forEach { $0.cancel() }
         tasks = [:]
+        generazioni = [:]
         automatiche = []
         daRiprendere = []
         trascrizioni = [:]

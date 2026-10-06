@@ -147,23 +147,42 @@ nonisolated enum ParakeetLocale {
                           progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         guard installato else { throw Errore.nonInstallato }
         progresso(0, "Caricamento del modello…")
-        let (asr, condiviso) = try await pronto.prendi()
+        // Mentre il modello si carica (la prima volta dopo l'installazione anche qualche minuto) l'avanzamento si muove
+        // un poco: con l'avanzamento fermo iOS considerava bloccata l'attività di sistema e la chiudeva ("non riuscita").
+        let attesa = Task {
+            var secondi = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                secondi += 2
+                progresso(min(Self.quotaCaricamento, Double(secondi) * 0.0005),
+                          secondi >= 10 ? "Preparazione del modello: la prima volta richiede qualche minuto" : "Caricamento del modello…")
+            }
+        }
+        let (asr, condiviso): (AsrManager, condiviso: Bool)
+        do {
+            (asr, condiviso) = try await pronto.prendi()
+            attesa.cancel()
+        } catch {
+            attesa.cancel()
+            throw error
+        }
         defer { Task { if condiviso { await pronto.restituisci() } else { await asr.cleanup() } } }
         let flusso = await asr.transcriptionProgressStream
         let osserva = Task {
             for try await p in flusso where durata > 0 {
-                progresso(min(p, 0.99), faseTrascrizione(p * durata, di: durata))
+                progresso(Self.quotaCaricamento + min(p, 0.99) * (1 - Self.quotaCaricamento), faseTrascrizione(p * durata, di: durata))
             }
         }
         defer { osserva.cancel() }
-        progresso(0, "Trascrizione…")
+        progresso(Self.quotaCaricamento, "Trascrizione…")
         var stato = TdtDecoderState.make()
         let risultato: ASRResult
         do {
             risultato = try await asr.transcribe(url, decoderState: &stato, language: .italian)
         } catch {
             // Un modello caricato da tempo può non essere più valido (es. dopo il background): si ricarica la volta dopo.
-            if condiviso { await pronto.rilascia() }
+            if condiviso, !(error is CancellationError) { await pronto.rilascia() }
             throw error
         }
         try Task.checkCancellation()
@@ -174,6 +193,9 @@ nonisolated enum ParakeetLocale {
 }
 
 nonisolated extension ParakeetLocale {
+    /// Parte della barra dedicata al caricamento del modello.
+    fileprivate static let quotaCaricamento = 0.03
+
     /// Il modello caricato, pronto per la prossima trascrizione.
     fileprivate static let pronto = ModelloPronto()
 
@@ -185,6 +207,21 @@ nonisolated extension ParakeetLocale {
         Task.detached(priority: .utility) { try? await pronto.prepara() }
     }
 
+    /// Alla prima apertura dopo un'installazione o un aggiornamento (anche da TestFlight) Core ML ricompila il modello
+    /// per il Neural Engine, e può richiedere qualche minuto: lo si fa subito, con l'app in primo piano, invece che
+    /// alla prima trascrizione (magari con l'app già in background).
+    static func preparaDopoAggiornamento() {
+        let versione = [Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString"),
+                        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion")]
+            .compactMap { $0 as? String }.joined(separator: "-")
+        let chiave = "parakeetPreparatoPer"
+        guard installato, UserDefaults.standard.string(forKey: chiave) != versione else { return }
+        Task.detached(priority: .utility) {
+            guard (try? await pronto.prepara()) != nil else { return }
+            UserDefaults.standard.set(versione, forKey: chiave)
+        }
+    }
+
     /// Libera subito il modello (memoria scarsa).
     static func libera() {
         Task { await pronto.rilascia() }
@@ -194,6 +231,8 @@ nonisolated extension ParakeetLocale {
 /// `AsrManager` con i modelli caricati, condiviso fra pre-riscaldamento e trascrizioni. FluidAudio segue
 /// l'avanzamento di una trascrizione alla volta per manager: se è già occupato (due trascrizioni insieme) se ne
 /// carica un altro solo per quella.
+/// Il caricamento di Core ML non si può interrompere: chi lo aspetta però sì (`attendiAnnullabile`). Un caricamento
+/// rimasto senza nessuno che lo aspetta finisce comunque, resta pronto per la volta dopo e si libera dopo tre minuti.
 private actor ModelloPronto {
     private var asr: AsrManager?
     private var occupato = false
@@ -206,12 +245,16 @@ private actor ModelloPronto {
 
     /// Il manager per una trascrizione; `condiviso` = da restituire con `restituisci()`.
     func prendi() async throws -> (AsrManager, condiviso: Bool) {
-        if occupato { return (try await Self.carica(), false) }
+        if occupato {
+            let separato = Task { try await Self.carica() }
+            return (try await attendiAnnullabile(separato, alloAnnullo: { separato.cancel() }), false)
+        }
         occupato = true
         do {
             return (try await condiviso(), true)
         } catch {
             occupato = false
+            programmaRilascio()
             throw error
         }
     }
@@ -219,12 +262,7 @@ private actor ModelloPronto {
     /// Fine della trascrizione: il modello resta pronto per tre minuti, poi si libera.
     func restituisci() {
         occupato = false
-        rilascio?.cancel()
-        rilascio = Task {
-            try? await Task.sleep(for: .seconds(180))
-            guard !Task.isCancelled else { return }
-            rilascia()
-        }
+        programmaRilascio()
     }
 
     func rilascia() {
@@ -234,18 +272,46 @@ private actor ModelloPronto {
         asr = nil
     }
 
+    private func programmaRilascio() {
+        rilascio?.cancel()
+        guard asr != nil, !occupato else { rilascio = nil; return }
+        rilascio = Task {
+            try? await Task.sleep(for: .seconds(180))
+            guard !Task.isCancelled else { return }
+            rilascia()
+        }
+    }
+
     private func condiviso() async throws -> AsrManager {
         rilascio?.cancel()
         rilascio = nil
         if let asr { return asr }
-        if let caricamento { return try await caricamento.value }
-        let compito = Task { try await Self.carica() }
-        caricamento = compito
-        defer { caricamento = nil }
-        let nuovo = try await compito.value
-        asr = nuovo
-        return nuovo
+        let compito: Task<AsrManager, Error>
+        if let caricamento {
+            compito = caricamento
+        } else {
+            compito = Task {
+                do {
+                    let nuovo = try await Self.carica()
+                    await self.caricato(nuovo)
+                    return nuovo
+                } catch {
+                    await self.caricamentoFallito()
+                    throw error
+                }
+            }
+            caricamento = compito
+        }
+        return try await attendiAnnullabile(compito)
     }
+
+    private func caricato(_ nuovo: AsrManager) {
+        asr = nuovo
+        caricamento = nil
+        programmaRilascio()
+    }
+
+    private func caricamentoFallito() { caricamento = nil }
 
     private static func carica() async throws -> AsrManager {
         let modelli: AsrModels
@@ -259,6 +325,54 @@ private actor ModelloPronto {
         let asr = AsrManager()
         try await asr.loadModels(modelli)
         return asr
+    }
+}
+
+/// Aspetta il risultato di un `Task` smettendo subito di aspettare se chi attende viene annullato (lanciando
+/// `CancellationError`); il `Task` prosegue, salvo che `alloAnnullo` lo fermi.
+nonisolated func attendiAnnullabile<T: Sendable>(_ compito: Task<T, Error>,
+                                                 alloAnnullo: @escaping @Sendable () -> Void = {}) async throws -> T {
+    let attesa = AttesaUnica<T>()
+    return try await withTaskCancellationHandler {
+        try await withCheckedThrowingContinuation { (c: CheckedContinuation<T, Error>) in
+            attesa.imposta(c)
+            Task { attesa.concludi(await compito.result) }
+        }
+    } onCancel: {
+        alloAnnullo()
+        attesa.concludi(.failure(CancellationError()))
+    }
+}
+
+/// Continuazione ripresa una sola volta, dal primo fra risultato e annullamento.
+private nonisolated final class AttesaUnica<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuazione: CheckedContinuation<T, Error>?
+    private var anticipato: Result<T, Error>?
+
+    func imposta(_ c: CheckedContinuation<T, Error>) {
+        lock.lock()
+        if let anticipato {
+            self.anticipato = nil
+            lock.unlock()
+            c.resume(with: anticipato)
+            return
+        }
+        continuazione = c
+        lock.unlock()
+    }
+
+    func concludi(_ r: Result<T, Error>) {
+        lock.lock()
+        guard let c = continuazione else {
+            // Annullato prima che la continuazione esistesse: la si riprende appena arriva.
+            if anticipato == nil { anticipato = r }
+            lock.unlock()
+            return
+        }
+        continuazione = nil
+        lock.unlock()
+        c.resume(with: r)
     }
 }
 
