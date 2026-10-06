@@ -470,8 +470,14 @@ Ancora esclusi:
 - Private Cloud Compute: si aggiunge quando Apple concede l'entitlement (Small Business Program in approvazione).
 
 Distribuzione verificata: archivio Release ed esportazione `app-store-connect` riusciti (IPA di 39 MB,
-`beta-reports-active`, `get-task-allow = false`). Icona provvisoria disegnata via codice, senza simboli né font Apple:
-una "S" bianca con un "+" giallo su blu, nelle varianti chiara, scura e tinted, senza canale alfa.
+`beta-reports-active`, `get-task-allow = false`). Prima build su TestFlight (1.0, build 1) inviata alla revisione beta
+il 2026-10-06; a ogni caricamento va alzato `CURRENT_PROJECT_VERSION`.
+
+**Icona**: libro aperto (copertina e pagina sinistra blu, pagine grigie) con una fiamma che sale dal centro, su un'idea
+dell'autore. Sorgenti vettoriali in `Grafica/Icona/` (`chiara.svg`, `scura.svg`, `tinted.svg`, generati da
+`genera.py` con gli stessi tracciati). Per rigenerare i PNG: `python3 genera.py`, poi `qlmanage -t -s 1024 -o . *.svg`
+(Quick Look disegna gli SVG) e `piatta.swift` per togliere il canale alfa, che App Store Connect non accetta. Basta
+la sola dimensione 1024×1024 nelle tre varianti (chiara, scura, tinted): le altre le genera Xcode.
 
 ### Versione dimostrativa
 
@@ -726,6 +732,10 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-06 (3)
+
+- Nuova icona: libro aperto con una fiamma, in vettoriale, nelle varianti chiara, scura e tinted. Build 2.
 
 ### 2026-10-06 (2)
 

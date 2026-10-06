@@ -1,0 +1,28 @@
+# Genera le tre varianti SVG dell'icona (chiara, scura, tinted) dagli stessi tracciati.
+import sys
+def svg(sfondo, blu, grigio, pagine_linee, fiamma_interna):
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="{sfondo}"/>
+  <!-- copertina -->
+  <path d="M 200 440 L 200 745 C 360 745 462 768 512 812 C 562 768 664 745 824 745 L 824 440"
+        fill="none" stroke="{blu}" stroke-width="38" stroke-linejoin="round"/>
+  <!-- bordo delle pagine -->
+  <path d="M 264 392 L 264 690 C 384 690 472 714 512 762 C 552 714 640 690 760 690 L 760 392"
+        fill="none" stroke="{grigio}" stroke-width="30" stroke-linejoin="round"/>
+  <!-- pagina sinistra -->
+  <path d="M 322 350 C 400 368 470 420 512 520 L 512 742 C 470 690 400 652 322 646 Z" fill="{blu}"/>
+  <!-- pagina destra -->
+  <path d="M 702 350 C 624 368 554 420 512 520 L 512 742 C 554 690 624 652 702 646 Z" fill="{grigio}"/>
+  <path d="M 530 600 C 584 560 640 548 702 546 M 530 668 C 584 628 640 616 702 614"
+        fill="none" stroke="{pagine_linee}" stroke-width="16" stroke-linecap="round"/>
+  <!-- fiamma -->
+  <path d="M 512 506 C 440 492 404 432 430 368 C 446 330 478 300 486 248 C 486 228 482 210 474 192
+           C 540 222 582 278 584 338 C 600 324 608 304 610 284 C 646 334 652 402 618 452 C 594 486 556 504 512 506 Z"
+        fill="{blu}" stroke="{sfondo}" stroke-width="26" stroke-linejoin="round" paint-order="stroke"/>
+  <path d="M 512 486 C 476 480 458 446 474 410 C 484 388 500 372 504 344 C 532 368 548 400 546 432
+           C 556 426 562 416 564 404 C 578 432 572 466 552 480 C 540 486 526 488 512 486 Z"
+        fill="{fiamma_interna}"/>
+</svg>'''
+open('chiara.svg','w').write(svg('#FFFFFF', '#1D3F7A', '#A3A8AE', '#FFFFFF', '#FFFFFF'))
+open('scura.svg','w').write(svg('#0E1726', '#7FA7E8', '#7C838C', '#0E1726', '#0E1726'))
+open('tinted.svg','w').write(svg('#000000', '#FFFFFF', '#8A8A8A', '#000000', '#000000'))
