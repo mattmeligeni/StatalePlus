@@ -1,4 +1,4 @@
-# Statale+
+# Statale Plus
 
 App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi per gli studenti dell'Università degli Studi di Milano, oggi sparsi in quattro sistemi diversi:
 
@@ -147,10 +147,14 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - **Backup delle registrazioni** (_Impostazioni › Backup delle registrazioni_, `ArchivioRegistrazioni`).
   - Esporta in un unico file `.aar` (AppleArchive, senza compressione: l'audio è già compresso) audio, originali,
     metadati, trascrizioni e riassunti, da salvare in File o iCloud Drive.
+  - **Importazione dal menu Condividi**: l'app dichiara di aprire gli archivi `.aar` (`CFBundleDocumentTypes` con
+    `com.apple.archive`, `LSSupportsOpeningDocumentsInPlace = NO`), quindi compare fra le app del menu Condividi e in
+    _Apri con_ di File. L'archivio arriva in `onOpenURL` (`AppModel.importaArchivio`), si importa subito con un avviso
+    del risultato e la copia nella cartella Inbox si cancella: non serve salvarlo prima su disco.
   - L'importazione estrae l'archivio, aggiunge solo le registrazioni che mancano e le inserisce nell'elenco tramite il
     normale recupero dai file.
-  - Serve per cambiare iPhone e per il passaggio a un altro team di sviluppo: iOS non aggiorna un'app firmata con un
-    identificativo diverso, quindi va disinstallata, e disinstallando si perdono i dati.
+  - Serve per cambiare iPhone e per passare a un'app con un altro identificativo (come da "Statale+" a "Statale
+    Plus"): iOS la considera un'altra app, con dati separati.
 - **Eliminazione** (dal dettaglio o con lo swipe) sempre con conferma: rimuove audio, metadati, trascrizione, riassunto e la
   voce di `registrazioni.json`, e ferma trascrizioni o riassunti in corso per quella registrazione.
 - **Riconciliazione all'avvio** fra file e indice:
@@ -265,17 +269,28 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   - **PDF A4** da condividere o stampare: è generato dall'app con titolo, insegnamento e data.
 - **Glossario del corso** (_Altro › IA › Glossario del corso_, `GlossarioCorso`, `GestoreGlossario`): termini del corso
   per correggere le parole storpiate dalla trascrizione ("dopamila" → "dopamina") e da passare ai riassunti.
-  - Creazione con Apple Intelligence (online se disponibile, altrimenti sul telefono): una richiesta guidata per
-    insegnamento (`TerminiInsegnamento`, 15-40 parole tecniche specifiche, temperatura 0,2). Sul Mac, per sei
-    insegnamenti, circa un minuto.
+  - Creazione con Apple Intelligence (online se disponibile, altrimenti sul telefono): richieste guidate
+    (`TerminiInsegnamento`, 15-40 parole tecniche specifiche ciascuna, temperatura 0,2).
   - Filtro dei termini generati (`GlossarioCorso.filtra`), dopo un glossario creato con Qwen con parole inventate e
     nomi di persona:
-    - una parola in minuscolo sconosciuta ai dizionari italiano e inglese resta solo se compare nelle trascrizioni
-      già fatte o se il modello la propone per almeno due insegnamenti (il dizionario non conosce molti termini
+    - alla creazione, una parola in minuscolo sconosciuta ai dizionari italiano e inglese resta solo se compare
+      nelle trascrizioni già fatte o se il modello la propone in almeno due richieste (il dizionario non conosce molti termini
       veri come "neurotrasmettitori"; le parole inventate come "fenotiropo" compaiono una volta sola);
     - i termini fatti solo di nomi propri sconosciuti al dizionario si scartano, gli eponimi dentro un termine
       restano ("nodi di Ranvier");
     - sigle scartate; parole comuni con la maiuscola riportate in minuscolo.
+  - Tre richieste per insegnamento, una per tipo di termine (concetti e teorie; strutture, sostanze e oggetti di
+    studio; processi, disturbi, metodi e test), con tipi generici validi per ogni corso di laurea. Sul Mac, per sei
+    insegnamenti: 356 termini in meno di 3 minuti (prima, con una richiesta per insegnamento, 89). Resta qualche
+    termine generico, innocuo per la correzione.
+  - **Impara dalle lezioni**: mentre riassume, il modello elenca i termini tecnici di ogni parte nella forma corretta
+    (`ParteLezione.termini`; online, una sezione _Termini tecnici_ della passata finale, tolta dal documento). Passano
+    dallo stesso filtro ed entrano nel glossario (`GestoreGlossario.impara`); con termini nuovi la trascrizione della
+    lezione si ricorregge. Una parola sconosciuta al dizionario entra solo quando ricompare in una seconda lezione
+    (`candidati`): nella prova il modello copiava anche errori della trascrizione ("brassia" per "aprassia"). Sulla
+    lezione di neuroanatomia ha riconosciuto, fra gli altri, barriera emato-encefalica, circolo di Willis, formazione
+    reticolare, dermatomeri, motoneuroni, tronco encefalico, disartria e agnosia. I termini imparati restano quando
+    il glossario si ricrea.
   - I cognomi dei docenti non entrano più nel glossario. I termini aggiunti a mano restano quando lo si ricrea. Un
     glossario creato prima del filtro si ripulisce da solo alla prima lettura.
   - Correzione (`CorrettoreTermini`), automatica sulle nuove trascrizioni e su richiesta su quelle già fatte. Una parola
@@ -305,9 +320,8 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     di un minuto". Il titolo è il tipo di lavoro ("Trascrizione", "Riassunto", "Download di Parakeet").
   - Da iOS 27 il Neural Engine in background (Parakeet) richiede l'entitlement _Background Inference_
     (`com.apple.developer.background-tasks.continued-processing.inference`), valido anche fuori dai lavori lunghi; non
-    serve un'opzione nella richiesta del lavoro. Apple Intelligence gira in un processo di sistema e non ne ha bisogno.
-    Finché l'entitlement non è nel profilo, `StataleNeuralEngineInBackground = NO` in Info.plist e Parakeet indica che
-    si mette in pausa fuori dall'app.
+    serve un'opzione nella richiesta del lavoro. È attivo (`StataleNeuralEngineInBackground = YES`): Parakeet continua
+    fuori dall'app. Apple Intelligence gira in un processo di sistema e non ne ha bisogno.
     - Un'interruzione non chiesta dall'utente ora mostra un errore.
     - Un lavoro che si ferma per questo resta "in pausa" e riparte da solo al ritorno in
       primo piano (`PrimoPiano`, `ElaborazioniAudio.sospendi`).
@@ -415,13 +429,13 @@ dei docenti, manifesto degli studi) si scaricano e si mostrano con Quick Look (`
   parser interno e i framework di sistema.
 
 ```bash
-open Statale+.xcodeproj
+open StatalePlus.xcodeproj
 ```
 
 Da riga di comando (simulatore):
 
 ```bash
-xcodebuild -project Statale+.xcodeproj -scheme "Statale+" -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
+xcodebuild -project StatalePlus.xcodeproj -scheme StatalePlus -destination 'generic/platform=iOS Simulator' build CODE_SIGNING_ALLOWED=NO
 ```
 
 Per installare nel simulatore conviene la build firmata ("Sign to Run Locally", senza `CODE_SIGNING_ALLOWED=NO`):
@@ -429,27 +443,30 @@ una build non firmata non ha l'`application-identifier` del team e quindi non ve
 Portachiavi dalla build di Xcode.
 
 Impostazioni di progetto rilevanti: `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
-`SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (`UIBackgroundModes = audio,
-processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.elaborazione.*` per i lavori lunghi),
+`SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `StatalePlus-Info.plist` (`UIBackgroundModes = audio,
+processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.StatalePlus.elaborazione.*` per i lavori lunghi),
 `ITSAppUsesNonExemptEncryption = NO` (solo HTTPS di sistema), `StatalePCCAutorizzata` e
 `StataleNeuralEngineInBackground` (vedi sopra).
 `PrivacyInfo.xcprivacy`: nessun tracciamento, nessun dato raccolto dallo sviluppatore. API dichiarate:
 UserDefaults (CA92.1), date dei file (C617.1) e spazio su disco (85F4.1, E174.1).
 
-`Statale+.entitlements` (account Apple Developer a pagamento, team `TYJFB2ZDYA`, lo stesso del vecchio team
-personale: l'identificativo dell'app non cambia e gli aggiornamenti da TestFlight conservano i dati):
+Identificativo dell'app: `com.mattiameligeni.StatalePlus` (fino al 2026-10-06 `com.mattiameligeni.Statale-`, con il
+nome "Statale+"). Per iOS è un'app diversa: registrazioni e accesso della versione precedente non passano da soli;
+le registrazioni si spostano con il backup (dalla vecchia app, _Esporta_ › menu Condividi › _Statale Plus_).
 
+`StatalePlus.entitlements` (account Apple Developer a pagamento, team `TYJFB2ZDYA`):
+
+- _Background Inference_ (`…continued-processing.inference`): Neural Engine in background da iOS 27, per Parakeet;
+  con `StataleNeuralEngineInBackground = YES` in Info.plist. È pubblico per gli account a pagamento (senza richiesta
+  ad Apple), ma la firma automatica da riga di comando non lo aggiunge all'App ID ("Entitlement … not found and could
+  not be included in profile"): va attivato a mano su ogni nuovo identificativo, in Xcode (_Signing & Capabilities_
+  › _+ Capability_ › _Background Inference_) o sul portale sviluppatori;
 - _Increased Memory Limit_.
 
 _Background GPU Access_ è stato tolto insieme a Qwen, l'unico lavoro sulla GPU.
 
 Ancora esclusi:
 
-- _Background Inference_: è pubblico per gli account a pagamento (catalogo delle capability di Xcode, senza
-  richiesta ad Apple), ma la firma automatica non lo aggiunge all'App ID ("Entitlement … not found and could not be
-  included in profile"), nemmeno con il target minimo a iOS 27. Va attivato a mano: in Xcode, _Signing &
-  Capabilities_ › _+ Capability_ › _Background Inference_, oppure sul portale sviluppatori, nell'identificativo
-  `com.mattiameligeni.Statale-`. Poi `StataleNeuralEngineInBackground = YES`;
 - Private Cloud Compute: si aggiunge quando Apple concede l'entitlement (Small Business Program in approvazione).
 
 Distribuzione verificata: archivio Release ed esportazione `app-store-connect` riusciti (IPA di 39 MB,
@@ -488,7 +505,7 @@ Trascrizioni, riassunti e download dei modelli funzionano come nella versione no
 ## Architettura
 
 ```
-Statale+/
+StatalePlus/
 ├── App/                 AppModel (stato radice, navigazione, refresh), AppServices, Live<T>
 ├── Core/
 │   ├── Auth/            CASSession, ArielSession, KeychainStore
@@ -692,7 +709,7 @@ Da completare:
 
 © 2026 Mattia Meligeni. Tutti i diritti riservati.
 
-Statale+ è un'app indipendente e non ufficiale: non è affiliata, sponsorizzata né approvata dall'Università degli Studi
+Statale Plus è un'app indipendente e non ufficiale: non è affiliata, sponsorizzata né approvata dall'Università degli Studi
 di Milano. Nomi e marchi dei servizi citati appartengono ai rispettivi titolari. I dati sono letti dai servizi
 dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre il sito ufficiale.
 
@@ -709,6 +726,16 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-06 (2)
+
+- Nome **Statale Plus** (prima "Statale+") e nuovo identificativo `com.mattiameligeni.StatalePlus`; progetto, target e
+  cartelle rinominati. Le registrazioni della vecchia app si portano con il backup.
+- **Importazione dal menu Condividi**: l'app compare fra quelle a cui inviare l'archivio delle registrazioni e lo
+  importa subito, senza salvarlo prima.
+- _Background Inference_ attivo: Parakeet trascrive anche fuori dall'app (iOS 27).
+- Glossario più ricco (tre richieste per insegnamento: 356 termini contro 89 nella prova) e che **impara dalle
+  lezioni**: i termini riconosciuti nei riassunti entrano nel glossario e la trascrizione si ricorregge.
 
 ### 2026-10-06
 
