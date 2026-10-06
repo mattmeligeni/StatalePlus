@@ -334,7 +334,7 @@ private nonisolated final class UnaVoltaRete: @unchecked Sendable {
     }
 }
 
-/// Nota sui lavori lunghi: da iOS 26 continuano uscendo dall'app, ma in primo piano sono più rapidi.
+/// Nota sui lavori lunghi: continuano uscendo dall'app, ma in primo piano sono più rapidi.
 nonisolated enum NotaBackground {
     /// Da iOS 27 il Neural Engine in background (Parakeet) richiede l'entitlement "Background Inference": la chiave
     /// `StataleNeuralEngineInBackground` di Info.plist va messa a `YES` insieme all'entitlement.
@@ -345,11 +345,5 @@ nonisolated enum NotaBackground {
         return true
     }
 
-    static var testo: String {
-        if #available(iOS 26.0, *) {
-            "Puoi uscire dall'app: il lavoro continua. Con l'app aperta finisce prima."
-        } else {
-            "Tieni l'app aperta finché non finisce."
-        }
-    }
+    static let testo = "Puoi uscire dall'app: il lavoro continua. Con l'app aperta finisce prima."
 }

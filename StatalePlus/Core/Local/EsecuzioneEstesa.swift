@@ -4,15 +4,15 @@ import UIKit
 
 /// Lavori lunghi avviati dall'utente (trascrizione, riassunto, miglioramento dell'audio, download dei modelli)
 /// che devono poter continuare se l'app va in background.
-/// - iOS 26+: `BGContinuedProcessingTask`. Il lavoro parte in primo piano; se si esce dall'app iOS lo lascia
+/// - `BGContinuedProcessingTask`: il lavoro parte in primo piano; se si esce dall'app iOS lo lascia
 ///   proseguire e ne mostra l'avanzamento in un'attività in tempo reale, da cui si può anche annullare. Ogni lavoro
 ///   ha un identificativo proprio (`…elaborazione.<uuid>`, ammesso dal carattere jolly in Info.plist).
 /// - L'attività in tempo reale è quella di sistema (non personalizzabile): il titolo dice il lavoro, il sottotitolo
 ///   la fase attuale e il tempo stimato, aggiornati man mano.
 /// - Da iOS 27 il Neural Engine in background (Parakeet) richiede l'entitlement "Background Inference": senza, quei
 ///   lavori si mettono in pausa e riprendono in primo piano (`ElaborazioniAudio`).
-/// - Versioni precedenti, o se il sistema non può avviarlo subito: si esegue normalmente chiedendo il tempo extra
-///   di `beginBackgroundTask` (circa 30 secondi), poi il lavoro si sospende con l'app e riprende al ritorno.
+/// - Se il sistema non può avviarlo subito: si esegue normalmente chiedendo il tempo extra di `beginBackgroundTask`
+///   (circa 30 secondi), poi il lavoro si sospende con l'app e riprende al ritorno.
 nonisolated enum EsecuzioneEstesa {
     static let prefisso = (Bundle.main.bundleIdentifier ?? "com.mattiameligeni.StatalePlus") + ".elaborazione."
 
@@ -20,15 +20,12 @@ nonisolated enum EsecuzioneEstesa {
     /// `sottotitolo` si vede solo finché non arriva la prima fase.
     static func esegui<T: Sendable>(titolo: String, sottotitolo: String,
                                     operazione: @escaping @Sendable (_ avanzamento: Avanzamento) async throws -> T) async throws -> T {
-        if #available(iOS 26.0, *) {
-            if let risultato = try await continuata(titolo: titolo, sottotitolo: sottotitolo, operazione: operazione) {
-                return risultato.valore
-            }
+        if let risultato = try await continuata(titolo: titolo, sottotitolo: sottotitolo, operazione: operazione) {
+            return risultato.valore
         }
         return try await conTempoExtra(titolo: titolo, operazione: operazione)
     }
 
-    @available(iOS 26.0, *)
     private static func continuata<T: Sendable>(titolo: String, sottotitolo: String,
                                                 operazione: @escaping @Sendable (Avanzamento) async throws -> T) async throws -> Risultato<T>? {
         let identificativo = prefisso + UUID().uuidString
@@ -84,7 +81,6 @@ nonisolated struct Avanzamento: Sendable {
 
 /// Il task di sistema non è `Sendable`: lo si usa solo per avanzamento, titoli e conclusione (protetti dal lock).
 /// Il sottotitolo mostra la fase e il tempo che manca, stimato dalla velocità media; cambia al massimo ogni 3 secondi.
-@available(iOS 26.0, *)
 private nonisolated final class CompitoDiSistema: @unchecked Sendable {
     private let task: BGContinuedProcessingTask
     private let titolo: String

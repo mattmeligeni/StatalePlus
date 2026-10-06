@@ -132,7 +132,7 @@ private struct StatoElaborazione: View {
 
 // MARK: - Trascrizione completa
 
-/// Testo completo modificabile, con Writing Tools (iOS 18+) per correggere, riscrivere o riassumere.
+/// Testo completo modificabile, con Writing Tools per correggere, riscrivere o riassumere.
 struct TrascrizioneView: View {
     let id: UUID
     var player: AudioPlayer? = nil
@@ -328,10 +328,9 @@ struct MarkdownTesto: View {
 }
 
 extension View {
-    /// Writing Tools completi (riscrittura, correzione, riassunto) su iOS 18+.
-    @ViewBuilder
+    /// Writing Tools completi (riscrittura, correzione, riassunto).
     func strumentiScrittura() -> some View {
-        if #available(iOS 18.0, *) { writingToolsBehavior(.complete) } else { self }
+        writingToolsBehavior(.complete)
     }
 }
 

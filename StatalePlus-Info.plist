@@ -19,10 +19,6 @@
 			</array>
 		</dict>
 	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<false/>
 	<key>StataleNeuralEngineInBackground</key>
 	<true/>
 	<key>StatalePCCAutorizzata</key>

@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(FoundationModels)
 import FoundationModels
-#endif
 
 /// Apple Intelligence su Private Cloud Compute (iOS 27): il modello più grande di Apple sui suoi server, con un
 /// contesto di 32K token (8 volte quello sul telefono). Una lezione di due ore si riassume in 2-3 blocchi invece di
@@ -21,7 +19,6 @@ nonisolated enum NuvolaApple {
 
     static var stato: Stato {
         guard autorizzata else { return .nonAutorizzata }
-        #if canImport(FoundationModels)
         guard #available(iOS 27.0, *) else { return .nonDisponibile("Richiede iOS 27.") }
         return switch PrivateCloudComputeLanguageModel().availability {
         case .available: .disponibile
@@ -29,14 +26,10 @@ nonisolated enum NuvolaApple {
         case .unavailable(.systemNotReady): .nonDisponibile("Apple Intelligence non è ancora pronta: riprova tra poco.")
         @unknown default: .nonDisponibile("Non disponibile in questo momento.")
         }
-        #else
-        return .nonDisponibile("Non disponibile.")
-        #endif
     }
 
     /// Stato del limite giornaliero: testo da mostrare (nil se lontano dal limite).
     static var notaLimite: String? {
-        #if canImport(FoundationModels)
         guard autorizzata, #available(iOS 27.0, *) else { return nil }
         let q = PrivateCloudComputeLanguageModel().quotaUsage
         if q.isLimitReached {
@@ -44,23 +37,18 @@ nonisolated enum NuvolaApple {
             return "Hai usato tutte le richieste disponibili\(quando)."
         }
         if case .belowLimit(let info) = q.status, info.isApproachingLimit { return "Stai per raggiungere il limite giornaliero." }
-        #endif
         return nil
     }
 
     /// Mostra l'offerta di Apple per avere più richieste (iCloud+), se disponibile.
     static var puòAumentareLimite: Bool {
-        #if canImport(FoundationModels)
         if autorizzata, #available(iOS 27.0, *) { return PrivateCloudComputeLanguageModel().quotaUsage.limitIncreaseSuggestion != nil }
-        #endif
         return false
     }
 
     @MainActor
     static func mostraAumentoLimite() {
-        #if canImport(FoundationModels)
         if #available(iOS 27.0, *) { PrivateCloudComputeLanguageModel().quotaUsage.limitIncreaseSuggestion?.show() }
-        #endif
     }
 
     enum Errore: LocalizedError {
@@ -71,9 +59,7 @@ nonisolated enum NuvolaApple {
     /// Errori per cui conviene passare ad Apple Intelligence sul telefono: rete assente, servizio non raggiungibile,
     /// limite giornaliero raggiunto.
     static func convieneRipiegare(_ error: Error) -> Bool {
-        #if canImport(FoundationModels)
         if #available(iOS 27.0, *), error is PrivateCloudComputeLanguageModel.Error { return true }
-        #endif
         return error is Errore || (error as? URLError) != nil
     }
 
@@ -82,7 +68,6 @@ nonisolated enum NuvolaApple {
     @concurrent
     static func riassumi(_ trascrizione: String, glossario: [String] = [],
                          progresso: @escaping @Sendable (Double, String) -> Void) async throws -> Riassunto {
-        #if canImport(FoundationModels)
         guard #available(iOS 27.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
         let modello = PrivateCloudComputeLanguageModel()
         progresso(0, "Invio ad Apple Intelligence")
@@ -92,8 +77,5 @@ nonisolated enum NuvolaApple {
                 try await sessione.respond(to: richiesta, options: GenerationOptions(temperature: 0.3, maximumResponseTokens: massimo)).content
             }
         }
-        #else
-        throw Errore.nonDisponibile
-        #endif
     }
 }

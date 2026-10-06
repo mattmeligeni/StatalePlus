@@ -176,11 +176,12 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - **Trascrizione** in italiano, con tre motori a scelta in _Altro › IA › Trascrizione_ (sotto la
   trascrizione c'è la nota "Sono disponibili altri modelli più accurati" con il collegamento alla scelta):
   - **Apple** (predefinito): locale, privato, veloce e leggero.
-    - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber` con il preset `.transcription` (quello più accurato, per
+    - `SpeechAnalyzer` + `SpeechTranscriber` con il preset `.transcription` (quello più accurato, per
       dettatura e audio lunghi). Niente parole di contesto (`AnalysisContext`): su una lezione di 2 ore e mezza, un
       vocabolario di 63 termini lascia il testo identico. `DictationTranscriber` perde più di metà delle parole.
       Il modello della lingua viene scaricato la prima volta.
-    - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 s, on-device quando supportato, con punteggiatura.
+    - Se `SpeechTranscriber` non è disponibile sull'iPhone: `SFSpeechRecognizer` a blocchi di 50 s, on-device quando
+      supportato, con punteggiatura.
   - **Parakeet** (NVIDIA Parakeet TDT 0.6B v3, versione "Ultra", con FluidAudio): locale, più accurato, download di
     **632 MB**. Lavora sul Neural Engine con circa 90 MB di memoria e legge il file a blocchi dal disco.
     - Prima del download un avviso mostra dimensione, spazio libero, rete (Wi-Fi consigliato, possibili costi su
@@ -231,7 +232,7 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     trascrizione, poi si libera; si libera subito se iOS segnala memoria scarsa. Due trascrizioni insieme usano due
     copie, perché FluidAudio segue l'avanzamento di una sola per volta.
   - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
-    (iOS 18+), conteggio parole, condivisione, nuova trascrizione.
+    conteggio parole, condivisione, nuova trascrizione.
 - **Riassunto** con Apple Intelligence, in _Altro › IA › Riassunti_: online (predefinita, quando Apple la abilita
   per l'app) o sul telefono. Qwen 3.5 4B è stato tolto: su iPhone 17 Pro Max il riassunto di 20 minuti di lezione
   richiedeva 3 minuti e il 3% di batteria (circa 30 minuti e 30% per due ore), il glossario 6-7 minuti e il 6%. Il
@@ -248,7 +249,7 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     - Serve l'entitlement `com.apple.developer.private-cloud-compute`, concesso da Apple su richiesta a chi è
       nell'App Store Small Business Program. Finché manca, `StatalePCCAutorizzata = NO` in Info.plist e l'opzione si
       vede disattivata ("Presto disponibile").
-  - **Apple Intelligence sul telefono** (FoundationModels, iOS 26+, modello di sistema, solo se disponibile):
+  - **Apple Intelligence sul telefono** (FoundationModels, modello di sistema, solo se disponibile):
     - Parti grandi quanto il contesto permette: 4096 token fino a iOS 26, 8192 da iOS 27 (`contextSize`). Da iOS 26.4
       si misurano in token istruzioni, schema e un campione del testo (`tokenCount`), e la dimensione delle parti in
       caratteri si ricava dal rapporto caratteri/token del testo stesso; prima si usano 4000 caratteri. Se una parte
@@ -326,7 +327,7 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     - Un lavoro che si ferma per questo resta "in pausa" e riparte da solo al ritorno in
       primo piano (`PrimoPiano`, `ElaborazioniAudio.sospendi`).
     - Parakeet nel simulatore continua in background.
-  - Prima di iOS 26 c'è il tempo extra di `beginBackgroundTask`.
+  - Se iOS non può avviare subito il lavoro c'è il tempo extra di `beginBackgroundTask`.
   - Il lavoro pesante gira fuori dal main thread (attori e funzioni `@concurrent`).
 - **Protezioni** contro elaborazioni inutili e riassunti inventati:
   - trascrizione solo per registrazioni di almeno **1 minuto**, riassunto solo da **5 minuti** (controllo sia nell'interfaccia
@@ -423,7 +424,8 @@ dei docenti, manifesto degli studi) si scaricano e si mostrano con Quick Look (`
 
 ## Requisiti e build
 
-- Xcode 27 (Swift 6.4), target **iOS 17.0+**, iPhone e iPad.
+- Xcode 27 (Swift 6.4), target **iOS 26.0+** (dal 2026-10-06: gli stessi iPhone di iOS 26, dall'iPhone 11 in poi),
+  iPhone e iPad. Niente più controlli di versione e ripieghi per iOS 17–25.
 - **Dipendenze esterne**: solo [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.x (Apache 2.0) per
   Parakeet su Core ML. HTML, CSS selector, XML, JSON, Keychain, audio, fotocamera, trascrizione Apple e riassunti Apple usano il
   parser interno e i framework di sistema.
@@ -688,9 +690,9 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 | ------------------- | --------------------------------------------------- |
 | Microfono           | registrazione delle lezioni                         |
 | Fotocamera          | scansione del QR del codice lezione                 |
-| Riconoscimento vocale | trascrizione delle registrazioni (iOS 17–25)      |
+| Riconoscimento vocale | trascrizione con il ripiego `SFSpeechRecognizer`  |
 | Audio in background | la registrazione continua a schermo bloccato        |
-| Elaborazione in background | trascrizione, riassunto, miglioramento e download proseguono fuori dall'app (iOS 26+); Parakeet va in pausa e riprende finché manca _Background Inference_ |
+| Elaborazione in background | trascrizione, riassunto, miglioramento e download proseguono fuori dall'app, anche Parakeet (_Background Inference_) |
 | Libreria foto       | nessun permesso: la foto profilo usa `PhotosPicker` |
 
 ---
@@ -732,6 +734,12 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 ---
 
 ## Changelog
+
+### 2026-10-06 (4)
+
+- Requisito minimo **iOS 26.0**: tolti i controlli di versione e i ripieghi per iOS 17–25 (pulsanti senza vetro,
+  testi per i lavori in primo piano, blocchi condizionali di FoundationModels).
+- Repository pronto per GitHub: impostazioni personali di Xcode fuori dal controllo di versione.
 
 ### 2026-10-06 (3)
 

@@ -2,9 +2,10 @@ import AVFoundation
 import Speech
 
 /// Trascrizione delle registrazioni in italiano: Parakeet (se scelto e scaricato) oppure il framework Speech di Apple.
-/// - iOS 26+: `SpeechAnalyzer` + `SpeechTranscriber`, on-device e pensato per audio lunghi
-///   (il modello della lingua viene scaricato la prima volta tramite `AssetInventory`).
-/// - iOS 17–25: `SFSpeechRecognizer` a blocchi di 50 secondi (on-device se supportato), con punteggiatura.
+/// - `SpeechAnalyzer` + `SpeechTranscriber`, on-device e pensato per audio lunghi (il modello della lingua viene
+///   scaricato la prima volta tramite `AssetInventory`);
+/// - se `SpeechTranscriber` non è disponibile su questo iPhone: `SFSpeechRecognizer` a blocchi di 50 secondi
+///   (on-device se supportato), con punteggiatura.
 nonisolated enum Trascrittore {
     static let lingua = Formats.it
 
@@ -31,7 +32,7 @@ nonisolated enum Trascrittore {
             return paragrafi(try await ParakeetLocale.trascrivi(url, durata: durata, progresso: progresso))
         }
         var testo: String?
-        if #available(iOS 26.0, *), SpeechTranscriber.isAvailable {
+        if SpeechTranscriber.isAvailable {
             do { testo = try await conAnalyzer(url, progresso: progresso) } catch Errore.linguaNonSupportata { testo = nil }
         }
         if testo == nil {
@@ -45,9 +46,8 @@ nonisolated enum Trascrittore {
         return pulito
     }
 
-    // MARK: iOS 26+
+    // MARK: SpeechAnalyzer
 
-    @available(iOS 26.0, *)
     private static func conAnalyzer(_ url: URL,
                                     progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: lingua) else { throw Errore.linguaNonSupportata }
@@ -86,7 +86,7 @@ nonisolated enum Trascrittore {
         }
     }
 
-    // MARK: iOS 17–25
+    // MARK: Ripiego senza SpeechTranscriber
 
     private static func conRecognizer(_ url: URL, progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         let stato = await withCheckedContinuation { c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) } }

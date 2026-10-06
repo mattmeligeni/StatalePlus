@@ -64,11 +64,7 @@ private struct PulsanteChiudi: View {
         }
         .buttonBorderShape(.capsule)
         .accessibilityHint("Chiude la tastiera")
-        if #available(iOS 26.0, *) {
-            pulsante.buttonStyle(.glass)
-        } else {
-            pulsante.buttonStyle(.bordered).background(.regularMaterial, in: Capsule())
-        }
+        pulsante.buttonStyle(.glass)
     }
 }
 

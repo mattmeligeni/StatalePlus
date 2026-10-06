@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(FoundationModels)
 import FoundationModels
-#endif
 
 /// Un riassunto e i termini tecnici che il modello ha riconosciuto nella lezione, nella forma corretta: servono a far
 /// crescere il glossario del corso (`GestoreGlossario.impara`).
@@ -50,8 +48,6 @@ nonisolated enum AppleIntelligence {
     }
 
     static var stato: Stato {
-        #if canImport(FoundationModels)
-        guard #available(iOS 26.0, *) else { return .nonSupportata }
         let modello = SystemLanguageModel.default
         switch modello.availability {
         case .available:
@@ -60,9 +56,6 @@ nonisolated enum AppleIntelligence {
         case .unavailable(.modelNotReady): return .inPreparazione
         default: return .nonSupportata
         }
-        #else
-        return .nonSupportata
-        #endif
     }
 
     enum Errore: LocalizedError {
@@ -93,8 +86,7 @@ nonisolated enum AppleIntelligence {
     static func riassumi(_ trascrizione: String, glossario: [String] = [],
                          progresso: @escaping @Sendable (Double, String) -> Void) async throws -> Riassunto {
         guard LimitiElaborazione.contenutoSufficiente(trascrizione) else { throw Errore.testoInsufficiente }
-        #if canImport(FoundationModels)
-        guard #available(iOS 26.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
+        guard stato == .disponibile else { throw Errore.nonDisponibile }
         progresso(0, "Verifica del contenuto")
         guard try await eLezione(trascrizione) else { throw Errore.testoInsufficiente }
         do {
@@ -102,13 +94,8 @@ nonisolated enum AppleIntelligence {
         } catch where violaProtezioni(error) {
             throw Errore.contenutoNonAmmesso
         }
-        #else
-        throw Errore.nonDisponibile
-        #endif
     }
 
-    #if canImport(FoundationModels)
-    @available(iOS 26.0, *)
     @Generable
     struct ParteLezione {
         @Guide(description: "true solo se il testo non spiega alcun argomento (saluti, attese, rumore, frasi senza contenuto)")
@@ -125,7 +112,6 @@ nonisolated enum AppleIntelligence {
         let termini: [String]
     }
 
-    @available(iOS 26.0, *)
     @Generable
     struct SintesiLezione {
         @Guide(description: "Un paragrafo di 4-6 frasi su cosa tratta la lezione nel suo insieme e come si collegano gli argomenti")
@@ -137,7 +123,6 @@ nonisolated enum AppleIntelligence {
     }
 
     /// Controllo preliminare su un campione del testo: contiene la spiegazione di argomenti di una lezione?
-    @available(iOS 26.0, *)
     private static func eLezione(_ testo: String) async throws -> Bool {
         let campione = String(testo.prefix(3_000))
         let sessione = LanguageModelSession(instructions: "Rispondi soltanto con SI oppure NO, senza altre parole.")
@@ -158,7 +143,6 @@ nonisolated enum AppleIntelligence {
     /// Caratteri di trascrizione per parte: il contesto meno istruzioni, schema, titoli già scritti e risposta,
     /// convertito in caratteri con il rapporto caratteri/token misurato sul testo stesso (l'italiano trascritto, con
     /// gli errori, occupa più token del previsto). Senza le API di conteggio (prima di iOS 26.4): 4000 caratteri.
-    @available(iOS 26.0, *)
     private static func caratteriPerParte(_ testo: String) async -> Int {
         guard #available(iOS 26.4, *) else { return 4_000 }
         let modello = SystemLanguageModel.default
@@ -177,7 +161,6 @@ nonisolated enum AppleIntelligence {
         }
     }
 
-    @available(iOS 26.0, *)
     private static func riassumiAParti(_ testo: String, glossario: [String],
                                        progresso: @escaping @Sendable (Double, String) -> Void) async throws -> Riassunto {
         var blocchi = dividi(testo, dimensione: await caratteriPerParte(testo))
@@ -221,7 +204,6 @@ nonisolated enum AppleIntelligence {
 
     /// "In breve", punti chiave e domande di tutta la lezione, dai titoli e dai punti chiave delle parti (tagliati
     /// per stare nel contesto).
-    @available(iOS 26.0, *)
     private static func sintesi(_ parti: [ParteLezione]) async throws -> SintesiLezione {
         let limite = SystemLanguageModel.default.contextSize >= 8_000 ? 14_000 : 6_000
         var traccia = ""
@@ -243,7 +225,6 @@ nonisolated enum AppleIntelligence {
     }
 
     /// Il documento: parti consecutive con lo stesso titolo (un argomento spezzato fra due parti) si uniscono.
-    @available(iOS 26.0, *)
     private static func documento(_ parti: [ParteLezione], sintesi: SintesiLezione?) -> String {
         var sezioni: [(titolo: String, testo: [String])] = []
         for p in parti {
@@ -279,7 +260,6 @@ nonisolated enum AppleIntelligence {
 
     /// Il testo è stato fermato dalle protezioni del modello (errore di iOS 26 o di iOS 27: da iOS 27 il framework
     /// lancia `LanguageModelError` al posto di `GenerationError`).
-    @available(iOS 26.0, *)
     static func violaProtezioni(_ error: Error) -> Bool {
         if case LanguageModelSession.GenerationError.guardrailViolation = error { return true }
         if #available(iOS 27.0, *), case LanguageModelError.guardrailViolation = error { return true }
@@ -287,7 +267,6 @@ nonisolated enum AppleIntelligence {
     }
 
     /// La richiesta non entra nel contesto del modello (errore di iOS 26 o di iOS 27).
-    @available(iOS 26.0, *)
     static func superaContesto(_ error: Error) -> Bool {
         if case LanguageModelSession.GenerationError.exceededContextWindowSize = error { return true }
         if #available(iOS 27.0, *), case LanguageModelError.contextSizeExceeded = error { return true }
@@ -296,7 +275,6 @@ nonisolated enum AppleIntelligence {
 
     /// Esegue una richiesta e, se iOS limita il modello (app in background, sistema occupato), riprova dopo una pausa
     /// (fino alla data indicata da iOS, al massimo un minuto; 6 tentativi).
-    @available(iOS 26.0, *)
     static func conRiprova<T>(_ richiesta: () async throws -> T) async throws -> T {
         var attesa: Double = 5
         for _ in 0..<6 {
@@ -312,7 +290,6 @@ nonisolated enum AppleIntelligence {
     }
 
     /// Secondi da attendere se l'errore è un limite temporaneo; nil per gli altri errori.
-    @available(iOS 26.0, *)
     private static func pausaPerLimite(_ error: Error, predefinita: Double) -> Double? {
         if #available(iOS 27.0, *), case LanguageModelError.rateLimited(let info) = error {
             return min(max(info.resetDate?.timeIntervalSinceNow ?? predefinita, 1), 60)
@@ -325,7 +302,6 @@ nonisolated enum AppleIntelligence {
             return nil
         }
     }
-    #endif
 
     /// Divide il testo in parti di circa `dimensione` caratteri, rispettando i paragrafi quando possibile.
     static func dividi(_ testo: String, dimensione: Int) -> [String] {

@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(FoundationModels)
 import FoundationModels
-#endif
 
 /// Glossario del corso di studio: termini tecnici, strutture, sostanze, test… che ricorrono nelle lezioni. Serve a
 /// correggere le parole che la trascrizione storpia ("dopamila" → "dopamina").
@@ -79,14 +77,11 @@ nonisolated enum GlossarioCorso {
         }
     }
 
-    #if canImport(FoundationModels)
-    @available(iOS 26.0, *)
     @Generable
     struct TerminiInsegnamento {
         @Guide(description: "Parole tecniche specifiche della materia (meglio se singole), senza spiegazioni né ripetizioni", .minimumCount(15), .maximumCount(40))
         let termini: [String]
     }
-    #endif
 
     enum Errore: LocalizedError {
         case nonDisponibile
@@ -98,8 +93,6 @@ nonisolated enum GlossarioCorso {
     @concurrent
     static func genera(con motore: MotoreRiassunto, corso: String, insegnamenti: [String],
                        progresso: @escaping @Sendable (Double) -> Void) async throws -> [[String]] {
-        #if canImport(FoundationModels)
-        guard #available(iOS 26.0, *) else { throw Errore.nonDisponibile }
         let richieste = richieste(corso: corso, insegnamenti: insegnamenti)
         var elenchi: [[String]] = []
         for (i, r) in richieste.enumerated() {
@@ -126,9 +119,6 @@ nonisolated enum GlossarioCorso {
         }
         progresso(1)
         return elenchi
-        #else
-        throw Errore.nonDisponibile
-        #endif
     }
 
     private static let paroleVuote: Set<String> = [

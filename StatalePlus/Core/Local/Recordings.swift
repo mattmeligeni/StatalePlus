@@ -415,7 +415,7 @@ final class RecordingStore {
 /// Tutto ciò che tocca `AVAudioSession` gira qui, fuori dal main thread e un'operazione alla volta:
 /// configurazione e attivazione della sessione, ma anche `record()`, `pause()`, `stop()` di `AVAudioRecorder` e
 /// `play()`/`stop()` di `AVAudioPlayer`, che attivano o disattivano la sessione da soli in modo sincrono.
-/// Le API di attivazione asincrone esistono solo da iOS 27; il target è iOS 17.
+/// Le API di attivazione asincrone esistono solo da iOS 27; il target è iOS 26.
 /// Le classi osservabili (`AudioRecorder`, `AudioPlayer`) tengono solo lo stato mostrato e chiedono qui il resto.
 actor MotoreAudio {
     static let shared = MotoreAudio()

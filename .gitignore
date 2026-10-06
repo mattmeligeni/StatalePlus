@@ -16,3 +16,10 @@ build/
 INFO/
 *.lwp
 *.har
+
+# Archivi e pacchetti generati
+*.xcarchive
+*.ipa
+
+# Prove con registrazioni reali: mai nella repo
+Prove/
