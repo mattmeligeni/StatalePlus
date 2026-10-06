@@ -159,7 +159,8 @@ final class ElaborazioniAudio {
                     }
                 }
                 guard corrente(chiave, gen) else { return }
-                store.salvaTrascrizione(id, correggiTesto(testo))
+                store.salvaTrascrizione(id, correggiTesto(testo.testo))
+                store.salvaTempi(id, testo.ancore)
             } catch {
                 guard corrente(chiave, gen) else { return }
                 EsecuzioneEstesa.traccia("Trascrizione non riuscita (\(motore.rawValue), in primo piano: \(PrimoPiano.attivo)): \(String(describing: error))", errore: true)

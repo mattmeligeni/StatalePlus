@@ -153,7 +153,7 @@ nonisolated enum ParakeetLocale {
     /// - il file temporaneo è di un blocco (circa 38 MB) invece che di tutta la lezione.
     @concurrent
     static func trascrivi(_ url: URL, durata: TimeInterval,
-                          progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
+                          progresso: @escaping @Sendable (Double, String) -> Void) async throws -> TestoTrascritto {
         guard installato else { throw Errore.nonInstallato }
         progresso(0, "Caricamento del modello…")
         // Mentre il modello si carica (la prima volta dopo l'installazione anche qualche minuto) l'avanzamento si muove
@@ -186,6 +186,7 @@ nonisolated enum ParakeetLocale {
         let quota = Self.quotaCaricamento
         let n = Double(blocchi.count)
         var testi: [String] = []
+        var ancore: [Ancora] = []
         // Secondi di lavoro per minuto di audio, misurati sui blocchi già fatti (prima stima prudente: 4 s/min; su
         // iPhone 17 Pro Max in background circa 3,6).
         var secondiLavoro: Double = 0
@@ -194,8 +195,10 @@ nonisolated enum ParakeetLocale {
             try Task.checkCancellation()
             let base = Double(i)
             let fatto = cartella.appending(path: "blocco-\(i).txt")
+            let tempiBlocco = cartella.appending(path: "blocco-\(i).tempi.json")
             if let t = try? String(contentsOf: fatto, encoding: .utf8) {
                 testi.append(t)
+                ancore += (try? Data(contentsOf: tempiBlocco)).flatMap { try? JSONDecoder().decode([Ancora].self, from: $0) } ?? []
                 progresso(quota + (base + 1) / n * (1 - quota), faseTrascrizione(blocco.fine, di: totale))
                 continue
             }
@@ -243,14 +246,21 @@ nonisolated enum ParakeetLocale {
             secondiLavoro += Date().timeIntervalSince(inizioBlocco)
             minutiFatti += minutiBlocco
             let t = risultato.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Àncore del blocco dai tempi dei token, spostate all'inizio del blocco nella registrazione.
+            let parole = buildWordTimings(from: risultato.tokenTimings ?? [])
+                .map { (t: $0.startTime + blocco.inizio, parola: TempiTrascrizione.normalizza($0.word)) }
+                .filter { !$0.parola.isEmpty }
+            let ancoreBlocco = TempiTrascrizione.ancore(da: parole)
+            if let dati = try? JSONEncoder().encode(ancoreBlocco) { try? dati.write(to: tempiBlocco) }
             try? t.write(to: fatto, atomically: true, encoding: .utf8)
             testi.append(t)
+            ancore += ancoreBlocco
             EsecuzioneEstesa.traccia("Blocco \(i + 1) di \(blocchi.count) trascritto (\(t.count) caratteri), in primo piano: \(PrimoPiano.attivo)")
         }
         try? FileManager.default.removeItem(at: cartella)
         let testo = senzaRipetizioni(testi.filter { !$0.isEmpty }.joined(separator: " "))
         guard !testo.isEmpty else { throw Errore.vuota }
-        return testo
+        return TestoTrascritto(testo: testo, ancore: ancore)
     }
 }
 

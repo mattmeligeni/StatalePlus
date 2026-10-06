@@ -26,14 +26,21 @@ nonisolated enum Trascrittore {
     /// lezione di 2 ore e mezza, con `SpeechTranscriber` il testo resta identico byte per byte.
     @concurrent
     static func trascrivi(_ url: URL, motore: MotoreTrascrizione = .apple,
-                          progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
+                          progresso: @escaping @Sendable (Double, String) -> Void) async throws -> TestoTrascritto {
         if motore == .parakeet {
             let durata = (try? AVAudioFile(forReading: url)).map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
-            return paragrafi(try await ParakeetLocale.trascrivi(url, durata: durata, progresso: progresso))
+            var risultato = try await ParakeetLocale.trascrivi(url, durata: durata, progresso: progresso)
+            risultato.testo = paragrafi(risultato.testo)
+            return risultato
         }
         var testo: String?
+        var ancore: [Ancora] = []
         if SpeechTranscriber.isAvailable {
-            do { testo = try await conAnalyzer(url, progresso: progresso) } catch Errore.linguaNonSupportata { testo = nil }
+            do {
+                let r = try await conAnalyzer(url, progresso: progresso)
+                testo = r.testo
+                ancore = r.ancore
+            } catch Errore.linguaNonSupportata { testo = nil }
         }
         if testo == nil {
             do { testo = try await conRecognizer(url, progresso: progresso) } catch let e as NSError where e.domain != NSCocoaErrorDomain && !(e is Errore) {
@@ -43,13 +50,13 @@ nonisolated enum Trascrittore {
         }
         let pulito = paragrafi(testo ?? "")
         guard !pulito.isEmpty else { throw Errore.vuota }
-        return pulito
+        return TestoTrascritto(testo: pulito, ancore: ancore)
     }
 
     // MARK: SpeechAnalyzer
 
     private static func conAnalyzer(_ url: URL,
-                                    progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
+                                    progresso: @escaping @Sendable (Double, String) -> Void) async throws -> TestoTrascritto {
         guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: lingua) else { throw Errore.linguaNonSupportata }
         // `.transcription`: il preset "accurato" (niente risultati rapidi o provvisori, che sacrificano precisione).
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
@@ -60,13 +67,20 @@ nonisolated enum Trascrittore {
         let file = try AVAudioFile(forReading: url)
         let durata = Double(file.length) / file.processingFormat.sampleRate
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        // Ogni risultato è una frase con il suo intervallo nell'audio: diventa un'àncora per seguire il testo all'ascolto.
         let raccolta = Task {
             var parti: [String] = []
+            var ancore: [Ancora] = []
             for try await r in transcriber.results {
-                parti.append(String(r.text.characters))
+                let frase = String(r.text.characters)
+                parti.append(frase)
+                let parole = TempiTrascrizione.parole(frase)
+                if !parole.isEmpty {
+                    ancore.append(Ancora(t: r.range.start.seconds, parole: Array(parole.prefix(TempiTrascrizione.paroleAncora))))
+                }
                 if durata > 0 { progresso(min(0.99, r.range.end.seconds / durata), faseTrascrizione(r.range.end.seconds, di: durata)) }
             }
-            return parti.joined(separator: " ")
+            return TestoTrascritto(testo: parti.joined(separator: " "), ancore: ancore)
         }
         progresso(0, "Trascrizione in corso…")
         do {

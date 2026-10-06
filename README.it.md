@@ -347,6 +347,13 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
       più il caricamento del modello (circa 3,6 s per minuto di audio, come la trascrizione in un file unico).
     - Nelle build di sviluppo il registro dei lavori va anche in `Library/Caches/registro-lavori.txt`
       (`EsecuzioneEstesa.traccia`), da copiare dall'iPhone con `xcrun devicectl device copy from`.
+  - **Tempi della trascrizione** (`TempiTrascrizione`, `<id>.tempi.json`): durante la trascrizione si salva circa
+    ogni 3 secondi un'«àncora» con l'istante e le 4 parole che iniziano lì (Parakeet: dai tempi dei token, con
+    `buildWordTimings` di FluidAudio; Apple: dall'intervallo di ogni frase). Pochi KB anche per lezioni di ore; si
+    esportano con il backup. Nella vista le àncore si ritrovano nel testo cercando le loro parole (bastano 3 su 4:
+    reggono alle correzioni del glossario e alle modifiche a mano) e fra due àncore la posizione si interpola
+    (`MappaTesto`). Senza àncore (trascrizioni precedenti o `SFSpeechRecognizer`) la posizione si stima in proporzione
+    alla durata.
   - **Pre-riscaldamento** di Parakeet: il modello si carica sul Neural Engine all'inizio di ogni registrazione (con la
     catena automatica attiva), così alla fine la trascrizione parte subito. Resta in memoria tre minuti dopo l'ultima
     trascrizione, poi si libera; si libera subito se iOS segnala memoria scarsa. Due trascrizioni insieme usano due

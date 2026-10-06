@@ -111,10 +111,11 @@ final class RecordingStore {
     private func metadatiURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).json") }
     private func trascrizioneURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).txt") }
     private func riassuntoURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).riassunto.md") }
+    private func tempiURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).tempi.json") }
     private func originaleURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).originale.m4a") }
     private func temporaneoURL(_ id: UUID) -> URL { folder.appending(path: "\(id.uuidString).migliorata.tmp.m4a") }
     private func fileCollegati(_ id: UUID) -> [URL] {
-        [audioURL(id), metadatiURL(id), trascrizioneURL(id), riassuntoURL(id), originaleURL(id), temporaneoURL(id)]
+        [audioURL(id), metadatiURL(id), trascrizioneURL(id), riassuntoURL(id), originaleURL(id), temporaneoURL(id), tempiURL(id)]
     }
     private func esiste(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) }
 
@@ -180,10 +181,23 @@ final class RecordingStore {
     func trascrizione(_ id: UUID) -> String? { try? String(contentsOf: trascrizioneURL(id), encoding: .utf8) }
     func riassunto(_ id: UUID) -> String? { try? String(contentsOf: riassuntoURL(id), encoding: .utf8) }
 
+    /// Àncore tempo → testo della trascrizione (`TempiTrascrizione`), vuote se il motore non dà i tempi.
+    func tempi(_ id: UUID) -> [Ancora] {
+        (try? Data(contentsOf: tempiURL(id))).flatMap { try? JSONDecoder().decode([Ancora].self, from: $0) } ?? []
+    }
+
+    func salvaTempi(_ id: UUID, _ ancore: [Ancora]) {
+        guard item(id) != nil else { return }
+        if ancore.isEmpty { rimuovi(tempiURL(id)); return }
+        if let dati = try? JSONEncoder().encode(ancore) { scriviDati(dati, tempiURL(id)) }
+    }
+
     /// Non scrive nulla se la registrazione nel frattempo è stata eliminata (elaborazione finita dopo l'eliminazione).
+    /// Senza testo (trascrizione eliminata) si eliminano anche le àncore.
     func salvaTrascrizione(_ id: UUID, _ testo: String?) {
         guard var r = item(id) else { return }
         scrivi(testo, trascrizioneURL(id))
+        if testo == nil { rimuovi(tempiURL(id)) }
         r.trascrittaIl = testo == nil ? nil : .now
         update(r)
     }

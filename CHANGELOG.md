@@ -2,6 +2,15 @@
 
 Storico delle modifiche di Statale Plus (fino al 2026-10-06 "Statale+"), dal più recente. Documentazione completa in [README.it.md](README.it.md).
 
+## 2026-10-06 (11)
+
+- **La trascrizione segue l'audio**: in lettura il paragrafo in ascolto è evidenziato con la frase in corso, la vista
+  scorre da sola (con «Segui l'audio» dopo aver scorso a mano), un tocco su un paragrafo fa partire l'audio da lì e
+  una barra a destra mostra la posizione nel testo. I tempi si salvano durante la trascrizione. Per correggere il
+  testo c'è «Modifica».
+- Mini player con cursore per spostarsi nell'audio, sempre visibile e con tasti più grandi.
+- Presentazione: il modello di trascrizione più preciso è descritto senza nominarlo come un'app a parte.
+
 ## 2026-10-06 (10)
 
 - **Presentazione** dopo il primo accesso: quattro pagine sulle funzioni principali e sull'IA, con i pulsanti per

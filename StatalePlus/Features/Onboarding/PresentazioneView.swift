@@ -82,7 +82,7 @@ struct PresentazioneView: View {
                testo: "Alla fine di ogni registrazione l'app trascrive la lezione e ne scrive il riassunto da sola, anche se esci dall'app.") {
             Section {
                 Voce(simbolo: "text.quote", titolo: "Trascrizione",
-                     testo: "Con il riconoscimento vocale di iPhone funziona subito. Per una trascrizione più precisa, soprattutto di termini tecnici e nomi, scarica Parakeet.")
+                     testo: "Funziona subito con il riconoscimento vocale di iPhone. Qui sotto, o più avanti nelle impostazioni della trascrizione, puoi scaricare un modello più preciso, soprattutto con termini tecnici e nomi, con la stessa velocità e la stessa privacy di quello integrato.")
                 Voce(simbolo: "sparkles", titolo: "Riassunto",
                      testo: "Apple Intelligence scrive gli appunti della lezione, con punti chiave e domande di ripasso.")
                 Voce(simbolo: "lock.iphone", titolo: "Puoi uscire dall'app",
@@ -93,17 +93,17 @@ struct PresentazioneView: View {
             Section {
                 switch app.parakeet.stato {
                 case .installato:
-                    Label("Parakeet è sul telefono e viene usato per le trascrizioni.", systemImage: "checkmark.circle.fill")
+                    Label("Il modello più preciso è scaricato e viene usato per le trascrizioni.", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                 case .download(let p):
-                    ProgressView(value: p) { Text("Download di Parakeet…").font(.callout) }
+                    ProgressView(value: p) { Text("Download del modello più preciso…").font(.callout) }
                 case .assente:
                     Button { confermaParakeet = true } label: {
-                        Label("Scarica Parakeet (\(ParakeetLocale.dimensioneMB) MB)", systemImage: "arrow.down.circle")
+                        Label("Scarica il modello più preciso (\(ParakeetLocale.dimensioneMB) MB)", systemImage: "arrow.down.circle")
                     }
                 }
             } footer: {
-                Text("Puoi cambiare modello quando vuoi da Altro › IA › Trascrizione.")
+                Text("Si scarica dentro Statale Plus, non è un'altra app. Puoi cambiare modello quando vuoi da Altro › IA › Trascrizione.")
             }
         }
     }

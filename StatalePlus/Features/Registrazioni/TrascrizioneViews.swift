@@ -132,7 +132,11 @@ private struct StatoElaborazione: View {
 
 // MARK: - Trascrizione completa
 
-/// Testo completo modificabile, con Writing Tools per correggere, riscrivere o riassumere.
+/// Trascrizione completa. In lettura segue l'audio: il paragrafo in ascolto è evidenziato (con la frase in corso),
+/// la vista scorre da sola finché non la si scorre a mano («Segui l'audio» per tornare), un tocco su un paragrafo fa
+/// partire l'audio da lì e la barra a destra mostra dove si è nel testo. La posizione viene dalle àncore salvate
+/// durante la trascrizione (`MappaTesto`); per le trascrizioni senza àncore è stimata in proporzione alla durata.
+/// «Modifica» passa al testo modificabile, con Writing Tools.
 struct TrascrizioneView: View {
     let id: UUID
     var player: AudioPlayer? = nil
@@ -140,70 +144,238 @@ struct TrascrizioneView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var testo = ""
     @State private var caricato = false
+    @State private var modifica = false
+    @State private var paragrafi: [ParagrafoConPosizione] = []
+    @State private var mappa: MappaTesto?
+    @State private var segui = true
     @State private var confermaRifai = false
     @State private var confermaElimina = false
 
     var body: some View {
-        TextEditor(text: $testo)
-            .font(.body)
-            .strumentiScrittura()
-            .padding(.horizontal, 8)
-            .tastieraConChiudi()
-            .navigationTitle("Trascrizione")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear { player?.utilizzatori += 1 }
-            .onDisappear { player?.utilizzatori -= 1 }
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 0) {
-                    if let player { MiniPlayer(player: player) }
-                    Text("\(testo.split(whereSeparator: \.isWhitespace).count) parole")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity).padding(6)
-                }
-                .background(.bar)
+        Group {
+            if modifica {
+                TextEditor(text: $testo)
+                    .font(.body)
+                    .strumentiScrittura()
+                    .padding(.horizontal, 8)
+                    .tastieraConChiudi()
+            } else {
+                lettura
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { ShareLink(item: testo) }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button { UIPasteboard.general.string = testo } label: { Label("Copia tutto", systemImage: "doc.on.doc") }
-                        Button { confermaRifai = true } label: { Label("Trascrivi di nuovo", systemImage: "arrow.clockwise") }
-                        Button(role: .destructive) { confermaElimina = true } label: { Label("Elimina trascrizione", systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis.circle") }
-                }
+        }
+        .navigationTitle("Trascrizione")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { player?.utilizzatori += 1 }
+        .onDisappear { player?.utilizzatori -= 1 }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 0) {
+                if let player { MiniPlayer(player: player) }
+                Text("\(testo.split(whereSeparator: \.isWhitespace).count) parole")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity).padding(6)
             }
-            .onAppear {
-                guard !caricato else { return }
-                testo = app.recordings.trascrizione(id) ?? ""
-                caricato = true
-            }
-            .task(id: testo) {
-                // Salvataggio con debounce mentre si modifica.
-                guard caricato else { return }
-                try? await Task.sleep(for: .seconds(1))
-                salva()
-            }
-            .onDisappear { salva() }
-            .confirmationDialog("Trascrivere di nuovo?", isPresented: $confermaRifai, titleVisibility: .visible) {
-                Button("Trascrivi di nuovo", role: .destructive) {
-                    caricato = false
-                    app.recordings.salvaTrascrizione(id, nil)
-                    if let r = app.recordings.item(id) { app.elaborazioni.trascrivi(r, in: app.recordings) }
-                    dismiss()
-                }
-            } message: { Text("Le modifiche fatte a mano andranno perse.") }
-            .confirmationDialog("Eliminare la trascrizione?", isPresented: $confermaElimina, titleVisibility: .visible) {
-                Button("Elimina", role: .destructive) {
-                    caricato = false
-                    app.recordings.salvaTrascrizione(id, nil)
-                    dismiss()
+            .background(.bar)
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(modifica ? "Fine" : "Modifica") {
+                    if modifica { salva() }
+                    modifica.toggle()
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) { ShareLink(item: testo) }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button { UIPasteboard.general.string = testo } label: { Label("Copia tutto", systemImage: "doc.on.doc") }
+                    Button { confermaRifai = true } label: { Label("Trascrivi di nuovo", systemImage: "arrow.clockwise") }
+                    Button(role: .destructive) { confermaElimina = true } label: { Label("Elimina trascrizione", systemImage: "trash") }
+                } label: { Image(systemName: "ellipsis.circle") }
+            }
+        }
+        .onAppear {
+            guard !caricato else { return }
+            testo = app.recordings.trascrizione(id) ?? ""
+            caricato = true
+        }
+        .task(id: testo) {
+            // Paragrafi e mappa dei tempi si ricalcolano dopo le modifiche, con il salvataggio (debounce).
+            guard caricato else { return }
+            paragrafi = ParagrafoConPosizione.dividi(testo)
+            let ancore = app.recordings.tempi(id)
+            let durata = player?.duration ?? app.recordings.item(id)?.durata ?? 0
+            let t = testo
+            mappa = await Task.detached { MappaTesto(testo: t, ancore: ancore, durata: durata) }.value
+            try? await Task.sleep(for: .seconds(1))
+            salva()
+        }
+        .onDisappear { salva() }
+        .confirmationDialog("Trascrivere di nuovo?", isPresented: $confermaRifai, titleVisibility: .visible) {
+            Button("Trascrivi di nuovo", role: .destructive) {
+                caricato = false
+                app.recordings.salvaTrascrizione(id, nil)
+                if let r = app.recordings.item(id) { app.elaborazioni.trascrivi(r, in: app.recordings) }
+                dismiss()
+            }
+        } message: { Text("Le modifiche fatte a mano andranno perse.") }
+        .confirmationDialog("Eliminare la trascrizione?", isPresented: $confermaElimina, titleVisibility: .visible) {
+            Button("Elimina", role: .destructive) {
+                caricato = false
+                app.recordings.salvaTrascrizione(id, nil)
+                dismiss()
+            }
+        }
+    }
+
+    // MARK: Lettura
+
+    /// Posizione nel testo di ciò che si sta ascoltando (nil se l'audio non è partito).
+    private var posizione: Int? {
+        guard let player, let mappa, player.isPlaying || player.currentTime > 0 else { return nil }
+        return mappa.posizione(al: player.currentTime)
+    }
+
+    private var lettura: some View {
+        let posizione = posizione
+        let attivo = posizione.flatMap { p in paragrafi.lastIndex { $0.inizio <= p } }
+        return ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    ForEach(paragrafi.indices, id: \.self) { i in
+                        let p = paragrafi[i]
+                        ParagrafoTrascrizione(testo: p.testo, evidenziato: i == attivo ? posizione.map { $0 - p.inizio } : nil)
+                            .id(i)
+                            .contentShape(Rectangle())
+                            .onTapGesture { ascolta(da: p.inizio) }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .padding(.trailing, 8)
+                .textSelection(.enabled)
+            }
+            .onScrollPhaseChange { _, fase in
+                if fase == .interacting, posizione != nil { segui = false }
+            }
+            .onChange(of: attivo) { _, nuovo in
+                guard segui, let nuovo else { return }
+                withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(nuovo, anchor: .center) }
+            }
+            .overlay(alignment: .trailing) {
+                if let posizione, let mappa, mappa.lunghezza > 0 {
+                    IndicatorePosizione(frazione: Double(posizione) / Double(mappa.lunghezza)) { f in
+                        ascolta(da: Int(f * Double(mappa.lunghezza)))
+                    }
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if !segui, let attivo {
+                    Button {
+                        segui = true
+                        withAnimation { proxy.scrollTo(attivo, anchor: .center) }
+                    } label: {
+                        Label("Segui l'audio", systemImage: "waveform").font(.callout.weight(.semibold))
+                    }
+                    .buttonStyle(.glass)
+                    .padding(.bottom, 10)
+                }
+            }
+        }
+    }
+
+    /// Fa partire l'audio dal punto del testo toccato e riprende a seguirlo.
+    private func ascolta(da offset: Int) {
+        guard let player, let t = mappa?.tempo(per: offset) else { return }
+        player.seek(to: max(0, t - 0.5))
+        if !player.isPlaying { player.play() }
+        segui = true
     }
 
     private func salva() {
         guard caricato, testo != app.recordings.trascrizione(id) else { return }
         app.recordings.salvaTrascrizione(id, testo)
+    }
+}
+
+/// Un paragrafo della trascrizione con la sua posizione (in caratteri) nel testo completo.
+struct ParagrafoConPosizione: Sendable {
+    let inizio: Int
+    let testo: String
+
+    /// Paragrafi separati da righe vuote (o da a capo, se il testo è stato modificato a mano).
+    static func dividi(_ testo: String) -> [ParagrafoConPosizione] {
+        var risultato: [ParagrafoConPosizione] = []
+        var offset = 0
+        for riga in testo.split(separator: "\n", omittingEmptySubsequences: false) {
+            if !riga.trimmingCharacters(in: .whitespaces).isEmpty {
+                risultato.append(ParagrafoConPosizione(inizio: offset, testo: String(riga)))
+            }
+            offset += riga.count + 1
+        }
+        return risultato
+    }
+}
+
+/// Un paragrafo; se è quello in ascolto ha una barra colorata a sinistra e la frase in corso evidenziata.
+private struct ParagrafoTrascrizione: View {
+    let testo: String
+    /// Posizione (in caratteri, nel paragrafo) della parola in ascolto.
+    let evidenziato: Int?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Capsule()
+                .fill(evidenziato != nil ? Color.accentColor : .clear)
+                .frame(width: 3)
+            Text(attribuito)
+                .font(.body)
+                .lineSpacing(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .animation(.easeInOut(duration: 0.2), value: evidenziato != nil)
+    }
+
+    private var attribuito: AttributedString {
+        var a = AttributedString(testo)
+        guard let evidenziato else { return a }
+        a.foregroundColor = .secondary
+        let posizione = testo.index(testo.startIndex, offsetBy: min(max(evidenziato, 0), testo.count))
+        var frase: Range<String.Index>?
+        testo.enumerateSubstrings(in: testo.startIndex..., options: .bySentences) { _, intervallo, _, stop in
+            if intervallo.contains(posizione) || intervallo.upperBound == posizione { frase = intervallo; stop = true }
+        }
+        if let frase, let r = Range(frase, in: a) {
+            a[r].foregroundColor = .primary
+            a[r].backgroundColor = Color.accentColor.opacity(0.18)
+        }
+        return a
+    }
+}
+
+/// Barra sottile a destra del testo con il punto in ascolto; si tocca o trascina per spostarsi nell'audio.
+private struct IndicatorePosizione: View {
+    let frazione: Double
+    let vai: (Double) -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let altezza = geo.size.height
+            ZStack(alignment: .top) {
+                Capsule().fill(Color.secondary.opacity(0.2)).frame(width: 3)
+                Capsule().fill(Color.accentColor)
+                    .frame(width: 5, height: 22)
+                    .offset(y: min(max(frazione * altezza - 11, 0), max(altezza - 22, 0)))
+            }
+            .frame(width: 20, height: altezza)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onEnded { v in
+                vai(min(max(v.location.y / max(altezza, 1), 0), 1))
+            })
+        }
+        .frame(width: 20)
+        .padding(.vertical, 12)
+        .padding(.trailing, 2)
+        .accessibilityLabel("Posizione nel testo")
+        .accessibilityValue("\(Int(frazione * 100)) per cento")
     }
 }
 
@@ -338,22 +510,38 @@ extension View {
 /// ferma aprendo queste schermate). Compare solo se l'audio è stato avviato.
 private struct MiniPlayer: View {
     let player: AudioPlayer
+    /// Valore del cursore mentre lo si trascina: l'audio salta lì quando lo si lascia.
+    @State private var trascinamento: Double?
 
     var body: some View {
-        if player.isPlaying || player.currentTime > 0 {
-            HStack(spacing: 18) {
-                Button { player.skip(-15) } label: { Image(systemName: "gobackward.15") }
-                Button { player.toggle() } label: {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.title3)
+        if player.duration > 0 {
+            VStack(spacing: 2) {
+                Slider(value: Binding(get: { trascinamento ?? player.currentTime }, set: { trascinamento = $0 }),
+                       in: 0...max(player.duration, 1)) { inCorso in
+                    if !inCorso, let t = trascinamento {
+                        player.seek(to: t)
+                        trascinamento = nil
+                    }
                 }
-                Button { player.skip(30) } label: { Image(systemName: "goforward.30") }
-                Spacer()
-                Text("\(durata(player.currentTime)) / \(durata(player.duration))")
-                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                .accessibilityLabel("Posizione nell'audio")
+                HStack(spacing: 8) {
+                    Button { player.skip(-15) } label: { Image(systemName: "gobackward.15").font(.title2).frame(width: 44, height: 44) }
+                        .accessibilityLabel("Indietro di 15 secondi")
+                    Button { player.toggle() } label: {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.title).frame(width: 52, height: 44)
+                    }
+                    .accessibilityLabel(player.isPlaying ? "Pausa" : "Riproduci")
+                    Button { player.skip(30) } label: { Image(systemName: "goforward.30").font(.title2).frame(width: 44, height: 44) }
+                        .accessibilityLabel("Avanti di 30 secondi")
+                    Spacer()
+                    Text("\(durata(trascinamento ?? player.currentTime)) / \(durata(player.duration))")
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
             .accessibilityElement(children: .contain)
         }
     }
