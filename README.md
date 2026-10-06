@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/mattmeligeni/StatalePlus/actions/workflows/compila.yml"><img src="https://github.com/mattmeligeni/StatalePlus/actions/workflows/compila.yml/badge.svg" alt="Build"></a>
-  <img src="https://img.shields.io/badge/version-1.0%20%E2%80%A2%20build%203-informational" alt="Version 1.0, build 3">
+  <img src="https://img.shields.io/badge/version-1.0%20%E2%80%A2%20build%204-informational" alt="Version 1.0, build 4">
   <img src="https://img.shields.io/badge/iOS-26%2B-black?logo=apple" alt="iOS 26+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
   <img src="https://img.shields.io/badge/Xcode-27-147EFB?logo=xcode&logoColor=white" alt="Xcode 27">
@@ -61,6 +61,9 @@
   - **summaries with Apple Intelligence**: key points and review questions, written from the transcript only;
   - a **course glossary** that fixes technical terms mangled by speech recognition and **learns from your lectures**;
   - export all recordings to one archive and import it on another iPhone straight from the Share menu.
+- **A short tour after sign-in** explains the main features — above all recording, transcription, summaries and the
+  course glossary — with buttons to download Parakeet and create the glossary right away. It can be reopened from
+  *Altro › IA*.
 - **Demo mode** for reviewers and anyone without a university account.
 
 ## Privacy

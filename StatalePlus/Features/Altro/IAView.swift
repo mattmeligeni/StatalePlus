@@ -56,6 +56,14 @@ struct IAView: View {
             }
 
             Section {
+                Button { app.mostraPresentazione = true } label: {
+                    Label("Rivedi la presentazione", systemImage: "rectangle.stack")
+                }
+            } footer: {
+                Text("Le funzioni principali dell'app e come usare trascrizioni, riassunti e glossario.")
+            }
+
+            Section {
                 Label {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Modelli online").foregroundStyle(.secondary)

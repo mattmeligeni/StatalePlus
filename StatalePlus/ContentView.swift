@@ -63,7 +63,12 @@ struct MainTabView: View {
         } message: {
             Text(messaggioRecuperate)
         }
-        .onAppear { app.segnaRefresh(); app.avviaAutoRefresh() }
+        .fullScreenCover(isPresented: $app.mostraPresentazione) { PresentazioneView() }
+        .onAppear {
+            app.segnaRefresh()
+            app.avviaAutoRefresh()
+            if !Preferenze.presentazioneVista { app.mostraPresentazione = true }
+        }
         .onDisappear { app.fermaAutoRefresh() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { app.avviaAutoRefresh() } else if phase == .background { app.fermaAutoRefresh() }

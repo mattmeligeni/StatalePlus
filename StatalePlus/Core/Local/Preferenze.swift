@@ -71,8 +71,15 @@ nonisolated enum Preferenze {
         set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "modificheLezioni") }
     }
 
+    /// La presentazione delle funzioni (dopo il primo accesso) è già stata vista.
+    static var presentazioneVista: Bool {
+        get { defaults.bool(forKey: "presentazioneVista") }
+        set { defaults.set(newValue, forKey: "presentazioneVista") }
+    }
+
     static func azzera() {
-        ["sogliaFrequenzaManuale", "obbligoFrequenza", "obbligoFrequenzaChiave", "avvisiLetti", "modificheLezioni"]
+        ["sogliaFrequenzaManuale", "obbligoFrequenza", "obbligoFrequenzaChiave", "avvisiLetti", "modificheLezioni",
+         "presentazioneVista"]
             .forEach(defaults.removeObject(forKey:))
     }
 }

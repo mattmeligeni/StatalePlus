@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/mattmeligeni/StatalePlus/actions/workflows/compila.yml"><img src="https://github.com/mattmeligeni/StatalePlus/actions/workflows/compila.yml/badge.svg" alt="Build"></a>
-  <img src="https://img.shields.io/badge/version-1.0%20%E2%80%A2%20build%203-informational" alt="Version 1.0, build 3">
+  <img src="https://img.shields.io/badge/version-1.0%20%E2%80%A2%20build%204-informational" alt="Version 1.0, build 4">
   <img src="https://img.shields.io/badge/iOS-26%2B-black?logo=apple" alt="iOS 26+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
   <img src="https://img.shields.io/badge/Xcode-27-147EFB?logo=xcode&logoColor=white" alt="Xcode 27">
@@ -469,6 +469,23 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
     e chiacchiere vengono rifiutati;
   - il nome della materia **non** entra nei prompt e il modello deve usare solo il testo trascritto, rispondendo con un
     segnale dedicato quando non c'è materiale (convertito in errore, mai mostrato come riassunto).
+
+### Presentazione
+
+Dopo il primo accesso (`Preferenze.presentazioneVista`) compare una presentazione a schermo intero di quattro pagine
+da scorrere (`PresentazioneView`), nello stile della conferma di download dei modelli: icona grande, titolo, voci con
+icona e spiegazione, pulsante «Avanti» / «Inizia» in basso, «Salta» in alto.
+
+1. **Benvenuto**: Oggi, Orario, Presenze, Esami e carriera, Ariel.
+2. **Registra le lezioni**: dove si avvia (scheda Registrazioni o «Inizia registrazione» in Oggi), schermo bloccato e
+   segnalibri, audio migliorato per l'ascolto, privacy.
+3. **Trascrizioni e riassunti**: catena automatica, Apple o Parakeet, Apple Intelligence, lavoro in background; con
+   il pulsante per scaricare Parakeet (stessa conferma di Altro › IA) e lo stato di Apple Intelligence.
+4. **Il glossario del corso**: a cosa serve, che impara dalle lezioni, dove si modifica; con il pulsante per crearlo
+   subito.
+
+Si rivede da _Altro › IA › Rivedi la presentazione_; esce con il logout. Nelle build di sviluppo `-presentazione YES`
+la mostra di nuovo.
 
 ### Altro
 

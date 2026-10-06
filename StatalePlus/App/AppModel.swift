@@ -29,6 +29,8 @@ final class AppModel {
     let glossario = GestoreGlossario()
     /// Apre in Registrazioni l'elenco delle registrazioni recuperate (dall'avviso all'avvio).
     var mostraRecuperate = false
+    /// Presentazione delle funzioni (dopo il primo accesso, o da Altro › IA).
+    var mostraPresentazione = false
     /// Esito dell'importazione di un archivio di registrazioni aperto da un'altra app (menu Condividi, File).
     var esitoImportazione: String?
     /// L'avviso sulle registrazioni recuperate si mostra una volta per avvio.
@@ -125,7 +127,8 @@ final class AppModel {
     #if DEBUG
     /// Solo nelle build di sviluppo, per gli screenshot del README (argomenti di avvio, es. con `simctl launch`):
     /// `-accessoDemo YES` entra nella versione dimostrativa, `-schermata registrazioni` apre una scheda,
-    /// `-altro esami` una pagina di Altro. Restituisce true se ha già avviato l'accesso.
+    /// `-altro esami` una pagina di Altro, `-presentazione YES` mostra di nuovo la presentazione. Restituisce true se
+    /// ha già avviato l'accesso.
     private func opzioniSviluppo() async -> Bool {
         let d = UserDefaults.standard
         let schede: [String: AppTab] = ["oggi": .oggi, "orario": .orario, "ariel": .ariel, "registrazioni": .registrazioni, "altro": .altro]
@@ -133,6 +136,7 @@ final class AppModel {
                                             "presenze": .presenze, "ia": .ia, "impostazioni": .impostazioni, "crediti": .crediti]
         if let s = d.string(forKey: "schermata").flatMap({ schede[$0] }) { tab = s }
         if let p = d.string(forKey: "altro").flatMap({ pagine[$0] }) { tab = .altro; altroPath = [p] }
+        if d.bool(forKey: "presentazione") { Preferenze.presentazioneVista = false }
         guard d.bool(forKey: "accessoDemo"), KeychainStore.load()?.email != Demo.email else { return false }
         await login(email: Demo.email, password: Demo.password)
         return true

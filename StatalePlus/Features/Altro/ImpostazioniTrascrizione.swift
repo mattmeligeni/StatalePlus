@@ -235,7 +235,7 @@ struct BarraDownload: View {
 }
 
 /// Avviso prima del download di un modello: dimensione, spazio libero, rete, primo piano, consumi, privacy.
-private struct ConfermaDownloadModello: View {
+struct ConfermaDownloadModello: View {
     let modello: ModelloLocale
     let titolo: String
     let testo: String

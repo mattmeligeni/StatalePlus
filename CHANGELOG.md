@@ -2,6 +2,11 @@
 
 Storico delle modifiche di Statale Plus (fino al 2026-10-06 "Statale+"), dal più recente. Documentazione completa in [README.it.md](README.it.md).
 
+## 2026-10-06 (10)
+
+- **Presentazione** dopo il primo accesso: quattro pagine sulle funzioni principali e sull'IA, con i pulsanti per
+  scaricare Parakeet e creare il glossario; si rivede da Altro › IA. Build 4.
+
 ## 2026-10-06 (9)
 
 - Parakeet trascrive a blocchi di circa 10 minuti, tagliati nei silenzi: le lezioni lunghe non vengono più chiuse da
