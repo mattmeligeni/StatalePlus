@@ -1,13 +1,12 @@
 import SwiftUI
 
 /// Altro › IA: scelta dei modelli per trascrizione e riassunti, miglioramento dell'audio, catena automatica.
-/// Oggi tutto funziona sul telefono; qui andranno anche le opzioni online.
 struct IAView: View {
     @Environment(AppModel.self) private var app
     @AppStorage("motoreTrascrizione") private var motoreTrascrizione = MotoreTrascrizione.apple.rawValue
     @AppStorage("miglioraAudio") private var miglioraAudio = true
     @AppStorage("elaborazioneAutomatica") private var automatica = true
-    @AppStorage("motoreRiassunto") private var motoreRiassunto = MotoreRiassunto.apple.rawValue
+    @AppStorage("motoreRiassunto") private var motoreRiassunto = MotoreRiassunto.cloud.rawValue
 
     private var motore: MotoreTrascrizione {
         let m = MotoreTrascrizione(rawValue: motoreTrascrizione) ?? .apple
@@ -17,7 +16,9 @@ struct IAView: View {
     var body: some View {
         List {
             Section {
-                Label("Tutto funziona sul telefono, anche offline: audio e testi delle lezioni non vengono inviati a nessuno.",
+                Label(MotoreRiassunto.disponibile == .cloud
+                      ? "L'audio resta sempre sul telefono. Per riassunti e glossario il testo va ad Apple Intelligence, che non lo conserva."
+                      : "Tutto funziona sul telefono, anche offline: audio e testi delle lezioni non vengono inviati a nessuno.",
                       systemImage: "lock.shield")
                     .font(.callout)
             }
@@ -68,10 +69,7 @@ struct IAView: View {
             }
         }
         .navigationTitle("IA")
-        .onAppear {
-            app.parakeet.ricontrolla()
-            app.qwen.ricontrolla()
-        }
+        .onAppear { app.parakeet.ricontrolla() }
     }
 
     private var notaRiassunti: String? {

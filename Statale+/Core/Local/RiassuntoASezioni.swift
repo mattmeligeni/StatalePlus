@@ -1,7 +1,7 @@
 import Foundation
 
-/// Riassunto "a sezioni con memoria", comune ai modelli con un contesto ampio (Qwen sul telefono, Apple
-/// Intelligence su Private Cloud Compute). La trascrizione si divide in blocchi; per ognuno il modello scrive le
+/// Riassunto "a sezioni con memoria" per i modelli con un contesto ampio (Apple Intelligence su Private Cloud
+/// Compute). La trascrizione si divide in blocchi; per ognuno il modello scrive le
 /// sezioni `### Titolo` nuove, ricevendo i titoli già scritti per non ripetersi e collegare i concetti; una passata
 /// finale scrive "In breve", punti chiave e domande dagli appunti. Le sezioni già scritte restano in memoria: un
 /// riassunto interrotto (app in background) riprende da lì.
@@ -21,7 +21,7 @@ nonisolated enum RiassuntoASezioni {
     }
 
     /// `genera(richiesta, massimo token)` produce una risposta con `istruzioni` come istruzioni di sistema.
-    static func riassumi(_ trascrizione: String, paroleBlocco: Int,
+    static func riassumi(_ trascrizione: String, paroleBlocco: Int, glossario: [String] = [],
                          progresso: @escaping @Sendable (Double, String) -> Void,
                          genera: (String, Int) async throws -> String) async throws -> String {
         let blocchi = dividiInBlocchi(trascrizione, parole: paroleBlocco)
@@ -35,6 +35,7 @@ nonisolated enum RiassuntoASezioni {
             if !titoli.isEmpty {
                 richiesta += "Argomenti già trattati nelle parti precedenti (non ripeterli, ma collega i nuovi concetti a questi quando il docente lo fa):\n\(titoli)\n"
             }
+            richiesta += GlossarioCorso.rigaPrompt(GlossarioCorso.pertinenti(glossario, a: blocchi[i], massimo: 80))
             richiesta += """
 
                 Scrivi gli appunti di questa parte in Markdown: una sezione `### Titolo` per ogni argomento nuovo, \

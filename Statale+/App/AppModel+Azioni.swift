@@ -254,6 +254,12 @@ extension AppModel {
             a.insegnamenti.filter { $0.key.hasPrefix(a.mioCorsoOrario.cdl.valore + "|") }.values.flatMap { $0 }
         } ?? []
         var visti = Set<String>()
-        glossario.crea(corso: Testo.nomeCorso(s.corso), insegnamenti: insegnamenti.filter { visti.insert($0.codice).inserted })
+        var parole = Set<String>()
+        for r in recordings.items {
+            guard let t = recordings.trascrizione(r.id) else { continue }
+            parole.formUnion(t.lowercased().split { !$0.isLetter }.lazy.filter { $0.count >= 6 }.map(String.init))
+        }
+        glossario.crea(corso: Testo.nomeCorso(s.corso), insegnamenti: insegnamenti.filter { visti.insert($0.codice).inserted },
+                       paroleTrascritte: parole)
     }
 }

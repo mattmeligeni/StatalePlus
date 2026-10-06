@@ -3,12 +3,37 @@ import Foundation
 import FoundationModels
 #endif
 
+/// Motori dei riassunti e del glossario del corso, in Altro › IA. La trascrizione resta sempre sul telefono.
+nonisolated enum MotoreRiassunto: String, CaseIterable, Sendable {
+    /// Modello di Apple Intelligence sul telefono (FoundationModels): offline, contesto di 4K token (8K da iOS 27).
+    case apple
+    /// Apple Intelligence su Private Cloud Compute (online, iOS 27): solo con l'entitlement concesso da Apple.
+    case cloud
+
+    var nome: String {
+        switch self {
+        case .apple: "Apple Intelligence"
+        case .cloud: "Apple Intelligence online"
+        }
+    }
+}
+
 /// Riassunti delle trascrizioni con il modello on-device di Apple Intelligence (FoundationModels, iOS 26+).
-/// `SystemLanguageModel.default` è sempre la versione più recente del modello, aggiornata con iOS (26.0–26.3, 26.4,
-/// 27.0); il modello più grande su Private Cloud Compute richiede un entitlement che Apple concede su richiesta.
-/// Il contesto è di ~4K token, quindi la lezione viene divisa in parti: per ognuna il modello produce (output guidato,
-/// `@Generable`) titolo, riassunto dettagliato, punti chiave e domande; il documento finale lo compone il codice.
-/// Così la lunghezza cresce con la lezione: una lezione di due ore dà una ventina di sezioni, non cinque righe.
+/// `SystemLanguageModel.default` è sempre la versione più recente del modello, aggiornata con iOS.
+///
+/// Il contesto è piccolo (4096 token fino a iOS 26, 8192 da iOS 27), quindi la lezione si divide in parti: per
+/// ognuna il modello produce (output guidato, `@Generable`) titolo, riassunto dettagliato, punti chiave e domande;
+/// il documento finale lo compone il codice. Così la lunghezza cresce con la lezione.
+/// Per sfruttare al massimo il modello:
+/// - le parti sono grandi quanto il contesto permette, misurato in token (`contextSize`, `tokenCount`, iOS 26.4+):
+///   meno parti significa argomenti meno spezzati e meno tempo; se una parte non entra si divide solo quella;
+/// - ogni parte riceve i titoli già scritti, per non ripetere gli argomenti e continuare quelli lasciati a metà, e i
+///   termini del glossario del corso che vi compaiono (anche storpiati), per correggere gli errori di trascrizione;
+/// - temperatura bassa: appunti fedeli al testo, non frasi creative;
+/// - una passata finale guidata sceglie "In breve", 10-15 punti chiave e 8-12 domande dagli appunti di tutte le parti
+///   (prima si elencavano tutti: in una lezione di due ore erano più di cento);
+/// - il modello gira in un processo di sistema e continua anche con l'app in background, dove iOS può limitarne le
+///   richieste: si riprova dopo una pausa invece di fallire.
 nonisolated enum AppleIntelligence {
     enum Stato: Equatable {
         case disponibile
@@ -46,48 +71,30 @@ nonisolated enum AppleIntelligence {
 
     /// Il nome della materia NON entra mai nei prompt: con una trascrizione povera il modello lo userebbe
     /// per inventare una lezione plausibile. Si lavora solo sul testo trascritto.
-    private static let istruzioni = """
+    static let istruzioni = """
         Sei un assistente che prepara appunti di studio dettagliati per uno studente universitario. Scrivi sempre in \
         italiano, in modo chiaro e completo, come appunti da cui si possa studiare senza riascoltare la lezione. \
         Usa esclusivamente le informazioni presenti nel testo che ricevi: non aggiungere argomenti, definizioni, \
         esempi o domande che non derivano dal testo. La trascrizione automatica può contenere errori di \
-        riconoscimento: correggili solo quando il significato è evidente.
+        riconoscimento: correggili solo quando il significato è evidente. Tralascia saluti, avvisi organizzativi e \
+        pause, salvo indicazioni utili per l'esame.
         """
 
     /// Riassume una trascrizione. `progresso` riceve (0…1, messaggio di stato).
     @concurrent
-    static func riassumi(_ trascrizione: String,
+    /// `glossario`: termini del corso; per ogni parte si passano al modello quelli che vi compaiono, anche storpiati.
+    static func riassumi(_ trascrizione: String, glossario: [String] = [],
                          progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         guard LimitiElaborazione.contenutoSufficiente(trascrizione) else { throw Errore.testoInsufficiente }
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
-        progresso(0, "Verifica del contenuto…")
+        progresso(0, "Verifica del contenuto")
         guard try await eLezione(trascrizione) else { throw Errore.testoInsufficiente }
         do {
-            return try await riassumi(trascrizione, dimensione: 4_000, progresso: progresso)
-        } catch LanguageModelSession.GenerationError.guardrailViolation {
+            return try await riassumiAParti(trascrizione, glossario: glossario, progresso: progresso)
+        } catch where violaProtezioni(error) {
             throw Errore.contenutoNonAmmesso
         }
-        #else
-        throw Errore.nonDisponibile
-        #endif
-    }
-
-    /// Più risposte brevi (es. gli elenchi del glossario del corso), una sessione per richiesta.
-    @concurrent
-    static func rispondi(_ richieste: [String], istruzioni: String,
-                         progresso: @escaping @Sendable (Double) -> Void) async throws -> [String] {
-        #if canImport(FoundationModels)
-        guard #available(iOS 26.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
-        var risposte: [String] = []
-        for (i, r) in richieste.enumerated() {
-            try Task.checkCancellation()
-            progresso(Double(i) / Double(max(richieste.count, 1)))
-            let sessione = LanguageModelSession(instructions: istruzioni)
-            if let testo = try? await sessione.respond(to: r).content { risposte.append(testo) }
-        }
-        progresso(1)
-        return risposte
         #else
         throw Errore.nonDisponibile
         #endif
@@ -99,13 +106,24 @@ nonisolated enum AppleIntelligence {
     struct ParteLezione {
         @Guide(description: "true solo se il testo non spiega alcun argomento (saluti, attese, rumore, frasi senza contenuto)")
         let senzaContenuto: Bool
-        @Guide(description: "Titolo breve dell'argomento di questa parte, al massimo 8 parole")
+        @Guide(description: "Titolo breve dell'argomento di questa parte, al massimo 8 parole. Se continua un argomento già trattato, usa lo stesso titolo")
         let titolo: String
         @Guide(description: "Riassunto dettagliato di questa parte in 2 o 3 paragrafi: concetti, definizioni, esempi, passaggi e collegamenti spiegati dal docente")
         let riassunto: String
-        @Guide(description: "I concetti più importanti di questa parte, ognuno in una frase completa", .minimumCount(3), .maximumCount(6))
+        @Guide(description: "I concetti più importanti di questa parte, ognuno in una frase completa", .minimumCount(2), .maximumCount(5))
         let puntiChiave: [String]
-        @Guide(description: "Domande di verifica a cui si risponde con il contenuto di questa parte", .minimumCount(2), .maximumCount(3))
+        @Guide(description: "Domande di verifica a cui si risponde con il contenuto di questa parte", .minimumCount(1), .maximumCount(3))
+        let domande: [String]
+    }
+
+    @available(iOS 26.0, *)
+    @Generable
+    struct SintesiLezione {
+        @Guide(description: "Un paragrafo di 4-6 frasi su cosa tratta la lezione nel suo insieme e come si collegano gli argomenti")
+        let inBreve: String
+        @Guide(description: "I concetti più importanti di tutta la lezione, ognuno in una frase completa, senza ripetizioni", .minimumCount(6), .maximumCount(15))
+        let puntiChiave: [String]
+        @Guide(description: "Domande di verifica sugli argomenti principali della lezione, senza ripetizioni", .minimumCount(5), .maximumCount(12))
         let domande: [String]
     }
 
@@ -114,41 +132,67 @@ nonisolated enum AppleIntelligence {
     private static func eLezione(_ testo: String) async throws -> Bool {
         let campione = String(testo.prefix(3_000))
         let sessione = LanguageModelSession(instructions: "Rispondi soltanto con SI oppure NO, senza altre parole.")
-        let r = try await sessione.respond(to: """
-            Il testo seguente è la trascrizione di una registrazione. Contiene la spiegazione di argomenti di una \
-            lezione universitaria (concetti, teorie, esempi, metodi)? Rispondi NO se contiene solo saluti, prove del \
-            microfono, attese, rumore, frasi ripetute o discorsi senza argomento.
+        let r = try await conRiprova {
+            try await sessione.respond(to: """
+                Il testo seguente è la trascrizione di una registrazione. Contiene la spiegazione di argomenti di una \
+                lezione universitaria (concetti, teorie, esempi, metodi)? Rispondi NO se contiene solo saluti, prove \
+                del microfono, attese, rumore, frasi ripetute o discorsi senza argomento.
 
-            Testo:
-            \(campione)
-            """)
+                Testo:
+                \(campione)
+                """, options: GenerationOptions(temperature: 0))
+        }
         let risposta = r.content.uppercased().folding(options: .diacriticInsensitive, locale: nil)
         return !risposta.contains("NO") || risposta.contains("SI")
     }
 
+    /// Caratteri di trascrizione per parte: il contesto meno istruzioni, schema, titoli già scritti e risposta,
+    /// convertito in caratteri con il rapporto caratteri/token misurato sul testo stesso (l'italiano trascritto, con
+    /// gli errori, occupa più token del previsto). Senza le API di conteggio (prima di iOS 26.4): 4000 caratteri.
     @available(iOS 26.0, *)
-    private static func riassumi(_ testo: String, dimensione: Int,
-                                 progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
-        // Se una parte non entra nel contesto (le trascrizioni piene di errori occupano più token) si divide solo
-        // quella e si continua: prima si ricominciava da capo con parti più piccole, buttando il lavoro fatto
-        // (su una lezione di 2 ore e mezza: 27, poi 41, poi 58 parti, 19 minuti invece di 6).
-        var blocchi = dividi(testo, dimensione: dimensione)
+    private static func caratteriPerParte(_ testo: String) async -> Int {
+        guard #available(iOS 26.4, *) else { return 4_000 }
+        let modello = SystemLanguageModel.default
+        do {
+            let fissi = try await modello.tokenCount(for: Instructions(istruzioni))
+                + modello.tokenCount(for: ParteLezione.generationSchema)
+            let campione = String(testo.prefix(6_000))
+            let tokenCampione = max(try await modello.tokenCount(for: Prompt(campione)), 1)
+            let caratteriPerToken = Double(campione.count) / Double(tokenCampione)
+            // Risposta (~900 token), richiesta con i titoli già scritti e i termini del glossario (~550) e un
+            // margine del 10%.
+            let disponibili = modello.contextSize - fissi - 900 - 550
+            return max(2_000, Int(Double(disponibili) * caratteriPerToken * 0.9))
+        } catch {
+            return 4_000
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private static func riassumiAParti(_ testo: String, glossario: [String],
+                                       progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
+        var blocchi = dividi(testo, dimensione: await caratteriPerParte(testo))
         var parti: [ParteLezione] = []
         var i = 0
+        let opzioni = GenerationOptions(temperature: 0.3)
         while i < blocchi.count {
             try Task.checkCancellation()
             let blocco = blocchi[i]
-            progresso(0.05 + Double(i) / Double(blocchi.count) * 0.85, "Parte \(i + 1) di \(blocchi.count)…")
+            progresso(0.05 + Double(i) / Double(blocchi.count) * 0.85, "Parte \(i + 1) di \(blocchi.count)")
+            // Gli ultimi titoli (al massimo 12): bastano per la continuità e restano piccoli nel contesto.
+            let titoli = parti.suffix(12).map { "- \($0.titolo)" }.joined(separator: "\n")
+            var richiesta = "Questa è la parte \(i + 1) di \(blocchi.count) della trascrizione di una lezione. Prepara gli appunti di questa parte.\n"
+            if !titoli.isEmpty {
+                richiesta += "Argomenti delle parti precedenti (non ripetere ciò che è già stato spiegato; se la parte continua uno di questi argomenti, usa lo stesso titolo):\n\(titoli)\n"
+            }
+            richiesta += GlossarioCorso.rigaPrompt(GlossarioCorso.pertinenti(glossario, a: blocco, massimo: 25))
+            richiesta += "\nTesto:\n\(blocco)"
             let sessione = LanguageModelSession(instructions: istruzioni)
             let r: LanguageModelSession.Response<ParteLezione>
             do {
-                r = try await sessione.respond(to: """
-                    Questa è una parte della trascrizione di una lezione. Prepara gli appunti di questa parte.
-
-                    Testo:
-                    \(blocco)
-                    """, generating: ParteLezione.self)
-            } catch LanguageModelSession.GenerationError.exceededContextWindowSize where blocco.count > 1_200 {
+                r = try await conRiprova { try await sessione.respond(to: richiesta, generating: ParteLezione.self, options: opzioni) }
+            } catch where superaContesto(error) && blocco.count > 1_200 {
+                // Solo questa parte si divide: le altre restano come sono (prima si ricominciava da capo).
                 blocchi.replaceSubrange(i...i, with: dividi(blocco, dimensione: blocco.count * 2 / 3))
                 continue
             }
@@ -160,51 +204,117 @@ nonisolated enum AppleIntelligence {
         }
         guard !parti.isEmpty else { throw Errore.testoInsufficiente }
         try Task.checkCancellation()
-        progresso(0.92, "Sintesi finale…")
-        let inBreve = try? await sintesi(parti)
+        progresso(0.92, "Sintesi finale")
+        let sintesi = try? await sintesi(parti)
         progresso(1, "Completato")
-        return documento(parti, inBreve: inBreve)
+        return documento(parti, sintesi: sintesi)
     }
 
-    /// "In breve": 4-6 frasi su tutta la lezione, dai titoli e dall'inizio dei riassunti delle parti.
+    /// "In breve", punti chiave e domande di tutta la lezione, dai titoli e dai punti chiave delle parti (tagliati
+    /// per stare nel contesto).
     @available(iOS 26.0, *)
-    private static func sintesi(_ parti: [ParteLezione]) async throws -> String? {
+    private static func sintesi(_ parti: [ParteLezione]) async throws -> SintesiLezione {
+        let limite = SystemLanguageModel.default.contextSize >= 8_000 ? 14_000 : 6_000
         var traccia = ""
         for (i, p) in parti.enumerated() {
-            let riga = "\(i + 1). \(p.titolo): \(p.riassunto.prefix(260))\n"
-            if traccia.count + riga.count > 7_000 { break }
-            traccia += riga
+            let punti = p.puntiChiave.prefix(3).map { "  · \($0)" }.joined(separator: "\n")
+            let blocco = "\(i + 1). \(p.titolo)\n\(punti)\n"
+            if traccia.count + blocco.count > limite { break }
+            traccia += blocco
         }
         let sessione = LanguageModelSession(instructions: istruzioni)
-        let r = try await sessione.respond(to: """
-            Questi sono gli argomenti di una lezione, nell'ordine in cui sono stati trattati. Scrivi un paragrafo di \
-            4-6 frasi che descriva di cosa parla la lezione nel suo insieme e come gli argomenti si collegano. Solo il \
-            paragrafo, senza titolo.
+        return try await conRiprova {
+            try await sessione.respond(to: """
+                Questi sono gli argomenti di una lezione, nell'ordine in cui sono stati trattati, con i concetti \
+                principali di ognuno. Prepara la sintesi di tutta la lezione.
 
-            \(traccia)
-            """)
-        let t = r.content.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.count > 40 ? t : nil
+                \(traccia)
+                """, generating: SintesiLezione.self, options: GenerationOptions(temperature: 0.3)).content
+        }
     }
 
+    /// Il documento: parti consecutive con lo stesso titolo (un argomento spezzato fra due parti) si uniscono.
     @available(iOS 26.0, *)
-    private static func documento(_ parti: [ParteLezione], inBreve: String?) -> String {
-        var md: [String] = []
-        if let inBreve { md += ["## In breve", inBreve, ""] }
-        md.append("## Riassunto")
+    private static func documento(_ parti: [ParteLezione], sintesi: SintesiLezione?) -> String {
+        var sezioni: [(titolo: String, testo: [String])] = []
         for p in parti {
-            md += ["### \(p.titolo.trimmingCharacters(in: .whitespacesAndNewlines))", p.riassunto.trimmingCharacters(in: .whitespacesAndNewlines), ""]
+            let titolo = p.titolo.trimmingCharacters(in: .whitespacesAndNewlines)
+            let testo = p.riassunto.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let ultimo = sezioni.last, ultimo.titolo.compare(titolo, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame {
+                sezioni[sezioni.count - 1].testo.append(testo)
+            } else {
+                sezioni.append((titolo, [testo]))
+            }
         }
-        var visti = Set<String>()
-        let punti = parti.flatMap(\.puntiChiave).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && visti.insert($0.lowercased()).inserted }
+        func pulisci(_ elenco: [String], massimo: Int) -> [String] {
+            var visti = Set<String>()
+            return elenco.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty && visti.insert($0.lowercased()).inserted }
+                .prefix(massimo).map { $0 }
+        }
+        let inBreve = sintesi?.inBreve.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let punti = pulisci(sintesi?.puntiChiave ?? parti.flatMap { $0.puntiChiave.prefix(2) }, massimo: 15)
+        let domande = pulisci(sintesi?.domande ?? parti.flatMap { $0.domande.prefix(1) }, massimo: 12)
+
+        var md: [String] = []
+        if inBreve.count > 40 { md += ["## In breve", inBreve, ""] }
+        md.append("## Riassunto")
+        for s in sezioni { md += ["### \(s.titolo)", s.testo.joined(separator: "\n\n"), ""] }
         md.append("## Punti chiave")
         md += punti.map { "- \($0)" }
         md.append("")
-        let domande = parti.flatMap(\.domande).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         md.append("## Da ripassare")
         md += domande.enumerated().map { "\($0.offset + 1). \($0.element)" }
         return md.joined(separator: "\n")
+    }
+
+    /// Il testo è stato fermato dalle protezioni del modello (errore di iOS 26 o di iOS 27: da iOS 27 il framework
+    /// lancia `LanguageModelError` al posto di `GenerationError`).
+    @available(iOS 26.0, *)
+    static func violaProtezioni(_ error: Error) -> Bool {
+        if case LanguageModelSession.GenerationError.guardrailViolation = error { return true }
+        if #available(iOS 27.0, *), case LanguageModelError.guardrailViolation = error { return true }
+        return false
+    }
+
+    /// La richiesta non entra nel contesto del modello (errore di iOS 26 o di iOS 27).
+    @available(iOS 26.0, *)
+    static func superaContesto(_ error: Error) -> Bool {
+        if case LanguageModelSession.GenerationError.exceededContextWindowSize = error { return true }
+        if #available(iOS 27.0, *), case LanguageModelError.contextSizeExceeded = error { return true }
+        return false
+    }
+
+    /// Esegue una richiesta e, se iOS limita il modello (app in background, sistema occupato), riprova dopo una pausa
+    /// (fino alla data indicata da iOS, al massimo un minuto; 6 tentativi).
+    @available(iOS 26.0, *)
+    static func conRiprova<T>(_ richiesta: () async throws -> T) async throws -> T {
+        var attesa: Double = 5
+        for _ in 0..<6 {
+            do {
+                return try await richiesta()
+            } catch {
+                guard let pausa = pausaPerLimite(error, predefinita: attesa) else { throw error }
+                try await Task.sleep(for: .seconds(pausa))
+                attesa = min(attesa * 2, 60)
+            }
+        }
+        return try await richiesta()
+    }
+
+    /// Secondi da attendere se l'errore è un limite temporaneo; nil per gli altri errori.
+    @available(iOS 26.0, *)
+    private static func pausaPerLimite(_ error: Error, predefinita: Double) -> Double? {
+        if #available(iOS 27.0, *), case LanguageModelError.rateLimited(let info) = error {
+            return min(max(info.resetDate?.timeIntervalSinceNow ?? predefinita, 1), 60)
+        }
+        if #available(iOS 27.0, *), case LanguageModelError.timeout = error { return predefinita }
+        switch error {
+        case LanguageModelSession.GenerationError.rateLimited, LanguageModelSession.GenerationError.concurrentRequests:
+            return predefinita
+        default:
+            return nil
+        }
     }
     #endif
 

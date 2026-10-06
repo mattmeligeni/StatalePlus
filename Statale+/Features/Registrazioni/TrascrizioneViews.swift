@@ -59,7 +59,7 @@ struct TrascrizioneSection: View {
     }
 }
 
-/// Riassunto con Apple Intelligence o Qwen (visibile se almeno uno dei due può funzionare su questo iPhone).
+/// Riassunto con Apple Intelligence, sul telefono o online (visibile se può funzionare su questo iPhone).
 struct RiassuntoSection: View {
     let registrazione: Registrazione
     var player: AudioPlayer? = nil
@@ -120,8 +120,8 @@ private struct StatoElaborazione: View {
                 Text(stato.progresso.formatted(.percent.precision(.fractionLength(0)))).font(.caption.monospacedDigit())
             }
             if !stato.inPausa {
-                Text(stato.motore == MotoreRiassunto.qwen.nome
-                     ? "Qwen lavora con l'app aperta: se esci si mette in pausa e riprende quando torni."
+                Text(stato.motore == MotoreTrascrizione.parakeet.nome && !NotaBackground.neuralEngineInBackground
+                     ? "Parakeet lavora con l'app aperta: se esci si mette in pausa e riprende quando torni."
                      : NotaBackground.testo).font(.caption).foregroundStyle(.secondary)
             }
             Button("Annulla", role: .destructive, action: annulla).font(.callout).buttonStyle(.borderless)

@@ -8,9 +8,9 @@ import UIKit
 ///
 /// - Catena automatica dopo una registrazione: trascrizione → riassunto → miglioramento dell'audio (per l'ascolto),
 ///   uno dopo l'altro per non contendersi Neural Engine, GPU e CPU.
-/// - Pausa e ripresa: GPU (Qwen) e, da iOS 27, Neural Engine (Parakeet) non sono usabili con l'app in background
-///   senza entitlement che gli account sviluppatore personali non hanno. Un lavoro che si ferma per questo resta
-///   "in pausa" e riparte da solo quando l'app torna in primo piano (Qwen dalle sezioni già scritte).
+/// - Pausa e ripresa: da iOS 27 il Neural Engine (Parakeet) in background richiede l'entitlement "Background
+///   Inference". Senza, un lavoro che si ferma uscendo dall'app resta "in pausa" e riparte da solo quando l'app torna
+///   in primo piano. Apple Intelligence gira in un processo di sistema e continua anche in background.
 @Observable
 final class ElaborazioniAudio {
     enum Tipo: Hashable { case trascrizione, riassunto, miglioramento }
@@ -36,6 +36,8 @@ final class ElaborazioniAudio {
     @ObservationIgnored private var osservatori: [NSObjectProtocol] = []
     /// Correzione delle trascrizioni con il glossario del corso (impostata da `AppModel`).
     @ObservationIgnored var correggiTesto: (String) -> String = { $0 }
+    /// Termini del glossario del corso, passati ai riassunti (impostati da `AppModel`).
+    @ObservationIgnored var terminiGlossario: () -> [String] = { [] }
     /// Lavori annullati dall'utente: le altre interruzioni (iOS) si mostrano come errore, non come annullamento.
     @ObservationIgnored private var annullatiDallUtente: Set<String> = []
     @ObservationIgnored private let log = Logger(subsystem: "com.mattiameligeni.Statale", category: "elaborazioni")
@@ -44,6 +46,9 @@ final class ElaborazioniAudio {
         let nc = NotificationCenter.default
         osservatori.append(nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in
             PrimoPiano.imposta(false)
+        })
+        osservatori.append(nc.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
+            ParakeetLocale.libera()
         })
         osservatori.append(nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             PrimoPiano.imposta(true)
@@ -159,20 +164,27 @@ final class ElaborazioniAudio {
         archivio = store
         errori[r.id] = nil
         riassunti[r.id] = Stato(progresso: 0, messaggio: "Preparazione…", motore: motore.nome)
+        let glossario = terminiGlossario()
         let id = r.id
         let titolo = r.titolo
         tasks["r\(id)"] = Task {
             do {
-                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo,
-                                                           gpu: motore == .qwen) { sistema in
+                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo) { sistema in
                     let aggiorna: @Sendable (Double, String) -> Void = { p, m in
                         sistema(p, fase: m)
                         Task { @MainActor in self.riassunti[id]?.progresso = p; self.riassunti[id]?.messaggio = m }
                     }
-                    return switch motore {
-                    case .qwen: try await QwenLocale.riassumi(testo, progresso: aggiorna)
-                    case .cloud: try await NuvolaApple.riassumi(testo, progresso: aggiorna)
-                    case .apple: try await AppleIntelligence.riassumi(testo, progresso: aggiorna)
+                    switch motore {
+                    case .apple:
+                        return try await AppleIntelligence.riassumi(testo, glossario: glossario, progresso: aggiorna)
+                    case .cloud:
+                        do {
+                            return try await NuvolaApple.riassumi(testo, glossario: glossario, progresso: aggiorna)
+                        } catch where NuvolaApple.convieneRipiegare(error) && AppleIntelligence.stato == .disponibile {
+                            // Senza rete o oltre il limite giornaliero: si continua sul telefono.
+                            Task { @MainActor in self.riassunti[id]?.motore = MotoreRiassunto.apple.nome }
+                            return try await AppleIntelligence.riassumi(testo, glossario: glossario, progresso: aggiorna)
+                        }
                     }
                 }
                 store.salvaRiassunto(id, md)
@@ -193,10 +205,10 @@ final class ElaborazioniAudio {
 
     // MARK: Pausa e ripresa
 
-    /// Un errore arrivato con l'app fuori dal primo piano (GPU o Neural Engine non permessi) mette il lavoro in pausa.
+    /// Un errore arrivato con l'app fuori dal primo piano (Neural Engine non permesso, limiti di Apple Intelligence
+    /// in background) mette il lavoro in pausa.
     private func sospendi(_ tipo: Tipo, _ id: UUID, _ error: Error) -> Bool {
-        let perBackground = (error as? QwenLocale.Errore) == .inPausa || !PrimoPiano.attivo
-        guard perBackground else { return false }
+        guard !PrimoPiano.attivo else { return false }
         let pausa = Stato(progresso: stato(tipo, id)?.progresso ?? 0, messaggio: "In pausa: riprende quando torni nell'app",
                           motore: stato(tipo, id)?.motore, inPausa: true)
         switch tipo {
@@ -257,11 +269,25 @@ final class ElaborazioniAudio {
 }
 
 extension MotoreRiassunto {
-    /// Il motore che si userà ora: Qwen se scelto, scaricato e supportato; altrimenti Apple Intelligence se
-    /// disponibile; nil se nessuno dei due.
+    /// Il motore che si userà ora: Apple Intelligence online se scelta (è la predefinita) e disponibile; altrimenti
+    /// quella sul telefono; nil se nessuna delle due.
     nonisolated static var disponibile: MotoreRiassunto? {
         if Preferenze.motoreRiassunto == .cloud, NuvolaApple.stato == .disponibile { return .cloud }
-        if Preferenze.motoreRiassunto == .qwen, QwenLocale.installato, QwenLocale.supportato { return .qwen }
         return AppleIntelligence.stato == .disponibile ? .apple : nil
+    }
+}
+
+/// L'app è in primo piano? Serve a distinguere i lavori fermati da iOS uscendo dall'app (da riprendere) dagli errori.
+nonisolated enum PrimoPiano {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var valore = true
+
+    static var attivo: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return valore
+    }
+
+    static func imposta(_ v: Bool) {
+        lock.lock(); valore = v; lock.unlock()
     }
 }

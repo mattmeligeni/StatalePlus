@@ -567,6 +567,8 @@ final class AudioRecorder {
             error = nil
             observeInterruptions()
             startMeter()
+            // La trascrizione partirà alla fine: Parakeet si carica ora, con l'app in primo piano.
+            if Preferenze.elaborazioneAutomatica { ParakeetLocale.preriscalda() }
         } catch {
             state = .idle
             self.error = "Impossibile avviare la registrazione: \(error.localizedDescription)"

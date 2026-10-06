@@ -2,8 +2,8 @@ import Foundation
 import Observation
 import UIKit
 
-/// Glossario del corso dello studente: creazione con Qwen (o Apple Intelligence), modifiche a mano e correzione
-/// delle trascrizioni. Il codice del corso arriva da `AppModel` (`codiceCorso`).
+/// Glossario del corso dello studente: creazione con Apple Intelligence (online se disponibile, altrimenti sul
+/// telefono), modifiche a mano e correzione delle trascrizioni. Il codice del corso arriva da `AppModel` (`codiceCorso`).
 @Observable
 final class GestoreGlossario {
     enum Stato: Equatable { case inattivo, creazione(Double) }
@@ -21,48 +21,47 @@ final class GestoreGlossario {
         return caricatoPer == codice ? glossario : GlossarioCorso.carica(codice)
     }
 
-    /// Legge il glossario del corso attuale (all'apertura della schermata).
+    /// Legge il glossario del corso attuale (all'apertura della schermata). Un glossario creato prima del filtro dei
+    /// termini (con Qwen) si ripulisce subito da parole inventate e nomi di persona, tenendo quelli aggiunti a mano.
     func ricarica() {
         guard let codice = codiceCorso(), caricatoPer != codice else { return }
         caricatoPer = codice
         glossario = GlossarioCorso.carica(codice)
+        if var g = glossario, g.filtrato != true {
+            let aggiunti = g.aggiunti ?? []
+            let generati = g.termini.filter { !aggiunti.contains($0) }
+            g.termini = GlossarioCorso.unisci(aggiunti, filtra(generati))
+            g.filtrato = true
+            GlossarioCorso.salva(g, codiceCorso: codice)
+            glossario = g
+        }
     }
 
-    /// Modello con cui si crea il glossario: Apple Intelligence online se autorizzata, poi Qwen se scaricato, poi
-    /// Apple Intelligence sul telefono.
+    /// Modello con cui si crea il glossario: Apple Intelligence online se disponibile, altrimenti sul telefono.
     var motore: MotoreRiassunto? {
         if NuvolaApple.stato == .disponibile { return .cloud }
-        if QwenLocale.installato, QwenLocale.supportato { return .qwen }
         return AppleIntelligence.stato == .disponibile ? .apple : nil
     }
 
-    func crea(corso: String, insegnamenti: [InsegnamentoAgenda]) {
+    /// `paroleTrascritte`: parole (in minuscolo) delle trascrizioni già fatte, per confermare i termini tecnici che
+    /// il dizionario non conosce.
+    func crea(corso: String, insegnamenti: [InsegnamentoAgenda], paroleTrascritte: Set<String>) {
         guard compito == nil, let codice = codiceCorso() else { return }
+        guard let motore else { errore = GlossarioCorso.Errore.nonDisponibile.errorDescription; return }
         errore = nil
         stato = .creazione(0)
-        let motore = motore
         let nomi = insegnamenti.map(\.nome)
-        let base = GlossarioCorso.terminiDiBase(insegnamenti: nomi, docenti: insegnamenti.map(\.docente))
-        let manuali = attuale?.termini ?? []
+        let aggiunti = attuale?.aggiunti ?? []
         compito = Task {
             do {
-                var generati: [String] = []
-                if let motore {
-                    let richieste = GlossarioCorso.richieste(corso: corso, insegnamenti: nomi)
-                    let aggiorna: @Sendable (Double) -> Void = { p in Task { @MainActor in self.stato = .creazione(p) } }
-                    let risposte = try await EsecuzioneEstesa.esegui(titolo: "Glossario del corso", sottotitolo: "\(nomi.count) insegnamenti",
-                                                                     gpu: motore == .qwen) { sistema in
-                        let progresso: @Sendable (Double) -> Void = { p in sistema(p); aggiorna(p) }
-                        return switch motore {
-                        case .qwen: try await QwenLocale.rispondi(richieste, istruzioni: GlossarioCorso.istruzioni, massimo: 900, progresso: progresso)
-                        case .apple: try await AppleIntelligence.rispondi(richieste, istruzioni: GlossarioCorso.istruzioni, progresso: progresso)
-                        case .cloud: try await NuvolaApple.rispondi(richieste, istruzioni: GlossarioCorso.istruzioni, progresso: progresso)
-                        }
-                    }
-                    generati = risposte.flatMap(GlossarioCorso.termini(da:))
+                let aggiorna: @Sendable (Double) -> Void = { p in Task { @MainActor in self.stato = .creazione(p) } }
+                let elenchi = try await EsecuzioneEstesa.esegui(titolo: "Glossario del corso", sottotitolo: "\(nomi.count) insegnamenti") { sistema in
+                    try await GlossarioCorso.genera(con: motore, corso: corso, insegnamenti: nomi) { p in sistema(p); aggiorna(p) }
                 }
-                let g = Glossario(corso: corso, termini: GlossarioCorso.unisci(manuali, base, generati),
-                                  generatoIl: .now, modello: motore?.nome ?? "solo nomi degli insegnamenti")
+                let ripetute = GlossarioCorso.paroleRipetute(elenchi)
+                let generati = filtra(elenchi.flatMap { $0 }) { ripetute.contains($0) || paroleTrascritte.contains($0) }
+                let g = Glossario(corso: corso, termini: GlossarioCorso.unisci(aggiunti, generati),
+                                  generatoIl: .now, modello: motore.nome, aggiunti: aggiunti, filtrato: true)
                 GlossarioCorso.salva(g, codiceCorso: codice)
                 glossario = g
                 caricatoPer = codice
@@ -75,13 +74,19 @@ final class GestoreGlossario {
         }
     }
 
+    private func filtra(_ termini: [String], confermata: (String) -> Bool = { _ in false }) -> [String] {
+        GlossarioCorso.filtra(termini, valida: Dizionario.italiano.valida, validaInglese: Dizionario.inglese.valida,
+                              confermata: confermata)
+    }
+
     func annulla() { compito?.cancel() }
 
     func aggiungi(_ termine: String) {
         let t = termine.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, let codice = codiceCorso() else { return }
-        var g = attuale ?? Glossario(corso: "", termini: [], generatoIl: .now, modello: "a mano")
+        var g = attuale ?? Glossario(corso: "", termini: [], generatoIl: .now, modello: "a mano", filtrato: true)
         g.termini = GlossarioCorso.unisci(g.termini, [t])
+        g.aggiunti = GlossarioCorso.unisci(g.aggiunti ?? [], [t])
         GlossarioCorso.salva(g, codiceCorso: codice)
         glossario = g
         caricatoPer = codice
@@ -91,6 +96,7 @@ final class GestoreGlossario {
         guard var g = attuale, let codice = codiceCorso() else { return }
         let via = Set(termini)
         g.termini.removeAll { via.contains($0) }
+        g.aggiunti?.removeAll { via.contains($0) }
         GlossarioCorso.salva(g, codiceCorso: codice)
         glossario = g
     }
@@ -106,9 +112,11 @@ final class GestoreGlossario {
 
     /// Testo corretto con il glossario del corso (o quello originale se non c'è un glossario).
     func correggi(_ testo: String) -> CorrettoreTermini.Esito {
-        guard let termini = attuale?.termini, !termini.isEmpty else { return .init(testo: testo, correzioni: [:]) }
+        ricarica()
+        guard let termini = glossario?.termini, !termini.isEmpty else { return .init(testo: testo, correzioni: [:]) }
         return CorrettoreTermini.correggi(testo, glossario: termini, valida: Dizionario.italiano.valida,
-                                          validaInglese: Dizionario.inglese.valida)
+                                          validaInglese: Dizionario.inglese.valida,
+                                          suggerimenti: Dizionario.italiano.suggerimenti)
     }
 
     /// Applica il glossario alle trascrizioni già fatte. Restituisce (parole corrette, trascrizioni cambiate).
@@ -148,6 +156,13 @@ final class Dizionario {
                                               startingAt: 0, wrap: false, language: lingua).location == NSNotFound
         cache[parola] = v
         return v
+    }
+
+    /// Parole simili proposte dal correttore ortografico per una parola sconosciuta.
+    func suggerimenti(_ parola: String) -> [String] {
+        guard let lingua else { return [] }
+        let ns = parola as NSString
+        return checker.guesses(forWordRange: NSRange(location: 0, length: ns.length), in: parola, language: lingua) ?? []
     }
 
     /// Senza dizionario italiano non si corregge nulla (ogni parola risulta valida); senza inglese si ignora il filtro.

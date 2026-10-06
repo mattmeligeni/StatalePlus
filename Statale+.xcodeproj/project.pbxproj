@@ -8,9 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		49FBE5C0306C093A00202E63 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 49FBE5B0306C093A00202E63 /* FluidAudio */; };
-		49FBE5C1306C093A00202E63 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 49FBE5B1306C093A00202E63 /* MLXLLM */; };
-		49FBE5C2306C093A00202E63 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 49FBE5B2306C093A00202E63 /* MLXLMCommon */; };
-		49FBE5C4306C093A00202E63 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = 49FBE5B4306C093A00202E63 /* Tokenizers */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,9 +27,6 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				49FBE5C0306C093A00202E63 /* FluidAudio in Frameworks */,
-				49FBE5C1306C093A00202E63 /* MLXLLM in Frameworks */,
-				49FBE5C2306C093A00202E63 /* MLXLMCommon in Frameworks */,
-				49FBE5C4306C093A00202E63 /* Tokenizers in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -73,9 +67,6 @@
 			name = "Statale+";
 			packageProductDependencies = (
 				49FBE5B0306C093A00202E63 /* FluidAudio */,
-				49FBE5B1306C093A00202E63 /* MLXLLM */,
-				49FBE5B2306C093A00202E63 /* MLXLMCommon */,
-				49FBE5B4306C093A00202E63 /* Tokenizers */,
 			);
 			productName = "Statale+";
 			productReference = 49FBE429306C093A00202E63 /* Statale+.app */;
@@ -107,8 +98,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				49FBE5A0306C093A00202E63 /* XCRemoteSwiftPackageReference "FluidAudio" */,
-				49FBE5A1306C093A00202E63 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
-				49FBE5A2306C093A00202E63 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 49FBE42A306C093A00202E63 /* Products */;
@@ -263,13 +252,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Statale+.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = TYJFB2ZDYA;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Statale+-Info.plist";
-				CODE_SIGN_ENTITLEMENTS = "Statale+.entitlements";
 				INFOPLIST_KEY_CFBundleDisplayName = "Statale+";
 				INFOPLIST_KEY_NSCameraUsageDescription = "La fotocamera serve per scansionare il QR del codice lezione.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Il microfono serve per registrare le lezioni.";
@@ -301,13 +290,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Statale+.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = TYJFB2ZDYA;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Statale+-Info.plist";
-				CODE_SIGN_ENTITLEMENTS = "Statale+.entitlements";
 				INFOPLIST_KEY_CFBundleDisplayName = "Statale+";
 				INFOPLIST_KEY_NSCameraUsageDescription = "La fotocamera serve per scansionare il QR del codice lezione.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Il microfono serve per registrare le lezioni.";
@@ -364,22 +353,6 @@
 				minimumVersion = 0.17.5;
 			};
 		};
-		49FBE5A1306C093A00202E63 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 3.32.3;
-			};
-		};
-		49FBE5A2306C093A00202E63 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/huggingface/swift-transformers";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.3.4;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -387,21 +360,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 49FBE5A0306C093A00202E63 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
-		};
-		49FBE5B1306C093A00202E63 /* MLXLLM */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 49FBE5A1306C093A00202E63 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXLLM;
-		};
-		49FBE5B2306C093A00202E63 /* MLXLMCommon */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 49FBE5A1306C093A00202E63 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXLMCommon;
-		};
-		49FBE5B4306C093A00202E63 /* Tokenizers */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 49FBE5A2306C093A00202E63 /* XCRemoteSwiftPackageReference "swift-transformers" */;
-			productName = Tokenizers;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

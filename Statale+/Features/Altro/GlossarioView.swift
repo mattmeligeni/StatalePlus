@@ -25,9 +25,6 @@ struct GlossarioView: View {
                 if case .creazione(let p) = gestore.stato {
                     VStack(alignment: .leading, spacing: 8) {
                         ProgressView(value: p) { Text("Creazione del glossario…").font(.callout) }
-                        if gestore.motore == .qwen {
-                            Text("Tieni l'app aperta: richiede un paio di minuti.").font(.caption).foregroundStyle(.secondary)
-                        }
                         Button("Annulla", role: .destructive) { gestore.annulla() }.font(.callout).buttonStyle(.borderless)
                     }
                     .padding(.vertical, 4)
@@ -96,9 +93,8 @@ struct GlossarioView: View {
     private var notaMotore: String {
         switch gestore.motore {
         case .cloud: "Creato con Apple Intelligence online dai nomi del corso e degli insegnamenti. Puoi aggiungere o togliere termini."
-        case .qwen: "Creato con Qwen dai nomi del corso e degli insegnamenti. Puoi aggiungere o togliere termini."
-        case .apple: "Creato con Apple Intelligence dai nomi del corso e degli insegnamenti. Con Qwen il glossario è più ricco."
-        case nil: "Per crearlo scarica Qwen (Altro › IA › Riassunti) o attiva Apple Intelligence. Intanto puoi aggiungere termini a mano."
+        case .apple: "Creato con Apple Intelligence dai nomi del corso e degli insegnamenti. Puoi aggiungere o togliere termini."
+        case nil: "Per crearlo attiva Apple Intelligence. Intanto puoi aggiungere termini a mano."
         }
     }
 

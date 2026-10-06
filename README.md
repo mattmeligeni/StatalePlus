@@ -222,55 +222,72 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     - Whisper è stato tolto (il modello scaricato si cancella da solo, 626 MB): è lento e su audio registrato da
       lontano inventa ("Grazie.") e ripete.
     - Qwen3-ASR è il più preciso, ma più lento, usa la GPU e ogni tanto ripete a lungo: per ora non incluso.
+  - **Pre-riscaldamento** di Parakeet: il modello si carica sul Neural Engine all'inizio di ogni registrazione (con la
+    catena automatica attiva), così alla fine la trascrizione parte subito. Resta in memoria tre minuti dopo l'ultima
+    trascrizione, poi si libera; si libera subito se iOS segnala memoria scarsa. Due trascrizioni insieme usano due
+    copie, perché FluidAudio segue l'avanzamento di una sola per volta.
   - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
     (iOS 18+), conteggio parole, condivisione, nuova trascrizione.
-- **Riassunto** con due motori a scelta in _Altro › IA › Riassunti_.
-  - **Qwen 3.5 4B** (Alibaba, Apache 2.0, `mlx-community/Qwen3.5-4B-4bit`) con MLX sulla GPU: download di **3 GB**, solo
-    iPhone con almeno 8 GB di memoria.
-    - Lavora a sezioni con memoria: blocchi di circa 2200 parole; per ognuno scrive le sezioni `### Titolo` nuove,
-      ricevendo i titoli già scritti per non ripetersi e collegare i concetti. Una passata finale scrive _In breve_,
-      _Punti chiave_ e _Da ripassare_.
-    - Prove sulla lezione di 2 h 25 min: copre 40 termini su 75, contro i 34 di Apple. Corregge nomi e termini
-      storpiati dalla trascrizione ("modo di gambier" → "nodi di Ranvier").
-    - Tempi e memoria: circa 5 minuti sul Mac, 4,1 GB di picco con la cache di MLX limitata a 256 MB. Su iPhone si
-      stimano 10–15 minuti.
-    - In una passata sola è più rapido ma riassume troppo.
-    - Prima di iniziare controlla la memoria libera (`os_proc_available_memory`).
-    - La GPU non si può usare in background: se si esce dall'app il riassunto va in pausa e riprende al ritorno dalle
-      sezioni già scritte.
-    - Il tokenizer è quello di swift-transformers, con un adattatore scritto a mano: niente macro di pacchetto da
-      abilitare in Xcode.
+- **Riassunto** con Apple Intelligence, in _Altro › IA › Riassunti_: online (predefinita, quando Apple la abilita
+  per l'app) o sul telefono. Qwen 3.5 4B è stato tolto: su iPhone 17 Pro Max il riassunto di 20 minuti di lezione
+  richiedeva 3 minuti e il 3% di batteria (circa 30 minuti e 30% per due ore), il glossario 6-7 minuti e il 6%. Il
+  modello già scaricato (3 GB) si cancella da solo.
   - **Apple Intelligence online** (`NuvolaApple`, Private Cloud Compute, iOS 27): il modello più grande di Apple sui
     suoi server, con 32K token di contesto.
-    - Usa la stessa pipeline a sezioni di Qwen (`RiassuntoASezioni`), con blocchi da circa 6000 parole.
+    - Pipeline a sezioni con memoria (`RiassuntoASezioni`): blocchi di circa 6000 parole (4-5 richieste per due ore
+      di lezione, il limite giornaliero conta le richieste); per ognuno il modello scrive le sezioni `### Titolo`
+      nuove, ricevendo i titoli già scritti e i termini del glossario del corso presenti nel blocco. Una passata
+      finale scrive _In breve_, _Punti chiave_ e _Da ripassare_.
+    - Senza connessione, con il servizio non raggiungibile o oltre il limite giornaliero il riassunto continua con
+      Apple Intelligence sul telefono.
     - Mostra il limite giornaliero di richieste e l'offerta di Apple per alzarlo con iCloud+.
     - Serve l'entitlement `com.apple.developer.private-cloud-compute`, concesso da Apple su richiesta a chi è
-      nell'App Store Small Business Program. Finché manca, `StatalePCCAutorizzata = NO` in Info.plist e l'opzione
-      non compare (al suo posto "Remoto Pro · Presto").
-  - **Apple Intelligence** (FoundationModels, iOS 26+, modello on-device di sistema, solo se disponibile):
-    - La trascrizione è divisa in parti di circa 4000 caratteri, perché il modello ha un contesto di ~4K token. Se una
-      parte non ci sta si divide solo quella e si va avanti. Prima si ricominciava da capo con parti più piccole: su
-      una lezione di 2 h 25 min si passava da 27 a 41 a 58 parti, 19 minuti invece di circa 6.
-    - Ogni parte diventa appunti strutturati con generazione guidata (`@Generable`): titolo, riassunto di un
-      paragrafo, 3–6 punti chiave, 2–3 domande.
-    - Il documento finale contiene _In breve_, _Riassunto_ con un paragrafo per parte, _Punti chiave_ senza duplicati
-      e _Da ripassare_ numerato.
+      nell'App Store Small Business Program. Finché manca, `StatalePCCAutorizzata = NO` in Info.plist e l'opzione si
+      vede disattivata ("Presto disponibile").
+  - **Apple Intelligence sul telefono** (FoundationModels, iOS 26+, modello di sistema, solo se disponibile):
+    - Parti grandi quanto il contesto permette: 4096 token fino a iOS 26, 8192 da iOS 27 (`contextSize`). Da iOS 26.4
+      si misurano in token istruzioni, schema e un campione del testo (`tokenCount`), e la dimensione delle parti in
+      caratteri si ricava dal rapporto caratteri/token del testo stesso; prima si usano 4000 caratteri. Se una parte
+      non ci sta si divide solo quella.
+    - Ogni parte riceve gli ultimi titoli già scritti (per non ripetere e continuare un argomento lasciato a metà) e i
+      termini del glossario che vi compaiono, anche storpiati (`GlossarioCorso.pertinenti`), con l'indicazione di
+      scriverli nella forma corretta.
+    - Generazione guidata (`@Generable`): titolo, riassunto in 2-3 paragrafi, punti chiave e domande; temperatura
+      0,3 per appunti fedeli al testo. Parti consecutive con lo stesso titolo si uniscono in una sezione.
+    - Una passata finale guidata (`SintesiLezione`) scrive _In breve_, 6-15 punti chiave e 5-12 domande per tutta la
+      lezione (prima si elencavano tutti quelli delle parti: più di cento in due ore).
+    - Il modello gira in un processo di sistema e continua con l'app in background, dove iOS può limitarne le
+      richieste: si riprova dopo una pausa (`conRiprova`, fino a 6 volte, al massimo un minuto di attesa). Da iOS 27
+      gli errori arrivano come `LanguageModelError` invece di `GenerationError`: si gestiscono entrambi.
+    - Prova sul Mac (M1 Pro, contesto da 4096 token) con la lezione di 2 h 25 min: 11 parti, 3 min 46 s.
     - Se Apple Intelligence è disattivata o in download, l'app lo indica.
   - Visualizzazione formattata, modifica con Writing Tools, rigenerazione.
   - **PDF A4** da condividere o stampare: è generato dall'app con titolo, insegnamento e data.
 - **Glossario del corso** (_Altro › IA › Glossario del corso_, `GlossarioCorso`, `GestoreGlossario`): termini del corso
-  per correggere le parole storpiate dalla trascrizione ("dopamila" → "dopamina").
-  - Creazione: una richiesta per insegnamento (60 termini: concetti, strutture, sostanze, test, sindromi, metodi,
-    autori), più nomi degli insegnamenti e cognomi dei docenti. Modello usato, in ordine: Apple Intelligence online se
-    autorizzata, Qwen, Apple Intelligence sul telefono. Si crea da solo alla fine del download di Qwen; i termini si
-    possono aggiungere e togliere a mano.
+  per correggere le parole storpiate dalla trascrizione ("dopamila" → "dopamina") e da passare ai riassunti.
+  - Creazione con Apple Intelligence (online se disponibile, altrimenti sul telefono): una richiesta guidata per
+    insegnamento (`TerminiInsegnamento`, 15-40 parole tecniche specifiche, temperatura 0,2). Sul Mac, per sei
+    insegnamenti, circa un minuto.
+  - Filtro dei termini generati (`GlossarioCorso.filtra`), dopo un glossario creato con Qwen con parole inventate e
+    nomi di persona:
+    - una parola in minuscolo sconosciuta ai dizionari italiano e inglese resta solo se compare nelle trascrizioni
+      già fatte o se il modello la propone per almeno due insegnamenti (il dizionario non conosce molti termini
+      veri come "neurotrasmettitori"; le parole inventate come "fenotiropo" compaiono una volta sola);
+    - i termini fatti solo di nomi propri sconosciuti al dizionario si scartano, gli eponimi dentro un termine
+      restano ("nodi di Ranvier");
+    - sigle scartate; parole comuni con la maiuscola riportate in minuscolo.
+  - I cognomi dei docenti non entrano più nel glossario. I termini aggiunti a mano restano quando lo si ricrea. Un
+    glossario creato prima del filtro si ripulisce da solo alla prima lettura.
   - Correzione (`CorrettoreTermini`), automatica sulle nuove trascrizioni e su richiesta su quelle già fatte. Una parola
     si sostituisce solo se:
     - il correttore ortografico italiano di iOS non la conosce;
     - non è una parola inglese valida;
     - ha almeno 6 lettere;
     - un solo termine le è vicinissimo: 1 lettera di differenza, 2 dalle 10 lettere in su;
-    - non è solo un'altra forma della stessa parola (singolare e plurale, derivati, parola contenuta nell'altra);
+    - non è solo un'altra forma della stessa parola (singolare e plurale, derivati, parola contenuta nell'altra,
+      stessa radice con un'altra desinenza: "neuropsicologia" non diventa "neuropsicologica");
+    - il correttore ortografico non propone una parola più vicina del termine ("pertebrale", cioè "vertebrale", non
+      diventa "cerebrale");
     - mantiene la desinenza trascritta, e la maiuscola resta solo per i nomi propri.
   - Prove: su 20 minuti di psicofarmacologia corregge "dopamila", "dopamita", "dopamia" e "serotonnina" in 0,08 s;
     sulla lezione di neuroanatomia corregge "bidollo" e "mitollo" in "midollo" e "cebelletto" in "cervelletto". Le regole
@@ -279,19 +296,18 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
     adatto all'italiano.
 - **Catena automatica** (attiva per impostazione predefinita, _Altro › IA › Dopo ogni registrazione_). Alla fine di una
   registrazione partono, uno dopo l'altro, trascrizione, riassunto e miglioramento dell'audio: quando si apre la
-  lezione è già tutto pronto. Uno dopo l'altro per non contendersi Neural Engine, GPU e CPU.
+  lezione è già tutto pronto. Uno dopo l'altro per non contendersi Neural Engine e CPU.
 - **Lavori lunghi in background** (`EsecuzioneEstesa`): trascrizione, riassunto, miglioramento dell'audio e download dei
   modelli.
   - Da iOS 26 usano `BGContinuedProcessingTask`: si può uscire dall'app e iOS mostra l'attività con barra e pulsante
     per annullare (non si può nascondere, per questo non c'è una Live Activity dell'app). Ha una sola riga di
     sottotitolo: solo fase e tempo stimato, ad esempio "312 di 632 MB · circa 2 min" o "Trascritti 5 di 13 min · meno
-    di un minuto". Il titolo è il tipo di lavoro ("Trascrizione", "Riassunto", "Download di Qwen").
-  - GPU (Qwen) e, da iOS 27, Neural Engine in background richiedono entitlement ("Background GPU Access",
-    "Background Inference") che gli account sviluppatore personali non hanno. Con l'account a pagamento Qwen chiede
-    la GPU in background (`EsecuzioneEstesa.esegui(gpu: true)`, `requiredResources = .gpu`, `gpuConcessa`) dove iOS la
-    supporta.
-    - Senza GPU in background il lavoro non passa dall'attività di sistema: iOS la chiudeva subito e il riassunto
-      sembrava non partire.
+    di un minuto". Il titolo è il tipo di lavoro ("Trascrizione", "Riassunto", "Download di Parakeet").
+  - Da iOS 27 il Neural Engine in background (Parakeet) richiede l'entitlement _Background Inference_
+    (`com.apple.developer.background-tasks.continued-processing.inference`), valido anche fuori dai lavori lunghi; non
+    serve un'opzione nella richiesta del lavoro. Apple Intelligence gira in un processo di sistema e non ne ha bisogno.
+    Finché l'entitlement non è nel profilo, `StataleNeuralEngineInBackground = NO` in Info.plist e Parakeet indica che
+    si mette in pausa fuori dall'app.
     - Un'interruzione non chiesta dall'utente ora mostra un errore.
     - Un lavoro che si ferma per questo resta "in pausa" e riparte da solo al ritorno in
       primo piano (`PrimoPiano`, `ElaborazioniAudio.sospendi`).
@@ -344,17 +360,16 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
   verde / grigio), dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
 - **IA** (icona processore): raccoglie tutte le impostazioni dei modelli, in vista di eventuali servizi cloud:
-  - motore di trascrizione (Apple o Parakeet) e motore dei riassunti (Apple Intelligence o Qwen), con download e
-    spazio dei modelli;
+  - motore di trascrizione (Apple o Parakeet), con download e spazio del modello, e motore di riassunti e glossario
+    (Apple Intelligence online o sul telefono);
   - catena automatica dopo ogni registrazione (trascrizione, riassunto, miglioramento);
   - miglioramento automatico dell'audio dopo ogni registrazione;
   - stato di Apple Intelligence per i riassunti (disponibile, disattivata, in download, non supportata), con cosa
     fare;
-  - servizi cloud, ancora "Prossimamente": oggi tutto resta sul dispositivo;
+  - servizi cloud di altri fornitori, ancora "Prossimamente"; il testo in alto dice cosa resta sul telefono;
   - nota sui lavori lunghi in background.
 - **Crediti** (sezione separata in fondo): servizi dell'Ateneo, piattaforme (Moodle, EasyStaff/EasyAcademy) e tecnologie
-  Apple usate, i modelli Parakeet (NVIDIA, CC BY 4.0) e Qwen 3.5 (Apache 2.0) e le librerie FluidAudio, MLX Swift e
-  swift-transformers, ciascuno con il proprio link. Disclaimer e copyright con la versione dell'app stanno in fondo ad _Altro_.
+  Apple usate, il modello Parakeet (NVIDIA, CC BY 4.0) e la libreria FluidAudio, ciascuno con il proprio link. Disclaimer e copyright con la versione dell'app stanno in fondo ad _Altro_.
 
 ### Mappe
 
@@ -395,13 +410,8 @@ dei docenti, manifesto degli studi) si scaricano e si mostrano con Quick Look (`
 ## Requisiti e build
 
 - Xcode 27 (Swift 6.4), target **iOS 17.0+**, iPhone e iPad.
-- **Dipendenze esterne**, solo per i modelli locali:
-  - [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.x (Apache 2.0): Parakeet su Core ML;
-  - [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) 3.32.x (MIT): Qwen con MLX;
-  - [swift-transformers](https://github.com/huggingface/swift-transformers) 1.3.x (Apache 2.0): tokenizer.
-
-  Si portano dietro mlx-swift, swift-huggingface, swift-jinja, swift-collections, swift-crypto e altri pacchetti di
-  base. HTML, CSS selector, XML, JSON, Keychain, audio, fotocamera, trascrizione Apple e riassunti Apple usano il
+- **Dipendenze esterne**: solo [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.x (Apache 2.0) per
+  Parakeet su Core ML. HTML, CSS selector, XML, JSON, Keychain, audio, fotocamera, trascrizione Apple e riassunti Apple usano il
   parser interno e i framework di sistema.
 
 ```bash
@@ -421,19 +431,25 @@ Portachiavi dalla build di Xcode.
 Impostazioni di progetto rilevanti: `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
 `SWIFT_APPROACHABLE_CONCURRENCY = YES`, Info.plist generato + `Statale+-Info.plist` (`UIBackgroundModes = audio,
 processing`; `BGTaskSchedulerPermittedIdentifiers = com.mattiameligeni.Statale-.elaborazione.*` per i lavori lunghi),
-`ITSAppUsesNonExemptEncryption = NO` (solo HTTPS di sistema) e `StatalePCCAutorizzata` (vedi sopra).
+`ITSAppUsesNonExemptEncryption = NO` (solo HTTPS di sistema), `StatalePCCAutorizzata` e
+`StataleNeuralEngineInBackground` (vedi sopra).
 `PrivacyInfo.xcprivacy`: nessun tracciamento, nessun dato raccolto dallo sviluppatore. API dichiarate:
 UserDefaults (CA92.1), date dei file (C617.1) e spazio su disco (85F4.1, E174.1).
 
 `Statale+.entitlements` (account Apple Developer a pagamento, team `TYJFB2ZDYA`, lo stesso del vecchio team
 personale: l'identificativo dell'app non cambia e gli aggiornamenti da TestFlight conservano i dati):
 
-- _Background GPU Access_ (`…continued-processing.gpu`);
-- _Increased Memory Limit_ (più memoria per Qwen).
+- _Increased Memory Limit_.
+
+_Background GPU Access_ è stato tolto insieme a Qwen, l'unico lavoro sulla GPU.
 
 Ancora esclusi:
 
-- _Background Inference_: il portale ancora non lo assegna ("not a valid entitlement");
+- _Background Inference_: è pubblico per gli account a pagamento (catalogo delle capability di Xcode, senza
+  richiesta ad Apple), ma la firma automatica non lo aggiunge all'App ID ("Entitlement … not found and could not be
+  included in profile"), nemmeno con il target minimo a iOS 27. Va attivato a mano: in Xcode, _Signing &
+  Capabilities_ › _+ Capability_ › _Background Inference_, oppure sul portale sviluppatori, nell'identificativo
+  `com.mattiameligeni.Statale-`. Poi `StataleNeuralEngineInBackground = YES`;
 - Private Cloud Compute: si aggiunge quando Apple concede l'entitlement (Small Business Program in approvazione).
 
 Distribuzione verificata: archivio Release ed esportazione `app-store-connect` riusciti (IPA di 39 MB,
@@ -478,7 +494,7 @@ Statale+/
 │   ├── Auth/            CASSession, ArielSession, KeychainStore
 │   ├── HTML/            parser HTML tollerante + selettori CSS (sostituisce librerie esterne)
 │   ├── Demo/            versione dimostrativa (credenziali, dati inventati)
-│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech, Parakeet), riassunti (FoundationModels, Qwen/MLX), modelli, lavori in background
+│   ├── Local/           foto profilo, registrazioni (store, recorder, player), trascrizione (Speech, Parakeet), riassunti e glossario (FoundationModels), modelli, lavori in background
 │   ├── Networking/      HTTPClient (rate limiting per host, redirect guard, rilevazione Cloudflare)
 │   ├── Persistence/     StableStore (cache stabile su disco)
 │   └── Util/            formati di data/importi, decodifica tollerante, helper HTML
@@ -618,8 +634,8 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 | Foto profilo                                                                                               | `Application Support/profilo.jpg`                                                                                         |
 | Registrazioni                                                                                              | `Application Support/Registrazioni/<id>.m4a` (AAC mono 64 kbps, ~29 MB/ora) + metadati `<id>.json` + indice `registrazioni.json` |
 | Trascrizioni e riassunti                                                                                   | `Application Support/Registrazioni/<id>.txt` e `<id>.riassunto.md`, separati dall'indice                                  |
-| Modelli locali (se scaricati)                                                                              | `Application Support/Modelli/parakeet-ultra` e `qwen3.5-4b-4bit` + marcatori `installato-*`, esclusi dal backup              |
-| Motori scelti e catena automatica                                                                          | `UserDefaults` (`motoreTrascrizione`: `apple`/`parakeet`, `motoreRiassunto`: `apple`/`qwen`, `elaborazioneAutomatica`)      |
+| Modelli locali (se scaricati)                                                                              | `Application Support/Modelli/parakeet-ultra` + marcatore `installato-parakeet-ultra`, esclusi dal backup                    |
+| Motori scelti e catena automatica                                                                          | `UserDefaults` (`motoreTrascrizione`: `apple`/`parakeet`, `motoreRiassunto`: `cloud`/`apple`, `elaborazioneAutomatica`)     |
 | Audio originale (se migliorato)                                                                            | `Application Support/Registrazioni/<id>.originale.m4a`; `<id>.m4a` è la versione migliorata                                |
 | Cookie di sessione                                                                                         | `HTTPCookieStorage` di sistema                                                                                            |
 | Orario, appelli, tasse, presenze, aule, esiti, partecipanti                                                | solo in memoria                                                                                                           |
@@ -651,7 +667,7 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 | Fotocamera          | scansione del QR del codice lezione                 |
 | Riconoscimento vocale | trascrizione delle registrazioni (iOS 17–25)      |
 | Audio in background | la registrazione continua a schermo bloccato        |
-| Elaborazione in background | trascrizione, miglioramento e download proseguono fuori dall'app (iOS 26+); Qwen va in pausa e riprende |
+| Elaborazione in background | trascrizione, riassunto, miglioramento e download proseguono fuori dall'app (iOS 26+); Parakeet va in pausa e riprende finché manca _Background Inference_ |
 | Libreria foto       | nessun permesso: la foto profilo usa `PhotosPicker` |
 
 ---
@@ -686,14 +702,29 @@ dell'Ateneo e potrebbero non essere aggiornati: in caso di dubbio fa fede sempre
 
 - Ogni modifica va accompagnata dall'aggiornamento di questo README (funzionalità, endpoint, formati, stato dei lavori)
   e da una voce nel [Changelog](#changelog).
-- Nessuna dipendenza esterna senza una ragione forte (oggi solo quelle dei modelli locali: FluidAudio, mlx-swift-lm,
-  swift-transformers).
+- Nessuna dipendenza esterna senza una ragione forte (oggi solo FluidAudio, per Parakeet).
 - Mai dati personali reali (nomi, matricole, indirizzi) nel codice, nei commenti o nei test: usare segnaposto
   (`MARIO ROSSI`, `12345A`).
 
 ---
 
 ## Changelog
+
+### 2026-10-06
+
+- **Qwen tolto**: troppo lento ed energivoro su iPhone (glossario 6-7 minuti e 6% di batteria, riassunto di 20
+  minuti 3 minuti e 3%). Il modello scaricato (3 GB) si cancella da solo; via anche MLX e swift-transformers.
+- Riassunti e glossario con **Apple Intelligence**: online quando Apple la abilita (predefinita, con ripiego sul
+  telefono senza rete o oltre il limite), altrimenti sul telefono.
+- Riassunti sul telefono ottimizzati: parti dimensionate sul contesto reale del modello (8K token da iOS 27),
+  memoria degli argomenti, termini del glossario nel prompt per correggere gli errori di trascrizione, sintesi finale
+  guidata, nuovi tentativi quando iOS limita il modello in background, errori di iOS 27 gestiti.
+- Glossario: richieste guidate di parole tecniche specifiche, filtro di parole inventate e nomi di persona, niente
+  cognomi dei docenti; i glossari creati con Qwen si ripuliscono da soli. Correttore più prudente con forme diverse
+  della stessa parola e parole che il dizionario riconosce come altro.
+- Parakeet **pre-riscaldato** all'inizio della registrazione: la trascrizione parte subito.
+- _Background Inference_: verificato che è disponibile per l'account, da attivare sull'App ID; GPU in background
+  tolta.
 
 ### 2026-10-05 (12)
 

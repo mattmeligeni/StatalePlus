@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Un modello locale scaricabile (Parakeet per la trascrizione, Qwen per i riassunti).
+/// Un modello locale scaricabile (Parakeet per la trascrizione).
 nonisolated struct ModelloLocale: Sendable {
     let nome: String
     let dimensioneMB: Int
@@ -18,12 +18,6 @@ nonisolated struct ModelloLocale: Sendable {
         installato: { ParakeetLocale.installato }, integro: { ParakeetLocale.integro },
         spazioOccupato: { ParakeetLocale.spazioOccupato },
         scarica: { try await ParakeetLocale.scarica(progresso: $0) }, elimina: { ParakeetLocale.elimina() })
-
-    static let qwen = ModelloLocale(
-        nome: "Qwen", dimensioneMB: QwenLocale.dimensioneMB,
-        installato: { QwenLocale.installato }, integro: { QwenLocale.integro },
-        spazioOccupato: { QwenLocale.spazioOccupato },
-        scarica: { try await QwenLocale.scarica(progresso: $0) }, elimina: { QwenLocale.elimina() })
 }
 
 /// Stato di un modello per le impostazioni: assente, in download (con avanzamento), installato.

@@ -9,7 +9,7 @@ import FoundationModels
 /// limite giornaliero di richieste per utente che si alza con iCloud+.
 ///
 /// Serve l'entitlement `com.apple.developer.private-cloud-compute`, che Apple concede su richiesta: finché non è in
-/// `Statale+.entitlements` la chiave `StatalePCCAutorizzata` di Info.plist resta `NO` e l'opzione non compare.
+/// `Statale+.entitlements` la chiave `StatalePCCAutorizzata` di Info.plist resta `NO` e l'opzione si vede disattivata.
 nonisolated enum NuvolaApple {
     static var autorizzata: Bool { Bundle.main.object(forInfoDictionaryKey: "StatalePCCAutorizzata") as? Bool ?? false }
 
@@ -65,41 +65,33 @@ nonisolated enum NuvolaApple {
 
     enum Errore: LocalizedError {
         case nonDisponibile
-        var errorDescription: String? { "Apple Intelligence online non è disponibile: controlla la connessione o usa un modello sul telefono." }
+        var errorDescription: String? { "Apple Intelligence online non è disponibile: controlla la connessione o usa quella sul telefono." }
     }
 
-    /// Riassunto a sezioni con blocchi da ~6000 parole (stanno comodi nei 32K token insieme alla risposta).
+    /// Errori per cui conviene passare ad Apple Intelligence sul telefono: rete assente, servizio non raggiungibile,
+    /// limite giornaliero raggiunto.
+    static func convieneRipiegare(_ error: Error) -> Bool {
+        #if canImport(FoundationModels)
+        if #available(iOS 27.0, *), error is PrivateCloudComputeLanguageModel.Error { return true }
+        #endif
+        return error is Errore || (error as? URLError) != nil
+    }
+
+    /// Riassunto a sezioni con blocchi da ~6000 parole: stanno comodi nei 32K token insieme alla risposta, e una
+    /// lezione di due ore richiede 4-5 richieste in tutto (il limite giornaliero conta le richieste).
     @concurrent
-    static func riassumi(_ trascrizione: String, progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
+    static func riassumi(_ trascrizione: String, glossario: [String] = [],
+                         progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         #if canImport(FoundationModels)
         guard #available(iOS 27.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
         let modello = PrivateCloudComputeLanguageModel()
         progresso(0, "Invio ad Apple Intelligence")
-        return try await RiassuntoASezioni.riassumi(trascrizione, paroleBlocco: 6_000, progresso: progresso) { richiesta, massimo in
+        return try await RiassuntoASezioni.riassumi(trascrizione, paroleBlocco: 6_000, glossario: glossario, progresso: progresso) { richiesta, massimo in
             let sessione = LanguageModelSession(model: modello, instructions: RiassuntoASezioni.istruzioni)
-            return try await sessione.respond(to: richiesta, options: GenerationOptions(maximumResponseTokens: massimo)).content
+            return try await AppleIntelligence.conRiprova {
+                try await sessione.respond(to: richiesta, options: GenerationOptions(temperature: 0.3, maximumResponseTokens: massimo)).content
+            }
         }
-        #else
-        throw Errore.nonDisponibile
-        #endif
-    }
-
-    /// Più risposte brevi (es. gli elenchi del glossario del corso).
-    @concurrent
-    static func rispondi(_ richieste: [String], istruzioni: String,
-                         progresso: @escaping @Sendable (Double) -> Void) async throws -> [String] {
-        #if canImport(FoundationModels)
-        guard #available(iOS 27.0, *), stato == .disponibile else { throw Errore.nonDisponibile }
-        let modello = PrivateCloudComputeLanguageModel()
-        var risposte: [String] = []
-        for (i, r) in richieste.enumerated() {
-            try Task.checkCancellation()
-            progresso(Double(i) / Double(max(richieste.count, 1)))
-            let sessione = LanguageModelSession(model: modello, instructions: istruzioni)
-            risposte.append(try await sessione.respond(to: r).content)
-        }
-        progresso(1)
-        return risposte
         #else
         throw Errore.nonDisponibile
         #endif

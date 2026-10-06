@@ -119,7 +119,13 @@ nonisolated enum ParakeetLocale {
     }
 
     static func elimina() {
+        libera()
         try? FileManager.default.removeItem(at: cartella)
+        try? FileManager.default.removeItem(at: conferma)
+    }
+
+    /// Il modello non si carica: va riscaricato.
+    static func segnaDanneggiato() {
         try? FileManager.default.removeItem(at: conferma)
     }
 
@@ -141,16 +147,8 @@ nonisolated enum ParakeetLocale {
                           progresso: @escaping @Sendable (Double, String) -> Void) async throws -> String {
         guard installato else { throw Errore.nonInstallato }
         progresso(0, "Caricamento del modello…")
-        let modelli: AsrModels
-        do {
-            modelli = try await AsrModels.load(from: cartella, version: versione)
-        } catch {
-            // File mancanti o rovinati: il modello si considera da riscaricare.
-            try? FileManager.default.removeItem(at: conferma)
-            throw Errore.danneggiato
-        }
-        let asr = AsrManager()
-        try await asr.loadModels(modelli)
+        let (asr, condiviso) = try await pronto.prendi()
+        defer { Task { if condiviso { await pronto.restituisci() } else { await asr.cleanup() } } }
         let flusso = await asr.transcriptionProgressStream
         let osserva = Task {
             for try await p in flusso where durata > 0 {
@@ -164,14 +162,103 @@ nonisolated enum ParakeetLocale {
         do {
             risultato = try await asr.transcribe(url, decoderState: &stato, language: .italian)
         } catch {
-            await asr.cleanup()
+            // Un modello caricato da tempo può non essere più valido (es. dopo il background): si ricarica la volta dopo.
+            if condiviso { await pronto.rilascia() }
             throw error
         }
-        await asr.cleanup()
         try Task.checkCancellation()
         let testo = senzaRipetizioni(risultato.text.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !testo.isEmpty else { throw Errore.vuota }
         return testo
+    }
+}
+
+nonisolated extension ParakeetLocale {
+    /// Il modello caricato, pronto per la prossima trascrizione.
+    fileprivate static let pronto = ModelloPronto()
+
+    /// Pre-riscaldamento: carica Parakeet sul Neural Engine in anticipo (all'inizio di una registrazione), così alla
+    /// fine la trascrizione parte subito invece di attendere qualche secondo di caricamento. Il modello resta in
+    /// memoria qualche minuto dopo l'ultima trascrizione, poi si libera.
+    static func preriscalda() {
+        guard installato, Preferenze.motoreTrascrizione == .parakeet else { return }
+        Task.detached(priority: .utility) { try? await pronto.prepara() }
+    }
+
+    /// Libera subito il modello (memoria scarsa).
+    static func libera() {
+        Task { await pronto.rilascia() }
+    }
+}
+
+/// `AsrManager` con i modelli caricati, condiviso fra pre-riscaldamento e trascrizioni. FluidAudio segue
+/// l'avanzamento di una trascrizione alla volta per manager: se è già occupato (due trascrizioni insieme) se ne
+/// carica un altro solo per quella.
+private actor ModelloPronto {
+    private var asr: AsrManager?
+    private var occupato = false
+    private var caricamento: Task<AsrManager, Error>?
+    private var rilascio: Task<Void, Never>?
+
+    func prepara() async throws {
+        _ = try await condiviso()
+    }
+
+    /// Il manager per una trascrizione; `condiviso` = da restituire con `restituisci()`.
+    func prendi() async throws -> (AsrManager, condiviso: Bool) {
+        if occupato { return (try await Self.carica(), false) }
+        occupato = true
+        do {
+            return (try await condiviso(), true)
+        } catch {
+            occupato = false
+            throw error
+        }
+    }
+
+    /// Fine della trascrizione: il modello resta pronto per tre minuti, poi si libera.
+    func restituisci() {
+        occupato = false
+        rilascio?.cancel()
+        rilascio = Task {
+            try? await Task.sleep(for: .seconds(180))
+            guard !Task.isCancelled else { return }
+            rilascia()
+        }
+    }
+
+    func rilascia() {
+        rilascio?.cancel()
+        rilascio = nil
+        if let asr, !occupato { Task { await asr.cleanup() } }
+        asr = nil
+    }
+
+    private func condiviso() async throws -> AsrManager {
+        rilascio?.cancel()
+        rilascio = nil
+        if let asr { return asr }
+        if let caricamento { return try await caricamento.value }
+        let compito = Task { try await Self.carica() }
+        caricamento = compito
+        defer { caricamento = nil }
+        let nuovo = try await compito.value
+        asr = nuovo
+        return nuovo
+    }
+
+    private static func carica() async throws -> AsrManager {
+        let modelli: AsrModels
+        do {
+            modelli = try await AsrModels.load(from: ParakeetLocale.cartella, version: ParakeetLocale.versione)
+        } catch {
+            // File mancanti o rovinati: il modello si considera da riscaricare.
+            ParakeetLocale.segnaDanneggiato()
+            throw ParakeetLocale.Errore.danneggiato
+        }
+        let asr = AsrManager()
+        try await asr.loadModels(modelli)
+        return asr
     }
 }
 
@@ -183,12 +270,19 @@ private nonisolated final class InizioPreparazione: @unchecked Sendable {
     func segna() { lock.lock(); if data == nil { data = Date() }; lock.unlock() }
 }
 
-/// Ripulitura dei modelli non più usati (Whisper, sostituito da Parakeet: era più lento e su audio registrato da
-/// lontano inventava frasi e ripeteva pezzi). Libera circa 630 MB a chi l'aveva scaricato.
+/// Ripulitura dei modelli non più usati:
+/// - Whisper, sostituito da Parakeet (più lento, su audio registrato da lontano inventava frasi): circa 630 MB;
+/// - Qwen 3.5 4B, sostituito da Apple Intelligence per riassunti e glossario (su iPhone 17 Pro Max il glossario
+///   richiedeva 6-7 minuti e il 6% di batteria): circa 3 GB.
 nonisolated enum ModelliDismessi {
     static func elimina() {
         let fm = FileManager.default
         let base = ScaricatoreModelli.cartellaBase
+        try? fm.removeItem(at: base.appending(path: "qwen3.5-4b-4bit", directoryHint: .isDirectory))
+        try? fm.removeItem(at: base.appending(path: "installato-qwen3.5-4b-4bit"))
+        if UserDefaults.standard.string(forKey: "motoreRiassunto") == "qwen" {
+            UserDefaults.standard.removeObject(forKey: "motoreRiassunto")
+        }
         try? fm.removeItem(at: base.appending(path: "models/argmaxinc", directoryHint: .isDirectory))
         for f in (try? fm.contentsOfDirectory(atPath: base.path(percentEncoded: false))) ?? [] where f.hasPrefix("installato-openai_whisper") {
             try? fm.removeItem(at: base.appending(path: f))

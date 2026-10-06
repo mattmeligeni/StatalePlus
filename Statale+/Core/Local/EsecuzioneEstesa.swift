@@ -9,9 +9,8 @@ import UIKit
 ///   ha un identificativo proprio (`…elaborazione.<uuid>`, ammesso dal carattere jolly in Info.plist).
 /// - L'attività in tempo reale è quella di sistema (non personalizzabile): il titolo dice il lavoro, il sottotitolo
 ///   la fase attuale e il tempo stimato, aggiornati man mano.
-/// - GPU ("Background GPU Access") e, da iOS 27, Neural Engine ("Background Inference") in background richiedono
-///   entitlement che gli account sviluppatore personali non hanno: quei lavori si mettono in pausa e riprendono in
-///   primo piano (`ElaborazioniAudio`).
+/// - Da iOS 27 il Neural Engine in background (Parakeet) richiede l'entitlement "Background Inference": senza, quei
+///   lavori si mettono in pausa e riprendono in primo piano (`ElaborazioniAudio`).
 /// - Versioni precedenti, o se il sistema non può avviarlo subito: si esegue normalmente chiedendo il tempo extra
 ///   di `beginBackgroundTask` (circa 30 secondi), poi il lavoro si sospende con l'app e riprende al ritorno.
 nonisolated enum EsecuzioneEstesa {
@@ -19,25 +18,18 @@ nonisolated enum EsecuzioneEstesa {
 
     /// Esegue `operazione`; `avanzamento(p, fase)` (p in 0…1) aggiorna l'attività di sistema.
     /// `sottotitolo` si vede solo finché non arriva la prima fase.
-    /// `gpu: true` per i lavori sulla GPU (Qwen): l'attività di sistema chiede anche la GPU in background
-    /// ("Background GPU Access"), e durante il lavoro `gpuConcessa` vale true. Sui dispositivi che non la supportano
-    /// il lavoro non passa dall'attività di sistema (iOS la chiuderebbe subito e sembrava non partire): va in pausa
-    /// fuori dall'app e riprende al ritorno.
-    static func esegui<T: Sendable>(titolo: String, sottotitolo: String, gpu: Bool = false,
+    static func esegui<T: Sendable>(titolo: String, sottotitolo: String,
                                     operazione: @escaping @Sendable (_ avanzamento: Avanzamento) async throws -> T) async throws -> T {
-        if #available(iOS 26.0, *), !gpu || BGTaskScheduler.supportedResources.contains(.gpu) {
-            if let risultato = try await continuata(titolo: titolo, sottotitolo: sottotitolo, gpu: gpu, operazione: operazione) {
+        if #available(iOS 26.0, *) {
+            if let risultato = try await continuata(titolo: titolo, sottotitolo: sottotitolo, operazione: operazione) {
                 return risultato.valore
             }
         }
         return try await conTempoExtra(titolo: titolo, operazione: operazione)
     }
 
-    /// true dentro un lavoro che ha ottenuto la GPU in background.
-    @TaskLocal static var gpuConcessa = false
-
     @available(iOS 26.0, *)
-    private static func continuata<T: Sendable>(titolo: String, sottotitolo: String, gpu: Bool,
+    private static func continuata<T: Sendable>(titolo: String, sottotitolo: String,
                                                 operazione: @escaping @Sendable (Avanzamento) async throws -> T) async throws -> Risultato<T>? {
         let identificativo = prefisso + UUID().uuidString
         let stato = StatoContinuato<T>()
@@ -54,9 +46,7 @@ nonisolated enum EsecuzioneEstesa {
                     let sistema = CompitoDiSistema(task, titolo: titolo, sottotitolo: sottotitolo)
                     let lavoro = Task {
                         do {
-                            let valore = try await $gpuConcessa.withValue(gpu) {
-                                try await operazione(Avanzamento { p, fase in sistema.avanzamento(p, fase: fase) })
-                            }
+                            let valore = try await operazione(Avanzamento { p, fase in sistema.avanzamento(p, fase: fase) })
                             sistema.concluso(true)
                             stato.concludi(.success(Risultato(valore: valore)))
                         } catch {
@@ -71,7 +61,6 @@ nonisolated enum EsecuzioneEstesa {
                 guard registrato else { stato.concludi(.success(nil)); return }
                 let richiesta = BGContinuedProcessingTaskRequest(identifier: identificativo, title: titolo, subtitle: sottotitolo)
                 richiesta.strategy = .fail
-                if gpu { richiesta.requiredResources = .gpu }
                 do { try BGTaskScheduler.shared.submit(richiesta) } catch { stato.concludi(.success(nil)) }
             }
         } onCancel: {

@@ -29,10 +29,10 @@ nonisolated enum Preferenze {
         set { defaults.set(newValue.rawValue, forKey: "motoreTrascrizione") }
     }
 
-    /// Miglioramento automatico dell'audio dopo ogni registrazione (predefinito: attivo).
-    /// Motore dei riassunti (Altro › IA). "qwen" vale solo se il modello è scaricato.
+    /// Motore dei riassunti e del glossario (Altro › IA). Predefinito: Apple Intelligence online, che si usa solo se
+    /// disponibile (altrimenti quella sul telefono). Il vecchio valore "qwen" (modello rimosso) torna al predefinito.
     static var motoreRiassunto: MotoreRiassunto {
-        get { defaults.string(forKey: "motoreRiassunto").flatMap(MotoreRiassunto.init(rawValue:)) ?? .apple }
+        get { defaults.string(forKey: "motoreRiassunto").flatMap(MotoreRiassunto.init(rawValue:)) ?? .cloud }
         set { defaults.set(newValue.rawValue, forKey: "motoreRiassunto") }
     }
 
@@ -42,6 +42,7 @@ nonisolated enum Preferenze {
         set { defaults.set(newValue, forKey: "elaborazioneAutomatica") }
     }
 
+    /// Miglioramento automatico dell'audio dopo ogni registrazione (predefinito: attivo).
     static var miglioraAudio: Bool {
         get { defaults.object(forKey: "miglioraAudio") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "miglioraAudio") }

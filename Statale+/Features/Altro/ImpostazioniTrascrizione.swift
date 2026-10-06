@@ -78,85 +78,55 @@ struct ImpostazioniTrascrizioneView: View {
     }
 }
 
-/// Scelta del motore dei riassunti: Apple Intelligence (nessun download) o Qwen 3.5 4B (più accurato).
+/// Scelta del motore di riassunti e glossario: Apple Intelligence online (predefinita, quando Apple la abilita per
+/// l'app) o sul telefono. Se quella online non è raggiungibile o il limite giornaliero è finito, si usa quella sul
+/// telefono.
 struct ImpostazioniRiassuntiView: View {
-    @Environment(AppModel.self) private var app
-    @AppStorage("motoreRiassunto") private var scelto = MotoreRiassunto.apple.rawValue
-    @State private var confermaDownload = false
+    @AppStorage("motoreRiassunto") private var scelto = MotoreRiassunto.cloud.rawValue
 
     var body: some View {
         List {
             Section {
+                Button { scelto = MotoreRiassunto.cloud.rawValue } label: {
+                    RigaMotore(nome: "Apple Intelligence online", simbolo: "icloud",
+                               caratteristiche: ["Online", "Più preciso", "Più veloce"],
+                               descrizione: "Il modello più grande di Apple: riassunti più completi e ordinati. Il testo della lezione va ad Apple, che non lo conserva. Riassunti al giorno limitati.",
+                               selezionato: effettivo == .cloud, nota: notaCloud, avanzamento: nil, pro: false)
+                }
+                .tint(.primary)
+                .disabled(NuvolaApple.stato != .disponibile)
                 Button { scelto = MotoreRiassunto.apple.rawValue } label: {
                     RigaMotore(nome: "Apple Intelligence", simbolo: "apple.intelligence",
-                               caratteristiche: ["Nessun download", "Più veloce", "Offline"],
-                               descrizione: "Pronto subito. Riassunti più frammentati, che a volte ripetono gli errori della trascrizione.",
+                               caratteristiche: ["Sul telefono", "Offline", "Nessun download"],
+                               descrizione: "Il testo resta sul telefono. Riassunti un po' più semplici.",
                                selezionato: effettivo == .apple, nota: notaApple, avanzamento: nil, pro: false)
                 }
                 .tint(.primary)
                 .disabled(AppleIntelligence.stato != .disponibile)
-                Button { selezionaQwen() } label: {
-                    RigaMotore(nome: "Qwen 3.5 4B", simbolo: "cpu",
-                               caratteristiche: ["Download di 3 GB", "Più preciso", "Offline"],
-                               descrizione: "Riassunti più completi e ordinati, che correggono molti errori della trascrizione. Modello pesante: serve un iPhone recente e l'app aperta.",
-                               selezionato: effettivo == .qwen, nota: notaQwen, avanzamento: avanzamentoQwen, pro: false)
-                }
-                .tint(.primary)
-                .disabled(!QwenLocale.supportato)
-                if NuvolaApple.autorizzata {
-                    Button { scelto = MotoreRiassunto.cloud.rawValue } label: {
-                        RigaMotore(nome: "Apple Intelligence online", simbolo: "icloud",
-                                   caratteristiche: ["Online", "Più veloce", "Più preciso"],
-                                   descrizione: "Il modello più grande di Apple, sui suoi server: riassunti più rapidi e completi. Il testo della lezione viene inviato ad Apple, che non lo conserva. Numero di riassunti al giorno limitato.",
-                                   selezionato: effettivo == .cloud, nota: notaCloud, avanzamento: nil, pro: false)
-                    }
-                    .tint(.primary)
-                    .disabled(NuvolaApple.stato != .disponibile)
-                } else {
-                    RigaMotore(nome: "Remoto Pro", simbolo: "cloud", caratteristiche: ["Online", "Presto"],
-                               descrizione: "Più veloce e potente, ma il testo della lezione viene inviato fuori dal telefono.",
-                               selezionato: false, nota: nil, avanzamento: nil, pro: true)
-                        .foregroundStyle(.secondary)
-                }
             } footer: {
-                Text("Con Qwen, se esci dall'app il riassunto si mette in pausa e riprende quando torni.")
+                Text("Vale anche per il glossario del corso. La trascrizione resta sempre sul telefono.")
             }
             if effettivo == .cloud, NuvolaApple.puòAumentareLimite {
                 Section {
                     Button("Più riassunti al giorno con iCloud+") { NuvolaApple.mostraAumentoLimite() }
                 }
             }
-            SezioneModello(gestore: app.qwen)
         }
         .navigationTitle("Riassunti")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { app.qwen.ricontrolla() }
-        // Appena Qwen è pronto si crea il glossario del corso, se manca: serve a correggere le trascrizioni.
-        .onChange(of: app.qwen.stato) { _, nuovo in
-            if nuovo == .installato, app.glossario.attuale == nil { app.creaGlossario() }
-        }
-        .sheet(isPresented: $confermaDownload) {
-            ConfermaDownloadModello(
-                modello: app.qwen.modello,
-                titolo: "Scaricare Qwen?",
-                testo: "Riassunti più completi e precisi, sul telefono. Il download si fa una volta sola.",
-                consumi: "Consuma più batteria: il riassunto di due ore di lezione richiede circa 10-15 minuti con l'app aperta."
-            ) { app.qwen.scarica() }
-            .presentationDetents([.large])
-        }
     }
 
     private var notaCloud: String? {
         switch NuvolaApple.stato {
-        case .nonDisponibile(let motivo): return motivo
-        case .nonAutorizzata: return nil
-        case .disponibile: return NuvolaApple.notaLimite
+        case .nonDisponibile(let motivo): motivo
+        case .nonAutorizzata: "Presto disponibile."
+        case .disponibile: NuvolaApple.notaLimite ?? (scelto == MotoreRiassunto.cloud.rawValue
+            ? "Senza connessione o oltre il limite si usa quella sul telefono." : nil)
         }
     }
 
     private var effettivo: MotoreRiassunto? {
         if scelto == MotoreRiassunto.cloud.rawValue, NuvolaApple.stato == .disponibile { return .cloud }
-        if scelto == MotoreRiassunto.qwen.rawValue, app.qwen.stato == .installato, QwenLocale.supportato { return .qwen }
         return AppleIntelligence.stato == .disponibile ? .apple : nil
     }
 
@@ -167,24 +137,6 @@ struct ImpostazioniRiassuntiView: View {
         case .inPreparazione: "Apple Intelligence sta scaricando il modello."
         case .nonSupportata: "Non disponibile su questo iPhone o con questa versione di iOS."
         }
-    }
-
-    private var notaQwen: String? {
-        if !QwenLocale.supportato { return "Richiede un iPhone con almeno 8 GB di memoria (iPhone 15 Pro e successivi)." }
-        switch app.qwen.stato {
-        case .installato: return "Scaricato e pronto."
-        case .download: return nil
-        case .assente: return "Toccalo per scaricarlo (\(QwenLocale.dimensioneMB) MB)."
-        }
-    }
-
-    private var avanzamentoQwen: Double? {
-        if case .download(let p) = app.qwen.stato { return p }
-        return nil
-    }
-
-    private func selezionaQwen() {
-        if app.qwen.stato == .installato { scelto = MotoreRiassunto.qwen.rawValue } else if app.qwen.stato == .assente { confermaDownload = true }
     }
 }
 
@@ -384,6 +336,15 @@ private nonisolated final class UnaVoltaRete: @unchecked Sendable {
 
 /// Nota sui lavori lunghi: da iOS 26 continuano uscendo dall'app, ma in primo piano sono più rapidi.
 nonisolated enum NotaBackground {
+    /// Da iOS 27 il Neural Engine in background (Parakeet) richiede l'entitlement "Background Inference": la chiave
+    /// `StataleNeuralEngineInBackground` di Info.plist va messa a `YES` insieme all'entitlement.
+    static var neuralEngineInBackground: Bool {
+        if #available(iOS 27.0, *) {
+            return Bundle.main.object(forInfoDictionaryKey: "StataleNeuralEngineInBackground") as? Bool ?? false
+        }
+        return true
+    }
+
     static var testo: String {
         if #available(iOS 26.0, *) {
             "Puoi uscire dall'app: il lavoro continua. Con l'app aperta finisce prima."
