@@ -53,7 +53,6 @@ final class ElaborazioniAudio {
         let nc = NotificationCenter.default
         osservatori.append(nc.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in
             PrimoPiano.imposta(false)
-            EsecuzioneEstesa.traccia("App fuori dal primo piano")
         })
         osservatori.append(nc.addObserver(forName: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil, queue: .main) { _ in
             EsecuzioneEstesa.traccia("Schermo bloccato (dati protetti non disponibili)")
@@ -63,7 +62,6 @@ final class ElaborazioniAudio {
         })
         osservatori.append(nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             PrimoPiano.imposta(true)
-            EsecuzioneEstesa.traccia("App in primo piano")
             MainActor.assumeIsolated { self?.riprendi() }
         })
     }
