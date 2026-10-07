@@ -4,6 +4,9 @@ import SwiftUI
 struct PresenzeView: View {
     @Environment(AppModel.self) private var app
     @State private var codice = ""
+    @State private var matricola = ""
+    /// Matricola effettivamente inviata all'ultima timbratura, mostrata nei feedback anche dopo il reset della textfield.
+    @State private var matricolaUsata = ""
     @State private var showScanner = false
     @State private var inviando = false
     @State private var risposta: TimbraturaResult?
@@ -21,15 +24,15 @@ struct PresenzeView: View {
                         Text("\(Formats.time(l.inizio)) – \(Formats.time(l.fine)) · \(l.aula)").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                // Sola lettura: è la matricola del profilo con cui viene registrata la presenza.
+                // Modificabile: parte con la matricola del profilo ma l'utente può sceglierne un'altra.
                 LabeledContent("Matricola") {
-                    TextField("Matricola", text: .constant(app.studente?.matricola.uppercased() ?? "—"))
+                    TextField("Matricola", text: $matricola)
                         .font(.body.monospaced())
                         .multilineTextAlignment(.trailing)
-                        .foregroundStyle(.secondary)
-                        .disabled(true)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
                 }
-                .accessibilityHint("La presenza viene registrata con questa matricola")
+                .accessibilityHint("Modificabile: la presenza viene registrata con la matricola indicata qui")
                 HStack {
                     CampoCodice(segnaposto: "Codice lezione", testo: $codice, invio: .send) { Task { await invia() } }
                     Button { showScanner = true } label: {
@@ -43,7 +46,7 @@ struct PresenzeView: View {
                 } label: {
                     HStack { Spacer(); if inviando { ProgressView() } else { Text("Registra presenza").bold() }; Spacer() }
                 }
-                .disabled(inviando || codice.trimmed.isEmpty || app.studente == nil)
+                .disabled(inviando || codice.trimmed.isEmpty || matricola.trimmed.isEmpty || app.studente == nil)
             } header: {
                 Text("Registra presenza")
             } footer: {
@@ -54,12 +57,14 @@ struct PresenzeView: View {
             if let r = risposta {
                 Section {
                     EsitoTimbratura(simbolo: simbolo(r), colore: colore(r), titolo: r.titolo, testo: r.spiegazione,
-                                    server: r.esito == .sconosciuto ? nil : r.message)
+                                    server: r.esito == .sconosciuto ? nil : r.message,
+                                    matricola: matricolaUsata.isEmpty ? nil : matricolaUsata)
                 }
             } else if let erroreInvio {
                 Section {
                     EsitoTimbratura(simbolo: "wifi.exclamationmark", colore: .red, titolo: "Richiesta non inviata",
-                                    testo: erroreInvio, server: nil)
+                                    testo: erroreInvio, server: nil,
+                                    matricola: matricolaUsata.isEmpty ? nil : matricolaUsata)
                 }
             }
 
@@ -89,9 +94,15 @@ struct PresenzeView: View {
         .tastieraConChiudi()
         .navigationTitle("Presenze")
         .refreshable { app.segnaRefresh(); await load() }
-        .task { if app.frequenze.updatedAt == nil { await load() } }
+        .task {
+            if matricola.isEmpty, let m = app.studente?.matricola {
+                matricola = m.uppercased()
+            }
+            if app.frequenze.updatedAt == nil { await load() }
+        }
         .fullScreenCover(item: $esitoGrande) { r in
-            EsitoPresenzaSchermata(esito: r, lezione: app.presenzaTarget?.insegnamento) {
+            EsitoPresenzaSchermata(esito: r, lezione: app.presenzaTarget?.insegnamento,
+                                   matricola: matricolaUsata.isEmpty ? nil : matricolaUsata) {
                 esitoGrande = nil
             } riprova: {
                 esitoGrande = nil
@@ -127,16 +138,27 @@ struct PresenzeView: View {
         }
     }
 
+    /// Riporta la textfield matricola al valore dell'utente loggato.
+    private func resetMatricola() {
+        matricola = app.studente?.matricola.uppercased() ?? ""
+    }
 
     private func invia() async {
-        guard !inviando, let m = app.studente?.matricolaAPI, !codice.trimmed.isEmpty else { return }
+        guard !inviando, app.studente != nil,
+              !matricola.trimmed.isEmpty, !codice.trimmed.isEmpty else { return }
         Tastiera.chiudi()
+        let matricolaInvio = matricola.trimmed
+        matricolaUsata = matricolaInvio
         inviando = true
         erroreInvio = nil
         risposta = nil
-        defer { inviando = false }
+        defer {
+            inviando = false
+            // Dopo l'invio si torna alla matricola dell'utente (quella usata resta visibile nei feedback).
+            resetMatricola()
+        }
         do {
-            let r = try await app.services.easyBadge.timbra(TimbraturaRequest(matricola: m, codiceLezione: codice.trimmed))
+            let r = try await app.services.easyBadge.timbra(TimbraturaRequest(matricola: matricolaInvio, codiceLezione: codice.trimmed))
             risposta = r
             if r.esito == .registrata || r.esito == .fallita {
                 UINotificationFeedbackGenerator().notificationOccurred(r.esito == .registrata ? .success : .error)
@@ -156,6 +178,7 @@ struct PresenzeView: View {
 private struct EsitoPresenzaSchermata: View {
     let esito: TimbraturaResult
     let lezione: String?
+    let matricola: String?
     let chiudi: () -> Void
     let riprova: () -> Void
 
@@ -172,6 +195,12 @@ private struct EsitoPresenzaSchermata: View {
                 .multilineTextAlignment(.center)
             if let lezione {
                 Text(lezione).font(.title3.weight(.medium)).multilineTextAlignment(.center).opacity(0.9)
+            }
+            if let matricola, !matricola.isEmpty {
+                Text("Matricola: \(matricola)")
+                    .font(.callout.monospaced())
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(.white.opacity(0.15), in: Capsule())
             }
             Text(riuscita ? "Non serve ripetere la scansione: la tua presenza è già sul server dell'Università."
                           : esito.spiegazione)
@@ -212,6 +241,7 @@ private struct EsitoTimbratura: View {
     let titolo: String
     let testo: String
     let server: String?
+    var matricola: String? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -219,6 +249,9 @@ private struct EsitoTimbratura: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(titolo).font(.subheadline.bold()).foregroundStyle(colore)
                 Text(testo).font(.callout)
+                if let matricola, !matricola.isEmpty {
+                    Text("Matricola: \(matricola)").font(.caption.monospaced()).foregroundStyle(.secondary)
+                }
                 if let server, !server.isEmpty {
                     Text("Messaggio del server: \(server)").font(.caption).foregroundStyle(.secondary)
                 }
