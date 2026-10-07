@@ -85,6 +85,7 @@ aggiuntivi di [ADDITIONAL-PERMISSIONS.md](ADDITIONAL-PERMISSIONS.md).
   versioni a pagamento dell'app.
 - Componenti di terzi con le loro licenze: [NOTICE](NOTICE) (FluidAudio, Apache 2.0; modello Parakeet, CC BY 4.0).
 - Sicurezza: segnalazioni private come da [SECURITY.md](SECURITY.md).
+- Contatti per feedback, problemi e domande sull'app: **dev@mattiameligeni.com** (anche dal feedback di TestFlight).
 
 Scelta della licenza: PolyForm Strict è una licenza standard scritta da avvocati per questo caso (uso non commerciale,
 niente modifiche né ridistribuzione); i due permessi aggiuntivi coprono la compilazione in locale e i contributi.

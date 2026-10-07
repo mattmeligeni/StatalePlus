@@ -103,7 +103,7 @@ Release notes: [CHANGELOG.md](CHANGELOG.md).
 
 Bug reports and ideas are welcome through GitHub issues (please never include real personal data). Pull requests
 are accepted under the contributor agreement in [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: see
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md). Feedback and questions: **dev@mattiameligeni.com** (or TestFlight feedback).
 
 ## License
 

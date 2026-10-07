@@ -10,6 +10,8 @@ Storico delle modifiche di Statale Plus (fino al 2026-10-06 "Statale+"), dal pi�
   testo c'è «Modifica».
 - Mini player con cursore per spostarsi nell'audio, sempre visibile e con tasti più grandi.
 - Presentazione: il modello di trascrizione più preciso è descritto senza nominarlo come un'app a parte.
+- Presentazione: niente più scatto passando dalla terza alla quarta pagina.
+- Contatto per feedback e segnalazioni di sicurezza: dev@mattiameligeni.com.
 
 ## 2026-10-06 (10)
 

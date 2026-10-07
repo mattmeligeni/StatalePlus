@@ -5,7 +5,8 @@ lezioni. Le segnalazioni di sicurezza sono benvenute e vanno fatte **in privato*
 
 ## Come segnalare un problema dell'app
 
-- Usa **Security › Report a vulnerability** in questo repository (segnalazione privata di GitHub).
+- Usa **Security › Report a vulnerability** in questo repository (segnalazione privata di GitHub), oppure scrivi a
+  **dev@mattiameligeni.com** con oggetto «Sicurezza».
 - **Non** aprire segnalazioni pubbliche, discussioni o pull request che descrivano il problema prima che sia corretto.
 - Indica la versione dell'app (Altro › Crediti), i passi per riprodurre il problema e l'impatto. Non includere
   credenziali, dati personali reali o catture di traffico con dati veri.

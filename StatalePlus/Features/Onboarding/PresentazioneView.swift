@@ -23,8 +23,13 @@ struct PresentazioneView: View {
             .background(Color(.systemGroupedBackground))
             .safeAreaInset(edge: .bottom) { barra }
             .toolbar {
-                if pagina < ultima {
-                    ToolbarItem(placement: .topBarTrailing) { Button("Salta", action: chiudi) }
+                // Sempre presente e solo nascosto sull'ultima pagina: toglierlo ricomponeva la barra durante lo
+                // scorrimento dalla terza alla quarta pagina, che andava a scatti.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Salta", action: chiudi)
+                        .opacity(pagina < ultima ? 1 : 0)
+                        .disabled(pagina >= ultima)
+                        .accessibilityHidden(pagina >= ultima)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
