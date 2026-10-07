@@ -579,6 +579,7 @@ final class AudioRecorder {
             store.iniziata(bozza(durata: 0))
             state = .recording
             error = nil
+            EsecuzioneEstesa.traccia("Registrazione avviata \(id.uuidString.prefix(8))")
             observeInterruptions()
             startMeter()
             // La trascrizione partirà alla fine: Parakeet si carica ora, con l'app in primo piano.
@@ -592,6 +593,7 @@ final class AudioRecorder {
     func pause() {
         guard state == .recording else { return }
         state = .paused
+        EsecuzioneEstesa.traccia("Registrazione in pausa a \(Int(elapsed)) s")
         Task { await MotoreAudio.shared.pausaRegistrazione() }
     }
 
@@ -605,15 +607,23 @@ final class AudioRecorder {
 
     func bookmark() { segnalibri.append(elapsed) }
 
-    /// Chiude il file e restituisce la registrazione da salvare.
-    func stop() async -> Registrazione? {
+    /// Ferma la registrazione e restituisce subito la registrazione da salvare, con la durata misurata finora; il
+    /// file si chiude dopo con `chiudiFile()`. Così l'elenco la mostra subito: prima si aggiungeva solo a file
+    /// chiuso, e se nel frattempo iOS sospendeva l'app (con lo stop finisce l'audio in background) la registrazione
+    /// spariva e ricompariva al riavvio come "recuperata".
+    func ferma() -> Registrazione? {
         guard state == .recording || state == .paused else { return nil }
-        let bozzaFinale = bozza(durata: elapsed)
+        let r = bozza(durata: elapsed)
         cleanup()
-        let durata = await MotoreAudio.shared.fermaRegistrazione(elimina: false)
-        var r = bozzaFinale
-        if durata > 0 { r.durata = durata }
+        EsecuzioneEstesa.traccia("Registrazione fermata \(r.id.uuidString.prefix(8)) dopo \(Int(r.durata)) s")
         return r
+    }
+
+    /// Chiude il file audio della registrazione appena fermata e restituisce la durata reale (0 se non nota).
+    func chiudiFile() async -> TimeInterval {
+        let durata = await MotoreAudio.shared.fermaRegistrazione(elimina: false)
+        EsecuzioneEstesa.traccia("File della registrazione chiuso (\(Int(durata)) s)")
+        return durata
     }
 
     /// Id della registrazione in corso (esclusa dalla riconciliazione).
@@ -662,6 +672,7 @@ final class AudioRecorder {
             let opts = (n.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt).map(AVAudioSession.InterruptionOptions.init) ?? []
             MainActor.assumeIsolated {
                 guard let self, self.state == .recording || self.state == .paused else { return }
+                EsecuzioneEstesa.traccia("Registrazione interrotta dal sistema: \(type == .began ? "inizio" : "fine")")
                 if type == .began { self.state = .paused }
                 else if type == .ended, opts.contains(.shouldResume) { self.resume() }
             }
@@ -773,6 +784,10 @@ final class AudioPlayer {
     }
 
     func skip(_ delta: TimeInterval) { seek(to: currentTime + delta) }
+
+    /// Velocità del player grande e del mini player.
+    static let velocità: [Float] = [0.75, 1, 1.25, 1.5, 2]
+    static func etichetta(_ v: Float) -> String { "\(v.formatted(.number.locale(Formats.it)))×" }
 
     func setRate(_ r: Float) {
         rate = r

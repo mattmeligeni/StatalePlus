@@ -1,13 +1,15 @@
 import SwiftUI
 
 /// Presentazione dopo il primo accesso: quattro pagine da scorrere sulle funzioni principali, soprattutto quelle con
-/// l'IA, con i pulsanti per scaricare Parakeet e creare il glossario senza dover cercare nelle impostazioni.
+/// l'IA, con i pulsanti per scaricare i modelli più precisi (Parakeet, Qwen) e creare il glossario senza dover
+/// cercare nelle impostazioni.
 /// Stesso stile della conferma di download dei modelli. Si rivede da Altro › IA.
 struct PresentazioneView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var pagina = 0
     @State private var confermaParakeet = false
+    @State private var confermaQwen = false
 
     private let ultima = 3
 
@@ -36,13 +38,10 @@ struct PresentazioneView: View {
         }
         .interactiveDismissDisabled()
         .sheet(isPresented: $confermaParakeet) {
-            ConfermaDownloadModello(
-                modello: app.parakeet.modello,
-                titolo: "Scaricare Parakeet?",
-                testo: "Trascrizioni più precise, sul telefono. Il download si fa una volta sola.",
-                consumi: "Due ore di lezione in pochi minuti, con poca batteria."
-            ) { app.parakeet.scarica() }
-            .presentationDetents([.large])
+            ConfermaDownloadParakeet(gestore: app.parakeet).presentationDetents([.large])
+        }
+        .sheet(isPresented: $confermaQwen) {
+            ConfermaDownloadQwen(gestore: app.qwen).presentationDetents([.large])
         }
     }
 
@@ -88,8 +87,7 @@ struct PresentazioneView: View {
             Section {
                 Voce(simbolo: "text.quote", titolo: "Trascrizione",
                      testo: "Funziona subito con il riconoscimento vocale di iPhone. Qui sotto, o più avanti nelle impostazioni della trascrizione, puoi scaricare un modello più preciso, soprattutto con termini tecnici e nomi, con la stessa velocità e la stessa privacy di quello integrato.")
-                Voce(simbolo: "sparkles", titolo: "Riassunto",
-                     testo: "Apple Intelligence scrive gli appunti della lezione, con punti chiave e domande di ripasso.")
+                Voce(simbolo: "sparkles", titolo: "Riassunto", testo: testoRiassunto)
                 Voce(simbolo: "lock.iphone", titolo: "Puoi uscire dall'app",
                      testo: "Il lavoro continua in background e lo segui dalla schermata di blocco.")
             } footer: {
@@ -107,8 +105,21 @@ struct PresentazioneView: View {
                         Label("Scarica il modello più preciso (\(ParakeetLocale.dimensioneMB) MB)", systemImage: "arrow.down.circle")
                     }
                 }
+                if QwenLocale.supportato {
+                    switch app.qwen.stato {
+                    case .installato:
+                        Label("Il modello per i riassunti è scaricato e viene usato per gli appunti.", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    case .download(let p):
+                        ProgressView(value: p) { Text("Download del modello per i riassunti…").font(.callout) }
+                    case .assente:
+                        Button { confermaQwen = true } label: {
+                            Label("Scarica il modello per i riassunti (\(QwenLocale.dimensioneMB) MB)", systemImage: "arrow.down.circle")
+                        }
+                    }
+                }
             } footer: {
-                Text("Si scarica dentro Statale Plus, non è un'altra app. Puoi cambiare modello quando vuoi da Altro › IA › Trascrizione.")
+                Text("Si scaricano dentro Statale Plus, non sono altre app. Puoi cambiare modello quando vuoi da Altro › IA.")
             }
         }
     }
@@ -163,12 +174,23 @@ struct PresentazioneView: View {
         .background(.bar)
     }
 
+    private var testoRiassunto: String {
+        switch (AppleIntelligence.stato, QwenLocale.supportato) {
+        case (.nonSupportata, true):
+            "Gli appunti della lezione, con punti chiave e domande di ripasso, li scrive un modello da scaricare qui sotto."
+        case (_, true):
+            "Apple Intelligence scrive gli appunti della lezione, con punti chiave e domande di ripasso. Qui sotto puoi scaricare un modello che scrive appunti più completi e spiegati."
+        case (_, false):
+            "Apple Intelligence scrive gli appunti della lezione, con punti chiave e domande di ripasso."
+        }
+    }
+
     private var notaAppleIntelligence: String? {
         switch AppleIntelligence.stato {
         case .disponibile: nil
-        case .nonAttiva: "Per i riassunti attiva Apple Intelligence in Impostazioni › Apple Intelligence e Siri."
+        case .nonAttiva: "Per i riassunti con Apple Intelligence attivala in Impostazioni › Apple Intelligence e Siri."
         case .inPreparazione: "Apple Intelligence sta scaricando il suo modello: i riassunti arrivano tra poco."
-        case .nonSupportata: "Su questo iPhone i riassunti non sono disponibili; la trascrizione sì."
+        case .nonSupportata: QwenLocale.supportato ? nil : "Su questo iPhone i riassunti non sono disponibili; la trascrizione sì."
         }
     }
 

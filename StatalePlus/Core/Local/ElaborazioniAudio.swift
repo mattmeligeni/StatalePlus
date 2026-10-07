@@ -9,8 +9,9 @@ import UIKit
 /// - Catena automatica dopo una registrazione: trascrizione → riassunto → miglioramento dell'audio (per l'ascolto),
 ///   uno dopo l'altro per non contendersi Neural Engine, GPU e CPU.
 /// - Pausa e ripresa: da iOS 27 il Neural Engine (Parakeet) in background richiede l'entitlement "Background
-///   Inference". Senza, un lavoro che si ferma uscendo dall'app resta "in pausa" e riparte da solo quando l'app torna
-///   in primo piano. Apple Intelligence gira in un processo di sistema e continua anche in background.
+///   Inference"; la GPU (Qwen) in background su iPhone non è mai concessa. Un lavoro che si ferma uscendo dall'app
+///   resta "in pausa" e riparte da solo quando l'app torna in primo piano (Qwen dalle sezioni già scritte). Apple
+///   Intelligence gira in un processo di sistema e continua anche in background.
 @Observable
 final class ElaborazioniAudio {
     enum Tipo: Hashable { case trascrizione, riassunto, miglioramento }
@@ -187,7 +188,8 @@ final class ElaborazioniAudio {
         let (chiave, gen) = nuovoLavoro(.riassunto, id)
         tasks[chiave] = Task {
             do {
-                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo) { sistema in
+                let md = try await EsecuzioneEstesa.esegui(titolo: "Riassunto", sottotitolo: titolo,
+                                                           soloInPrimoPiano: motore == .qwen) { sistema in
                     let aggiorna: @Sendable (Double, String) -> Void = { p, m in
                         sistema(p, fase: m)
                         Task { @MainActor in
@@ -197,6 +199,8 @@ final class ElaborazioniAudio {
                         }
                     }
                     switch motore {
+                    case .qwen:
+                        return try await QwenLocale.riassumi(testo, glossario: glossario, progresso: aggiorna)
                     case .apple:
                         return try await AppleIntelligence.riassumi(testo, glossario: glossario, progresso: aggiorna)
                     case .cloud:
@@ -315,11 +319,15 @@ final class ElaborazioniAudio {
 }
 
 extension MotoreRiassunto {
-    /// Il motore che si userà ora: Apple Intelligence online se scelta (è la predefinita) e disponibile; altrimenti
-    /// quella sul telefono; nil se nessuna delle due.
+    /// Il motore che si userà ora: quello scelto se si può usare (Qwen scaricato, Apple Intelligence online
+    /// disponibile); altrimenti Apple Intelligence sul telefono; altrimenti Qwen, se scaricato (iPhone senza Apple
+    /// Intelligence); nil se nessuno.
     nonisolated static var disponibile: MotoreRiassunto? {
+        let qwen = QwenLocale.supportato && QwenLocale.installato
+        if Preferenze.motoreRiassunto == .qwen, qwen { return .qwen }
         if Preferenze.motoreRiassunto == .cloud, NuvolaApple.stato == .disponibile { return .cloud }
-        return AppleIntelligence.stato == .disponibile ? .apple : nil
+        if AppleIntelligence.stato == .disponibile { return .apple }
+        return qwen ? .qwen : nil
     }
 }
 

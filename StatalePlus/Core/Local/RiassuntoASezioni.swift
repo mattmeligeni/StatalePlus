@@ -1,7 +1,7 @@
 import Foundation
 
-/// Riassunto "a sezioni con memoria" per i modelli con un contesto ampio (Apple Intelligence su Private Cloud
-/// Compute). La trascrizione si divide in blocchi; per ognuno il modello scrive le
+/// Riassunto "a sezioni con memoria" per i modelli che scrivono testo libero (Apple Intelligence su Private Cloud
+/// Compute, Qwen sul telefono). La trascrizione si divide in blocchi; per ognuno il modello scrive le
 /// sezioni `### Titolo` nuove, ricevendo i titoli già scritti per non ripetersi e collegare i concetti; una passata
 /// finale scrive "In breve", punti chiave e domande dagli appunti. Le sezioni già scritte restano in memoria: un
 /// riassunto interrotto (app in background) riprende da lì.
@@ -9,8 +9,9 @@ nonisolated enum RiassuntoASezioni {
     static let istruzioni = """
         Sei un assistente che prepara appunti di studio dettagliati per uno studente universitario. Scrivi sempre in \
         italiano, in modo chiaro e completo, come appunti da cui si possa studiare senza riascoltare la lezione. Usa \
-        esclusivamente le informazioni presenti nel testo: non aggiungere argomenti, definizioni, esempi o domande che \
-        non derivano dal testo. La trascrizione automatica contiene errori di riconoscimento (parole sbagliate, nomi di \
+        esclusivamente le informazioni presenti nel testo: non aggiungere argomenti, esempi o domande che non derivano \
+        dal testo. L'unica aggiunta permessa è una breve definizione generale di un concetto che il docente dà per \
+        scontato, quando serve a capire il resto. La trascrizione automatica contiene errori di riconoscimento (parole sbagliate, nomi di \
         autori storpiati, frasi spezzate): correggili quando il significato è evidente dal contesto, altrimenti ignora \
         i passaggi incomprensibili. Tralascia saluti, avvisi organizzativi e pause, salvo indicazioni utili per l'esame.
         """
@@ -40,7 +41,9 @@ nonisolated enum RiassuntoASezioni {
 
                 Scrivi gli appunti di questa parte in Markdown: una sezione `### Titolo` per ogni argomento nuovo, \
                 nell'ordine, con 1-3 paragrafi dettagliati (concetti, definizioni, autori, esempi, test e passaggi \
-                spiegati dal docente). Solo le sezioni, senza introduzione né conclusione.
+                spiegati dal docente). Se un argomento nuovo si basa su un concetto generale non ancora spiegato, apri \
+                la sezione dicendo in una frase che cos'è, poi passa ai dettagli. Solo le sezioni, senza introduzione \
+                né conclusione.
 
                 Trascrizione della parte \(i + 1):
                 \(blocchi[i])
@@ -89,9 +92,21 @@ nonisolated enum RiassuntoASezioni {
         let parti = finale.components(separatedBy: "## Punti chiave")
         let inBreve = parti[0].trimmingCharacters(in: .whitespacesAndNewlines)
         let resto = parti.count > 1 ? "## Punti chiave" + parti[1...].joined(separator: "## Punti chiave") : ""
-        // Le sezioni usano solo `###`: eventuali titoli di livello più alto scritti dal modello si abbassano.
-        let sezioni = corpo.split(separator: "\n", omittingEmptySubsequences: false).map { riga -> String in
-            riga.hasPrefix("## ") || riga.hasPrefix("# ") ? "### " + riga.drop { $0 == "#" || $0 == " " } : String(riga)
+        // Le sezioni usano solo `###`: eventuali titoli di livello più alto scritti dal modello si abbassano. I modelli
+        // piccoli numerano i titoli ("Parte 2:", "Titolo:", "3.") e ripetono lo stesso titolo in parti consecutive:
+        // si ripuliscono e un titolo uguale al precedente si toglie, così le due parti finiscono nella stessa sezione.
+        var ultimoTitolo: String?
+        let sezioni = corpo.split(separator: "\n", omittingEmptySubsequences: false).compactMap { riga -> String? in
+            guard riga.hasPrefix("### ") || riga.hasPrefix("## ") || riga.hasPrefix("# ") else { return String(riga) }
+            let titolo = pulisciTitolo(String(riga.drop { $0 == "#" || $0 == " " }))
+            guard !titolo.isEmpty else { return nil }
+            // Una frase intera scritta come titolo ("Ho letto la trascrizione e…") resta testo normale.
+            if titolo.split(separator: " ").count > 14 { return titolo }
+            if let ultimoTitolo, ultimoTitolo.compare(titolo, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame {
+                return nil
+            }
+            ultimoTitolo = titolo
+            return "### " + titolo
         }.joined(separator: "\n")
         var md = inBreve.hasPrefix("## In breve") ? inBreve : "## In breve\n" + inBreve
         md += "\n\n## Riassunto\n\n" + sezioni.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -99,8 +114,16 @@ nonisolated enum RiassuntoASezioni {
         return md
     }
 
+    /// "Parte 2: Recettori", "Titolo: Recettori", "3. Recettori" → "Recettori".
+    static func pulisciTitolo(_ titolo: String) -> String {
+        var t = titolo.trimmingCharacters(in: .whitespaces)
+        let prefissi = [#"^(?i)(titolo|title)\s*:\s*"#, #"^(?i)(parte|part|sezione|section)\s*\d+\s*[:.\-–—]?\s*"#, #"^\d+\s*[.):\-–—]\s*"#]
+        for p in prefissi { t = t.replacingOccurrences(of: p, with: "", options: .regularExpression) }
+        return t.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: "*")))
+    }
+
     private static func titoliSezioni(_ testo: String) -> [String] {
-        testo.split(separator: "\n").filter { $0.hasPrefix("### ") }.map { $0.dropFirst(4).trimmingCharacters(in: .whitespaces) }
+        testo.split(separator: "\n").filter { $0.hasPrefix("### ") }.map { pulisciTitolo(String($0.dropFirst(4))) }
     }
 
     /// Blocchi di circa `parole` parole, rispettando i paragrafi.

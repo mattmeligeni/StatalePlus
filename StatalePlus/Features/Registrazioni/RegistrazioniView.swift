@@ -267,7 +267,7 @@ private struct RecorderCard: View {
                         rec.state == .paused ? rec.resume() : rec.pause()
                     }
                     CircleButton(system: "stop.fill", tint: .red, big: true) {
-                        Task { if let r = await rec.stop() { app.salvaRegistrazione(r) } }
+                        app.fermaRegistrazione()
                     }
                     CircleButton(system: "bookmark.fill", tint: .accentColor) { rec.bookmark() }
                         .overlay(alignment: .topTrailing) {
@@ -415,7 +415,7 @@ struct RegistrazioneDetailView: View {
                     }
                     MiglioramentoSection(registrazione: r)
                     TrascrizioneSection(registrazione: r, player: player)
-                    if AppleIntelligence.stato != .nonSupportata || MotoreRiassunto.disponibile != nil {
+                    if AppleIntelligence.stato != .nonSupportata || QwenLocale.supportato || MotoreRiassunto.disponibile != nil {
                         RiassuntoSection(registrazione: r, player: player)
                     }
                     if !r.segnalibri.isEmpty {
@@ -535,7 +535,7 @@ private struct PlayerControls: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color.accentColor)
             Picker("Velocità", selection: Binding(get: { player.rate }, set: { player.setRate($0) })) {
-                ForEach([Float(0.75), 1, 1.25, 1.5, 2], id: \.self) { Text("\($0.formatted(.number.locale(Formats.it)))×").tag($0) }
+                ForEach(AudioPlayer.velocità, id: \.self) { Text(AudioPlayer.etichetta($0)).tag($0) }
             }
             .pickerStyle(.segmented)
         }

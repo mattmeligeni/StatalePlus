@@ -2,6 +2,24 @@
 
 Storico delle modifiche di Statale Plus (fino al 2026-10-06 "Statale+"), dal più recente. Documentazione completa in [README.it.md](README.it.md).
 
+## 2026-10-07 (12)
+
+- **Riassunti con Qwen 3.5 0.8B**, modello scaricabile (652 MB) che gira sul telefono con MLX: vincitore della prova
+  alla cieca su una lezione vera di un'ora, davanti ad Apple Intelligence e ad altri sei modelli. Funziona anche
+  sugli iPhone senza Apple Intelligence (con almeno 6 GB di memoria). Lavora con l'app aperta: uscendo si mette in
+  pausa e riprende dalle sezioni già scritte. Download da Altro › IA › Riassunti, dalla presentazione o dalla
+  sezione Riassunto della registrazione. Il glossario resta ad Apple Intelligence.
+- Riassunti: ogni sezione si apre spiegando il concetto principale prima dei dettagli.
+- Avviso «Non ti convince?» sotto trascrizioni e riassunti fatti con i modelli di base di Apple, con il pulsante per
+  scaricare il modello più preciso e «Non mostrare più».
+- **Segnalibri a due vie** nella trascrizione: quelli presi registrando compaiono nel testo nel punto esatto, con un
+  elenco dietro il pulsante in alto; tenendo premuto un paragrafo se ne aggiunge uno, che vale anche per l'audio.
+- Mini player con le stesse velocità del player grande (0,75–2×).
+- Stop della registrazione: la registrazione compare subito nell'elenco. Prima, se iOS sospendeva l'app mentre il file
+  si chiudeva, spariva e ricompariva al riavvio come "recuperata", senza trascrizione né riassunto.
+- Presentazione e impostazioni aggiornate per il nuovo modello; crediti e NOTICE con Qwen, MLX Swift e
+  swift-transformers.
+
 ## 2026-10-06 (11)
 
 - **La trascrizione segue l'audio**: in lettura il paragrafo in ascolto è evidenziato con la frase in corso, la vista

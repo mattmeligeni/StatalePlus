@@ -27,5 +27,28 @@ The model is not part of this repository: the app downloads it on request. Attri
 (Altro › Crediti).
 
 ------------------------------------------------------------------------------------------------------------------------
+MLX Swift and mlx-swift-lm
+https://github.com/ml-explore/mlx-swift
+https://github.com/ml-explore/mlx-swift-lm
+Copyright Apple Inc. and contributors
+Licensed under the MIT License: https://opensource.org/licenses/MIT
+Used as Swift packages to run the Qwen summary model on the GPU.
+
+------------------------------------------------------------------------------------------------------------------------
+swift-transformers
+https://github.com/huggingface/swift-transformers
+Copyright Hugging Face and contributors
+Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+Used as a Swift package for the Qwen tokenizer.
+
+------------------------------------------------------------------------------------------------------------------------
+Qwen3.5-0.8B (Alibaba Cloud, Qwen team), 4-bit MLX conversion by the MLX Community
+https://huggingface.co/Qwen/Qwen3.5-0.8B
+https://huggingface.co/mlx-community/Qwen3.5-0.8B-4bit
+Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+The model is not part of this repository: the app downloads it on request. Attribution is also shown in the app
+(Altro › Crediti).
+
+------------------------------------------------------------------------------------------------------------------------
 Apple frameworks (SwiftUI, Speech, Foundation Models, AVFoundation, BackgroundTasks and others) are provided by the
 operating system and are not redistributed.

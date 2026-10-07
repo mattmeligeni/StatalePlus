@@ -8,17 +8,22 @@ nonisolated struct Riassunto: Sendable {
     let termini: [String]
 }
 
-/// Motori dei riassunti e del glossario del corso, in Altro › IA. La trascrizione resta sempre sul telefono.
+/// Motori dei riassunti, in Altro › IA. Il glossario del corso usa sempre Apple Intelligence; la trascrizione resta
+/// sempre sul telefono.
 nonisolated enum MotoreRiassunto: String, CaseIterable, Sendable {
     /// Modello di Apple Intelligence sul telefono (FoundationModels): offline, contesto di 4K token (8K da iOS 27).
     case apple
     /// Apple Intelligence su Private Cloud Compute (online, iOS 27): solo con l'entitlement concesso da Apple.
     case cloud
+    /// Qwen 3.5 0.8B scaricabile, sul telefono con MLX (`QwenLocale`): riassunti più completi, anche senza Apple
+    /// Intelligence.
+    case qwen
 
     var nome: String {
         switch self {
         case .apple: "Apple Intelligence"
         case .cloud: "Apple Intelligence online"
+        case .qwen: "Qwen 3.5"
         }
     }
 }

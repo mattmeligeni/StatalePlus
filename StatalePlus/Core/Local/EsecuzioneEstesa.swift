@@ -12,6 +12,9 @@ import UIKit
 ///   la fase attuale e il tempo stimato, aggiornati man mano.
 /// - Da iOS 27 il Neural Engine in background (Parakeet) richiede l'entitlement "Background Inference": senza, quei
 ///   lavori si mettono in pausa e riprendono in primo piano (`ElaborazioniAudio`).
+/// - La GPU in background (Qwen con MLX) iOS la concede solo agli iPad con M3 o successivi, mai agli iPhone: quei
+///   lavori non passano dall'attività di sistema (`soloInPrimoPiano`), che fallirebbe appena usciti dall'app, e si
+///   mettono in pausa fuori dall'app.
 /// - Se il sistema non può avviarlo subito: si esegue normalmente chiedendo il tempo extra di `beginBackgroundTask`
 ///   (circa 30 secondi), poi il lavoro si sospende con l'app e riprende al ritorno.
 nonisolated enum EsecuzioneEstesa {
@@ -30,9 +33,11 @@ nonisolated enum EsecuzioneEstesa {
     }
 
     /// Esegue `operazione`; `avanzamento(p, fase)` (p in 0…1) aggiorna l'attività di sistema.
-    /// `sottotitolo` si vede solo finché non arriva la prima fase.
-    static func esegui<T: Sendable>(titolo: String, sottotitolo: String,
+    /// `sottotitolo` si vede solo finché non arriva la prima fase. `soloInPrimoPiano`: lavori sulla GPU, senza
+    /// attività di sistema (solo i secondi extra di `beginBackgroundTask` per fermarsi in ordine).
+    static func esegui<T: Sendable>(titolo: String, sottotitolo: String, soloInPrimoPiano: Bool = false,
                                     operazione: @escaping @Sendable (_ avanzamento: Avanzamento) async throws -> T) async throws -> T {
+        if soloInPrimoPiano { return try await conTempoExtra(titolo: titolo, operazione: operazione) }
         if let risultato = try await continuata(titolo: titolo, sottotitolo: sottotitolo, operazione: operazione) {
             return risultato.valore
         }

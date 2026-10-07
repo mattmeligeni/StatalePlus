@@ -94,7 +94,7 @@ struct GlossarioView: View {
     private var notaMotore: String {
         switch gestore.motore {
         case .cloud: "Creato con Apple Intelligence online dai nomi del corso e degli insegnamenti. Puoi aggiungere o togliere termini."
-        case .apple: "Creato con Apple Intelligence dai nomi del corso e degli insegnamenti. Puoi aggiungere o togliere termini."
+        case .apple, .qwen: "Creato con Apple Intelligence dai nomi del corso e degli insegnamenti. Puoi aggiungere o togliere termini."
         case nil: "Per crearlo attiva Apple Intelligence. Intanto puoi aggiungere termini a mano."
         }
     }

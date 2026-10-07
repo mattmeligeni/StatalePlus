@@ -58,25 +58,31 @@
   - records with the screen locked, with bookmarks and audio enhancement for listening;
   - **transcription on the device**: Apple Speech or NVIDIA **Parakeet** (optional 632 MB download, more accurate,
     keeps working in the background);
-  - **summaries with Apple Intelligence**: key points and review questions, written from the transcript only;
+  - the transcript **follows the audio** while you listen, with **two-way bookmarks**: the ones taken while recording
+    show up in the text, and a long press on a paragraph adds one to the audio;
+  - **summaries** with key points and review questions, written from the transcript only: with **Apple
+    Intelligence** or with **Qwen 3.5 0.8B** on the device (optional 652 MB download via MLX, fuller notes, also on
+    iPhones without Apple Intelligence) — picked in a blind test on a real one-hour lecture;
   - a **course glossary** that fixes technical terms mangled by speech recognition and **learns from your lectures**;
   - export all recordings to one archive and import it on another iPhone straight from the Share menu.
 - **A short tour after sign-in** explains the main features — above all recording, transcription, summaries and the
-  course glossary — with buttons to download Parakeet and create the glossary right away. It can be reopened from
+  course glossary — with buttons to download the more accurate models and create the glossary right away. It can be
+  reopened from
   *Altro › IA*.
 - **Demo mode** for reviewers and anyone without a university account.
 
 ## Privacy
 
-- Audio and transcripts never leave the iPhone. Summaries run on the device with Apple Intelligence; the online
-  model (Apple Private Cloud Compute) will be optional, once Apple enables it for the app.
+- Audio and transcripts never leave the iPhone. Summaries run on the device, with Apple Intelligence or Qwen; the
+  online model (Apple Private Cloud Compute) will be optional, once Apple enables it for the app.
 - No accounts, no analytics, no tracking, no third-party SDKs. The app talks only to the university's services.
 - Credentials live in the Keychain and are used only to sign in to the university's own systems.
 
 ## Requirements
 
 - iPhone with **iOS 26** or later (iPhone 11 and newer).
-- Summaries and the course glossary need **Apple Intelligence** (iPhone 15 Pro and newer).
+- Summaries need **Apple Intelligence** (iPhone 15 Pro and newer) or the downloadable Qwen model (iPhones with at least
+  6 GB of memory, from iPhone 13 Pro and 14). The course glossary needs Apple Intelligence.
 
 ## Try it
 
@@ -116,7 +122,9 @@ Statale Plus is **source-available, not open source**: [PolyForm Strict License 
 - The name "Statale Plus" and its icon are reserved.
 
 Third-party components keep their own licenses — see [NOTICE](NOTICE): [FluidAudio](https://github.com/FluidInference/FluidAudio)
-(Apache 2.0) and the NVIDIA Parakeet model (CC BY 4.0).
+(Apache 2.0), the NVIDIA Parakeet model (CC BY 4.0), [MLX Swift](https://github.com/ml-explore/mlx-swift-lm) (MIT),
+[swift-transformers](https://github.com/huggingface/swift-transformers) (Apache 2.0) and the Qwen 3.5 model (Apache
+2.0).
 
 ---
 

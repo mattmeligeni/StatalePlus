@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 enum AppTab: Hashable { case oggi, orario, ariel, registrazioni, altro }
 enum AltroRoute: Hashable { case carriera, tasse, esami, aule, presenze, ia, impostazioni, crediti }
@@ -68,11 +69,22 @@ extension AppModel {
 
     // MARK: Registrazioni
 
-    /// Salva una registrazione appena chiusa e avvia la catena automatica (Altro › IA): trascrizione, riassunto e
-    /// miglioramento dell'audio per l'ascolto, uno dopo l'altro.
-    func salvaRegistrazione(_ r: Registrazione) {
-        recordings.add(r)
-        elaborazioni.dopoRegistrazione(r, in: recordings)
+    /// Ferma la registrazione: la salva subito nell'elenco, poi chiude il file con il tempo extra di iOS (con lo stop
+    /// finisce l'audio in background e l'app potrebbe essere sospesa) e avvia la catena automatica (Altro › IA):
+    /// trascrizione, riassunto e miglioramento dell'audio per l'ascolto, uno dopo l'altro.
+    func fermaRegistrazione() {
+        guard let bozza = recorder.ferma() else { return }
+        recordings.add(bozza)
+        let tempoExtra = UIApplication.shared.beginBackgroundTask(withName: "Chiusura della registrazione")
+        Task {
+            let durata = await recorder.chiudiFile()
+            if durata > 0, var r = recordings.item(bozza.id), abs(r.durata - durata) > 0.5 {
+                r.durata = durata
+                recordings.update(r)
+            }
+            if let r = recordings.item(bozza.id) { elaborazioni.dopoRegistrazione(r, in: recordings) }
+            if tempoExtra != .invalid { UIApplication.shared.endBackgroundTask(tempoExtra) }
+        }
     }
 
     /// Eliminazione completa: ferma le elaborazioni in corso, poi audio, metadati, trascrizione, riassunto e indice.
@@ -210,8 +222,11 @@ extension AppModel {
             if eliminaDatiLocali {
                 recorder.discard(in: recordings)
             } else {
-                let archivio = recordings
-                Task { if let r = await recorder.stop() { archivio.add(r) } }
+                if let r = recorder.ferma() {
+                    recordings.add(r)
+                    let recorder = recorder
+                    Task { _ = await recorder.chiudiFile() }
+                }
             }
         }
         fermaAutoRefresh()

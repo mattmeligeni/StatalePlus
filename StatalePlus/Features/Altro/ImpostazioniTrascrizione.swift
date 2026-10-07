@@ -32,13 +32,7 @@ struct ImpostazioniTrascrizioneView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { app.parakeet.ricontrolla() }
         .sheet(isPresented: $confermaDownload) {
-            ConfermaDownloadModello(
-                modello: app.parakeet.modello,
-                titolo: "Scaricare Parakeet?",
-                testo: "Trascrizioni più precise, sul telefono. Il download si fa una volta sola.",
-                consumi: "Due ore di lezione in pochi minuti, con poca batteria."
-            ) { app.parakeet.scarica() }
-            .presentationDetents([.large])
+            ConfermaDownloadParakeet(gestore: app.parakeet).presentationDetents([.large])
         }
     }
 
@@ -78,19 +72,30 @@ struct ImpostazioniTrascrizioneView: View {
     }
 }
 
-/// Scelta del motore di riassunti e glossario: Apple Intelligence online (predefinita, quando Apple la abilita per
-/// l'app) o sul telefono. Se quella online non è raggiungibile o il limite giornaliero è finito, si usa quella sul
-/// telefono.
+/// Scelta del motore dei riassunti: Apple Intelligence online (predefinita, quando Apple la abilita per l'app), sul
+/// telefono, oppure Qwen scaricabile (riassunti più completi, anche sugli iPhone senza Apple Intelligence). Se quella
+/// online non è raggiungibile o il limite giornaliero è finito, si usa quella sul telefono.
 struct ImpostazioniRiassuntiView: View {
+    @Environment(AppModel.self) private var app
     @AppStorage("motoreRiassunto") private var scelto = MotoreRiassunto.cloud.rawValue
+    @State private var confermaDownload = false
 
     var body: some View {
         List {
             Section {
+                if QwenLocale.supportato {
+                    Button(action: selezionaQwen) {
+                        RigaMotore(nome: "Qwen 3.5", simbolo: "text.book.closed",
+                                   caratteristiche: ["Sul telefono", "Offline", "Più completo"],
+                                   descrizione: "Appunti più completi e spiegati, con punti chiave e domande di ripasso. Lavora con l'app aperta: se esci si mette in pausa e riprende quando torni.",
+                                   selezionato: effettivo == .qwen, nota: notaQwen, avanzamento: avanzamentoQwen, pro: false)
+                    }
+                    .tint(.primary)
+                }
                 Button { scelto = MotoreRiassunto.cloud.rawValue } label: {
                     RigaMotore(nome: "Apple Intelligence online", simbolo: "icloud",
-                               caratteristiche: ["Online", "Più preciso", "Più veloce"],
-                               descrizione: "Il modello più grande di Apple: riassunti più completi e ordinati. Il testo della lezione va ad Apple, che non lo conserva. Riassunti al giorno limitati.",
+                               caratteristiche: ["Online", "Più veloce"],
+                               descrizione: "Il modello più grande di Apple: riassunti completi e ordinati. Il testo della lezione va ad Apple, che non lo conserva. Riassunti al giorno limitati.",
                                selezionato: effettivo == .cloud, nota: notaCloud, avanzamento: nil, pro: false)
                 }
                 .tint(.primary)
@@ -98,22 +103,55 @@ struct ImpostazioniRiassuntiView: View {
                 Button { scelto = MotoreRiassunto.apple.rawValue } label: {
                     RigaMotore(nome: "Apple Intelligence", simbolo: "apple.intelligence",
                                caratteristiche: ["Sul telefono", "Offline", "Nessun download"],
-                               descrizione: "Il testo resta sul telefono. Riassunti un po' più semplici.",
+                               descrizione: "Il testo resta sul telefono e il lavoro continua anche fuori dall'app. Riassunti più brevi.",
                                selezionato: effettivo == .apple, nota: notaApple, avanzamento: nil, pro: false)
                 }
                 .tint(.primary)
                 .disabled(AppleIntelligence.stato != .disponibile)
             } footer: {
-                Text("Vale anche per il glossario del corso. La trascrizione resta sempre sul telefono.")
+                Text("Il glossario del corso si crea sempre con Apple Intelligence. La trascrizione resta sempre sul telefono.")
             }
             if effettivo == .cloud, NuvolaApple.puòAumentareLimite {
                 Section {
                     Button("Più riassunti al giorno con iCloud+") { NuvolaApple.mostraAumentoLimite() }
                 }
             }
+            SezioneModello(gestore: app.qwen)
         }
         .navigationTitle("Riassunti")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { app.qwen.ricontrolla() }
+        .sheet(isPresented: $confermaDownload) {
+            ConfermaDownloadQwen(gestore: app.qwen).presentationDetents([.large])
+        }
+    }
+
+    /// Il motore che si userà davvero (dipende anche da cosa è disponibile ora).
+    private var effettivo: MotoreRiassunto? {
+        _ = scelto
+        _ = app.qwen.stato
+        return MotoreRiassunto.disponibile
+    }
+
+    private func selezionaQwen() {
+        switch app.qwen.stato {
+        case .installato: scelto = MotoreRiassunto.qwen.rawValue
+        case .assente: confermaDownload = true
+        case .download: break
+        }
+    }
+
+    private var notaQwen: String? {
+        switch app.qwen.stato {
+        case .installato: "Scaricato e pronto."
+        case .download: nil
+        case .assente: "Toccalo per scaricarlo (\(QwenLocale.dimensioneMB) MB)."
+        }
+    }
+
+    private var avanzamentoQwen: Double? {
+        if case .download(let p) = app.qwen.stato { return p }
+        return nil
     }
 
     private var notaCloud: String? {
@@ -125,11 +163,6 @@ struct ImpostazioniRiassuntiView: View {
         }
     }
 
-    private var effettivo: MotoreRiassunto? {
-        if scelto == MotoreRiassunto.cloud.rawValue, NuvolaApple.stato == .disponibile { return .cloud }
-        return AppleIntelligence.stato == .disponibile ? .apple : nil
-    }
-
     private var notaApple: String? {
         switch AppleIntelligence.stato {
         case .disponibile: nil
@@ -137,6 +170,34 @@ struct ImpostazioniRiassuntiView: View {
         case .inPreparazione: "Apple Intelligence sta scaricando il modello."
         case .nonSupportata: "Non disponibile su questo iPhone o con questa versione di iOS."
         }
+    }
+}
+
+/// Conferma del download di Qwen, uguale ovunque (impostazioni, presentazione, avvisi sotto i riassunti).
+struct ConfermaDownloadQwen: View {
+    let gestore: GestoreModello
+
+    var body: some View {
+        ConfermaDownloadModello(
+            modello: gestore.modello,
+            titolo: "Scaricare il modello per i riassunti?",
+            testo: "Appunti più completi e spiegati, scritti sul telefono. Il download si fa una volta sola.",
+            consumi: "Un'ora di lezione in qualche minuto, con l'app aperta."
+        ) { gestore.scarica() }
+    }
+}
+
+/// Conferma del download di Parakeet, uguale ovunque (impostazioni, presentazione, avvisi sotto le trascrizioni).
+struct ConfermaDownloadParakeet: View {
+    let gestore: GestoreModello
+
+    var body: some View {
+        ConfermaDownloadModello(
+            modello: gestore.modello,
+            titolo: "Scaricare il modello più preciso?",
+            testo: "Trascrizioni più precise, soprattutto con termini tecnici e nomi, sul telefono. Il download si fa una volta sola.",
+            consumi: "Due ore di lezione in pochi minuti, con poca batteria."
+        ) { gestore.scarica() }
     }
 }
 
@@ -171,7 +232,7 @@ private struct SezioneModello: View {
             .confirmationDialog("Eliminare il modello \(gestore.modello.nome)?", isPresented: $confermaElimina, titleVisibility: .visible) {
                 Button("Elimina", role: .destructive) { gestore.elimina() }
             } message: {
-                Text("Libera circa \(gestore.modello.dimensioneMB) MB. Si userà di nuovo il motore di Apple; potrai riscaricarlo quando vuoi.")
+                Text("Libera circa \(gestore.modello.dimensioneMB) MB. Si userà di nuovo il modello di Apple; potrai riscaricarlo quando vuoi.")
             }
         }
     }

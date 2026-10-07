@@ -25,6 +25,10 @@ final class AppModel {
     let parakeet = GestoreModello(.parakeet,
                                   dopoDownload: { Preferenze.motoreTrascrizione = .parakeet },
                                   dopoEliminazione: { if Preferenze.motoreTrascrizione == .parakeet { Preferenze.motoreTrascrizione = .apple } })
+    /// Modello locale per i riassunti: scaricato, diventa il motore scelto.
+    let qwen = GestoreModello(.qwen,
+                              dopoDownload: { Preferenze.motoreRiassunto = .qwen },
+                              dopoEliminazione: { if Preferenze.motoreRiassunto == .qwen { Preferenze.motoreRiassunto = .cloud } })
     /// Glossario del corso per correggere le trascrizioni.
     let glossario = GestoreGlossario()
     /// Apre in Registrazioni l'elenco delle registrazioni recuperate (dall'avviso all'avvio).

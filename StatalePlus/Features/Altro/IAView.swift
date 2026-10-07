@@ -28,7 +28,7 @@ struct IAView: View {
                     LabeledContent("Trascrizione", value: motore.nome)
                 }
                 NavigationLink { ImpostazioniRiassuntiView() } label: {
-                    LabeledContent("Riassunti", value: MotoreRiassunto.disponibile?.nome ?? "Non disponibile")
+                    LabeledContent("Riassunti", value: motoreRiassunti)
                 }
                 NavigationLink { GlossarioView() } label: {
                     LabeledContent("Glossario del corso", value: app.glossario.attuale.map { "\($0.termini.count) termini" } ?? "Da creare")
@@ -77,14 +77,25 @@ struct IAView: View {
             }
         }
         .navigationTitle("IA")
-        .onAppear { app.parakeet.ricontrolla() }
+        .onAppear {
+            app.parakeet.ricontrolla()
+            app.qwen.ricontrolla()
+        }
+    }
+
+    private var motoreRiassunti: String {
+        _ = motoreRiassunto
+        _ = app.qwen.stato
+        return MotoreRiassunto.disponibile?.nome ?? (QwenLocale.supportato ? "Da scaricare" : "Non disponibile")
     }
 
     private var notaRiassunti: String? {
+        if MotoreRiassunto.disponibile == .qwen { return nil }
         switch AppleIntelligence.stato {
-        case .disponibile, .nonSupportata: nil
-        case .nonAttiva: "Per i riassunti con Apple Intelligence attivala in Impostazioni › Apple Intelligence e Siri."
-        case .inPreparazione: "Apple Intelligence sta scaricando il suo modello: i riassunti arrivano tra poco."
+        case .disponibile: return nil
+        case .nonSupportata: return QwenLocale.supportato ? "Per i riassunti scarica il modello da Riassunti." : nil
+        case .nonAttiva: return "Per i riassunti con Apple Intelligence attivala in Impostazioni › Apple Intelligence e Siri, oppure scarica il modello da Riassunti."
+        case .inPreparazione: return "Apple Intelligence sta scaricando il suo modello: i riassunti arrivano tra poco."
         }
     }
 }

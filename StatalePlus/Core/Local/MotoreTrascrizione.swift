@@ -590,18 +590,16 @@ private nonisolated final class InizioPreparazione: @unchecked Sendable {
 }
 
 /// Ripulitura dei modelli non più usati:
+/// - Qwen 3.5 4B, sostituito da Apple Intelligence per il glossario e dal più leggero Qwen 3.5 0.8B per i riassunti
+///   (su iPhone 17 Pro Max il glossario richiedeva 6-7 minuti e il 6% di batteria): circa 3 GB. La scelta "qwen" del
+///   motore dei riassunti resta: ora indica lo 0.8B.
 /// - Whisper, sostituito da Parakeet (più lento, su audio registrato da lontano inventava frasi): circa 630 MB;
-/// - Qwen 3.5 4B, sostituito da Apple Intelligence per riassunti e glossario (su iPhone 17 Pro Max il glossario
-///   richiedeva 6-7 minuti e il 6% di batteria): circa 3 GB.
 nonisolated enum ModelliDismessi {
     static func elimina() {
         let fm = FileManager.default
         let base = ScaricatoreModelli.cartellaBase
         try? fm.removeItem(at: base.appending(path: "qwen3.5-4b-4bit", directoryHint: .isDirectory))
         try? fm.removeItem(at: base.appending(path: "installato-qwen3.5-4b-4bit"))
-        if UserDefaults.standard.string(forKey: "motoreRiassunto") == "qwen" {
-            UserDefaults.standard.removeObject(forKey: "motoreRiassunto")
-        }
         try? fm.removeItem(at: base.appending(path: "models/argmaxinc", directoryHint: .isDirectory))
         for f in (try? fm.contentsOfDirectory(atPath: base.path(percentEncoded: false))) ?? [] where f.hasPrefix("installato-openai_whisper") {
             try? fm.removeItem(at: base.appending(path: f))

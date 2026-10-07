@@ -29,8 +29,8 @@ nonisolated enum Preferenze {
         set { defaults.set(newValue.rawValue, forKey: "motoreTrascrizione") }
     }
 
-    /// Motore dei riassunti e del glossario (Altro › IA). Predefinito: Apple Intelligence online, che si usa solo se
-    /// disponibile (altrimenti quella sul telefono). Il vecchio valore "qwen" (modello rimosso) torna al predefinito.
+    /// Motore dei riassunti (Altro › IA). Predefinito: Apple Intelligence online, che si usa solo se disponibile
+    /// (altrimenti quella sul telefono). Scaricato Qwen, diventa lui il motore scelto (`MotoreRiassunto.disponibile`).
     static var motoreRiassunto: MotoreRiassunto {
         get { defaults.string(forKey: "motoreRiassunto").flatMap(MotoreRiassunto.init(rawValue:)) ?? .cloud }
         set { defaults.set(newValue.rawValue, forKey: "motoreRiassunto") }
@@ -71,6 +71,11 @@ nonisolated enum Preferenze {
         set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "modificheLezioni") }
     }
 
+    /// Avvisi «Non ti convince? Prova il modello più preciso» sotto trascrizioni e riassunti fatti con i modelli di
+    /// base: chiusi dall'utente con «Non mostrare più».
+    static let chiaveAvvisoTrascrizione = "avvisoModelloTrascrizioneNascosto"
+    static let chiaveAvvisoRiassunto = "avvisoModelloRiassuntoNascosto"
+
     /// La presentazione delle funzioni (dopo il primo accesso) è già stata vista.
     static var presentazioneVista: Bool {
         get { defaults.bool(forKey: "presentazioneVista") }
@@ -79,7 +84,7 @@ nonisolated enum Preferenze {
 
     static func azzera() {
         ["sogliaFrequenzaManuale", "obbligoFrequenza", "obbligoFrequenzaChiave", "avvisiLetti", "modificheLezioni",
-         "presentazioneVista"]
+         "presentazioneVista", chiaveAvvisoTrascrizione, chiaveAvvisoRiassunto]
             .forEach(defaults.removeObject(forKey:))
     }
 }

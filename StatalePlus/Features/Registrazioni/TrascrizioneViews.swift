@@ -9,7 +9,9 @@ struct TrascrizioneSection: View {
     @Environment(AppModel.self) private var app
     @State private var anteprima: String?
     @State private var mostraMotori = false
+    @State private var confermaDownload = false
     @AppStorage("motoreTrascrizione") private var motore = MotoreTrascrizione.apple.rawValue
+    @AppStorage(Preferenze.chiaveAvvisoTrascrizione) private var avvisoNascosto = false
 
     var body: some View {
         let id = registrazione.id
@@ -20,6 +22,14 @@ struct TrascrizioneSection: View {
                 if let anteprima { Text(anteprima).font(.callout).lineLimit(4).foregroundStyle(.secondary) }
                 NavigationLink { TrascrizioneView(id: id, player: player) } label: {
                     Label("Leggi e modifica la trascrizione", systemImage: "text.alignleft")
+                }
+                if mostraAvviso {
+                    AvvisoModelloMigliore(
+                        titolo: "Non ti convince la trascrizione?",
+                        testo: "Prova il modello più preciso, soprattutto con termini tecnici e nomi: stessa velocità e privacy, sempre sul telefono. Poi rifai la trascrizione dal menu ⋯.",
+                        gestore: app.parakeet,
+                        scarica: { confermaDownload = true },
+                        nascondi: { avvisoNascosto = true })
                 }
             } else if let motivo = LimitiElaborazione.bloccoTrascrizione(registrazione) {
                 Label(motivo, systemImage: "clock.badge.exclamationmark").font(.callout).foregroundStyle(.secondary)
@@ -53,39 +63,57 @@ struct TrascrizioneSection: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { mostraMotori = false } } }
             }
         }
+        .sheet(isPresented: $confermaDownload) {
+            ConfermaDownloadParakeet(gestore: app.parakeet).presentationDetents([.large])
+        }
         .task(id: registrazione.trascrittaIl) {
             anteprima = app.recordings.trascrizione(id).map { String($0.prefix(400)) }
         }
     }
+
+    /// Trascrizione fatta con il modello di base di Apple e il modello più preciso non ancora scaricato.
+    private var mostraAvviso: Bool {
+        !avvisoNascosto && motore != MotoreTrascrizione.parakeet.rawValue && app.parakeet.stato != .installato
+    }
 }
 
-/// Riassunto con Apple Intelligence, sul telefono o online (visibile se può funzionare su questo iPhone).
+/// Riassunto con Apple Intelligence (sul telefono o online) o con Qwen scaricato. Sugli iPhone senza Apple
+/// Intelligence propone di scaricare Qwen.
 struct RiassuntoSection: View {
     let registrazione: Registrazione
     var player: AudioPlayer? = nil
     @Environment(AppModel.self) private var app
     @State private var testo: String?
     @State private var trascrizione: String?
+    @State private var confermaDownload = false
+    @AppStorage("motoreRiassunto") private var scelto = MotoreRiassunto.cloud.rawValue
+    @AppStorage(Preferenze.chiaveAvvisoRiassunto) private var avvisoNascosto = false
+
+    /// Il motore che si userà (si ricalcola quando cambiano scelta o download di Qwen).
+    private var motore: MotoreRiassunto? {
+        _ = scelto
+        _ = app.qwen.stato
+        return MotoreRiassunto.disponibile
+    }
 
     var body: some View {
         let id = registrazione.id
         let blocco = LimitiElaborazione.bloccoRiassunto(registrazione, trascrizione: trascrizione)
         Section {
-            switch MotoreRiassunto.disponibile != nil ? .disponibile : AppleIntelligence.stato {
-            case .nonAttiva:
-                Label("Attiva Apple Intelligence in Impostazioni per generare i riassunti delle lezioni.", systemImage: "apple.intelligence")
-                    .font(.callout)
-            case .inPreparazione:
-                Label("Apple Intelligence sta scaricando il modello. Riprova tra poco.", systemImage: "arrow.down.circle")
-                    .font(.callout)
-            case .nonSupportata:
-                EmptyView()
-            case .disponibile:
+            if motore != nil {
                 if let s = app.elaborazioni.stato(.riassunto, id) {
                     StatoElaborazione(stato: s) { app.elaborazioni.annulla(.riassunto, id) }
                 } else if registrazione.riassuntoIl != nil, let testo {
                     MarkdownTesto(markdown: testo).lineLimit(8)
                     NavigationLink { RiassuntoView(id: id, player: player) } label: { Label("Apri riassunto", systemImage: "doc.text.magnifyingglass") }
+                    if mostraAvviso {
+                        AvvisoModelloMigliore(
+                            titolo: "Non ti convince il riassunto?",
+                            testo: "Prova il modello più completo: appunti più spiegati, con punti chiave e domande, sempre sul telefono. Poi rigeneralo dal menu ⋯ del riassunto.",
+                            gestore: app.qwen,
+                            scarica: { confermaDownload = true },
+                            nascondi: { avvisoNascosto = true })
+                    }
                 } else if let blocco {
                     Label(blocco, systemImage: "clock.badge.exclamationmark").font(.callout).foregroundStyle(.secondary)
                 } else {
@@ -93,19 +121,101 @@ struct RiassuntoSection: View {
                         Label("Genera riassunto", systemImage: "sparkles")
                     }
                 }
+            } else {
+                switch AppleIntelligence.stato {
+                case .nonAttiva:
+                    Label("Attiva Apple Intelligence in Impostazioni per generare i riassunti delle lezioni\(QwenLocale.supportato ? ", oppure scarica il modello per i riassunti" : "").",
+                          systemImage: "apple.intelligence")
+                        .font(.callout)
+                case .inPreparazione:
+                    Label("Apple Intelligence sta scaricando il modello. Riprova tra poco.", systemImage: "arrow.down.circle")
+                        .font(.callout)
+                case .nonSupportata, .disponibile:
+                    if QwenLocale.supportato {
+                        Text("Su questo iPhone i riassunti li scrive un modello da scaricare una volta sola: appunti, punti chiave e domande di ripasso, sempre sul telefono.")
+                            .font(.callout)
+                    }
+                }
+                if QwenLocale.supportato, AppleIntelligence.stato != .inPreparazione {
+                    DownloadModello(gestore: app.qwen, etichetta: "Scarica il modello per i riassunti") { confermaDownload = true }
+                }
             }
         } header: {
-            Label("Riassunto", systemImage: "apple.intelligence")
+            Label("Riassunto", systemImage: "sparkles")
         } footer: {
-            if let motore = MotoreRiassunto.disponibile, registrazione.riassuntoIl == nil, blocco == nil {
-                Text("Con \(motore.nome), solo dal testo trascritto: riassunto, punti chiave e domande di ripasso.")
+            if let motore, registrazione.riassuntoIl == nil, blocco == nil, app.elaborazioni.stato(.riassunto, id) == nil {
+                Text(motore == .qwen
+                     ? "Con \(motore.nome), solo dal testo trascritto: riassunto, punti chiave e domande di ripasso. Lavora con l'app aperta: se esci si mette in pausa e riprende quando torni."
+                     : "Con \(motore.nome), solo dal testo trascritto: riassunto, punti chiave e domande di ripasso.")
             }
             if let e = app.elaborazioni.errori[id], app.elaborazioni.stato(.riassunto, id) == nil, registrazione.trascrittaIl != nil {
                 Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
         }
+        .sheet(isPresented: $confermaDownload) {
+            ConfermaDownloadQwen(gestore: app.qwen).presentationDetents([.large])
+        }
         .task(id: registrazione.riassuntoIl) { testo = app.recordings.riassunto(id) }
         .task(id: registrazione.trascrittaIl) { trascrizione = app.recordings.trascrizione(id) }
+    }
+
+    /// Riassunto fatto con Apple Intelligence sul telefono e Qwen non ancora scaricato.
+    private var mostraAvviso: Bool {
+        !avvisoNascosto && motore == .apple && QwenLocale.supportato && app.qwen.stato != .installato
+    }
+}
+
+/// «Non ti convince?»: invito a provare il modello più preciso sotto una trascrizione o un riassunto fatti con il
+/// modello di base, con download e «Non mostrare più».
+private struct AvvisoModelloMigliore: View {
+    let titolo: String
+    let testo: String
+    let gestore: GestoreModello
+    let scarica: () -> Void
+    let nascondi: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(titolo).font(.subheadline.weight(.semibold))
+                    Text(testo).font(.caption).foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
+            }
+            DownloadModello(gestore: gestore, etichetta: "Scarica il modello", azione: scarica)
+            if gestore.stato == .assente {
+                Button("Non mostrare più", action: nascondi)
+                    .font(.caption).foregroundStyle(.secondary).buttonStyle(.borderless)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// Pulsante per scaricare un modello, o il suo avanzamento mentre si scarica.
+private struct DownloadModello: View {
+    let gestore: GestoreModello
+    let etichetta: String
+    let azione: () -> Void
+
+    var body: some View {
+        switch gestore.stato {
+        case .assente:
+            Button(action: azione) {
+                Label("\(etichetta) (\(gestore.modello.dimensioneMB) MB)", systemImage: "arrow.down.circle")
+                    .font(.callout.weight(.semibold))
+            }
+            .buttonStyle(.borderless)
+        case .download(let p):
+            BarraDownload(avanzamento: p, totaleMB: gestore.modello.dimensioneMB)
+        case .installato:
+            Label("Modello scaricato", systemImage: "checkmark.circle.fill").font(.callout).foregroundStyle(.green)
+        }
+        if let e = gestore.errore {
+            Label(e, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.orange)
+        }
     }
 }
 
@@ -120,13 +230,21 @@ private struct StatoElaborazione: View {
                 Text(stato.progresso.formatted(.percent.precision(.fractionLength(0)))).font(.caption.monospacedDigit())
             }
             if !stato.inPausa {
-                Text(stato.motore == MotoreTrascrizione.parakeet.nome && !NotaBackground.neuralEngineInBackground
-                     ? "Parakeet lavora con l'app aperta: se esci si mette in pausa e riprende quando torni."
-                     : NotaBackground.testo).font(.caption).foregroundStyle(.secondary)
+                Text(nota).font(.caption).foregroundStyle(.secondary)
             }
             Button("Annulla", role: .destructive, action: annulla).font(.callout).buttonStyle(.borderless)
         }
         .padding(.vertical, 4)
+    }
+
+    private var nota: String {
+        if stato.motore == MotoreRiassunto.qwen.nome {
+            return "Tieni l'app aperta: se esci il riassunto si mette in pausa e riprende quando torni."
+        }
+        if stato.motore == MotoreTrascrizione.parakeet.nome && !NotaBackground.neuralEngineInBackground {
+            return "Parakeet lavora con l'app aperta: se esci si mette in pausa e riprende quando torni."
+        }
+        return NotaBackground.testo
     }
 }
 
@@ -136,6 +254,9 @@ private struct StatoElaborazione: View {
 /// la vista scorre da sola finché non la si scorre a mano («Segui l'audio» per tornare), un tocco su un paragrafo fa
 /// partire l'audio da lì e la barra a destra mostra dove si è nel testo. La posizione viene dalle àncore salvate
 /// durante la trascrizione (`MappaTesto`); per le trascrizioni senza àncore è stimata in proporzione alla durata.
+/// Segnalibri a due vie: quelli presi durante la registrazione (o nel player) compaiono nel testo nel punto in cui
+/// sono stati presi, elencati dietro il pulsante in alto; tenendo premuto un paragrafo se ne aggiunge uno, che vale
+/// anche per l'audio (stesso elenco `Registrazione.segnalibri`, in secondi).
 /// «Modifica» passa al testo modificabile, con Writing Tools.
 struct TrascrizioneView: View {
     let id: UUID
@@ -150,6 +271,11 @@ struct TrascrizioneView: View {
     @State private var segui = true
     @State private var confermaRifai = false
     @State private var confermaElimina = false
+    @State private var mostraSegnalibri = false
+    /// Paragrafo a cui scorrere (scelto dall'elenco dei segnalibri).
+    @State private var vaiAlParagrafo: Int?
+
+    private var segnalibri: [TimeInterval] { app.recordings.item(id)?.segnalibri ?? [] }
 
     var body: some View {
         Group {
@@ -183,6 +309,14 @@ struct TrascrizioneView: View {
                     modifica.toggle()
                 }
             }
+            if !modifica {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { mostraSegnalibri = true } label: {
+                        Image(systemName: segnalibri.isEmpty ? "bookmark" : "bookmark.fill")
+                    }
+                    .accessibilityLabel("Segnalibri")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) { ShareLink(item: testo) }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -209,6 +343,16 @@ struct TrascrizioneView: View {
             salva()
         }
         .onDisappear { salva() }
+        .sheet(isPresented: $mostraSegnalibri) {
+            ElencoSegnalibri(segnalibri: segnalibri, estratto: estratto(al:), puòAggiungere: (player?.currentTime ?? 0) > 0,
+                             aggiungiQui: { if let t = player?.currentTime { aggiungiSegnalibro(t) } },
+                             vai: { t in
+                                 mostraSegnalibri = false
+                                 vaiA(tempo: t)
+                             },
+                             elimina: rimuoviSegnalibri)
+                .presentationDetents([.medium, .large])
+        }
         .confirmationDialog("Trascrivere di nuovo?", isPresented: $confermaRifai, titleVisibility: .visible) {
             Button("Trascrivi di nuovo", role: .destructive) {
                 caricato = false
@@ -237,21 +381,37 @@ struct TrascrizioneView: View {
     private var lettura: some View {
         let posizione = posizione
         let attivo = posizione.flatMap { p in paragrafi.lastIndex { $0.inizio <= p } }
+        let segni = segniPerParagrafo
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(paragrafi.indices, id: \.self) { i in
                         let p = paragrafi[i]
-                        ParagrafoTrascrizione(testo: p.testo, evidenziato: i == attivo ? posizione.map { $0 - p.inizio } : nil)
+                        ParagrafoTrascrizione(testo: p.testo, evidenziato: i == attivo ? posizione.map { $0 - p.inizio } : nil,
+                                              segnalibri: segni[i] ?? [])
                             .id(i)
                             .contentShape(Rectangle())
                             .onTapGesture { ascolta(da: p.inizio) }
+                            .contextMenu {
+                                Button { ascolta(da: p.inizio) } label: { Label("Ascolta da qui", systemImage: "play") }
+                                Button { aggiungiSegnalibro(da: p.inizio) } label: { Label("Aggiungi segnalibro", systemImage: "bookmark") }
+                                if let qui = segni[i], !qui.isEmpty {
+                                    Button(role: .destructive) { rimuoviSegnalibri(qui.map(\.indice)) } label: {
+                                        Label(qui.count == 1 ? "Togli il segnalibro" : "Togli i segnalibri", systemImage: "bookmark.slash")
+                                    }
+                                }
+                                Button { UIPasteboard.general.string = p.testo } label: { Label("Copia paragrafo", systemImage: "doc.on.doc") }
+                            }
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
                 .padding(.trailing, 8)
-                .textSelection(.enabled)
+            }
+            .onChange(of: vaiAlParagrafo) { _, nuovo in
+                guard let nuovo else { return }
+                withAnimation { proxy.scrollTo(nuovo, anchor: .center) }
+                vaiAlParagrafo = nil
             }
             .onScrollPhaseChange { _, fase in
                 if fase == .interacting, posizione != nil { segui = false }
@@ -280,6 +440,62 @@ struct TrascrizioneView: View {
                 }
             }
         }
+    }
+
+    // MARK: Segnalibri
+
+    /// Segnalibri di ogni paragrafo: numero (da 1, nell'ordine dell'audio), indice nell'elenco e posizione nel
+    /// paragrafo della parola in cui sono stati presi.
+    private var segniPerParagrafo: [Int: [SegnoNelTesto]] {
+        guard let mappa, !paragrafi.isEmpty else { return [:] }
+        var risultato: [Int: [SegnoNelTesto]] = [:]
+        for (i, t) in segnalibri.enumerated() {
+            guard let pos = mappa.posizione(al: t), let par = paragrafi.lastIndex(where: { $0.inizio <= pos }) else { continue }
+            risultato[par, default: []].append(SegnoNelTesto(numero: i + 1, indice: i, posizione: pos - paragrafi[par].inizio))
+        }
+        return risultato
+    }
+
+    /// La frase della trascrizione dove cade un segnalibro (per l'elenco).
+    private func estratto(al t: TimeInterval) -> String? {
+        guard let pos = mappa?.posizione(al: t), let par = paragrafi.last(where: { $0.inizio <= pos }) else { return nil }
+        let testo = par.testo
+        let indice = testo.index(testo.startIndex, offsetBy: min(max(pos - par.inizio, 0), testo.count))
+        var frase: String?
+        testo.enumerateSubstrings(in: testo.startIndex..., options: .bySentences) { f, intervallo, _, stop in
+            if intervallo.contains(indice) || intervallo.upperBound == indice { frase = f; stop = true }
+        }
+        return (frase ?? testo).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Segnalibro all'inizio di un paragrafo (tenuto premuto): vale anche per l'audio.
+    private func aggiungiSegnalibro(da offset: Int) {
+        guard let t = mappa?.tempo(per: offset) else { return }
+        aggiungiSegnalibro(t)
+    }
+
+    private func aggiungiSegnalibro(_ t: TimeInterval) {
+        guard var r = app.recordings.item(id), !r.segnalibri.contains(where: { abs($0 - t) < 1 }) else { return }
+        r.segnalibri.append(max(0, t))
+        r.segnalibri.sort()
+        app.recordings.update(r)
+    }
+
+    private func rimuoviSegnalibri(_ indici: [Int]) {
+        guard var r = app.recordings.item(id) else { return }
+        r.segnalibri = r.segnalibri.enumerated().filter { !indici.contains($0.offset) }.map(\.element)
+        app.recordings.update(r)
+    }
+
+    /// Dall'elenco: scorre al punto del testo e fa partire l'audio da lì.
+    private func vaiA(tempo t: TimeInterval) {
+        if let pos = mappa?.posizione(al: t), let par = paragrafi.lastIndex(where: { $0.inizio <= pos }) {
+            vaiAlParagrafo = par
+        }
+        guard let player else { return }
+        player.seek(to: max(0, t - 0.5))
+        if !player.isPlaying { player.play() }
+        segui = true
     }
 
     /// Fa partire l'audio dal punto del testo toccato e riprende a seguirlo.
@@ -315,23 +531,50 @@ struct ParagrafoConPosizione: Sendable {
     }
 }
 
-/// Un paragrafo; se è quello in ascolto ha una barra colorata a sinistra e la frase in corso evidenziata.
+/// Un segnalibro nel testo: numero mostrato, indice in `Registrazione.segnalibri`, posizione nel paragrafo.
+private struct SegnoNelTesto: Equatable {
+    let numero: Int
+    let indice: Int
+    let posizione: Int
+}
+
+/// Un paragrafo; se è quello in ascolto ha una barra colorata a sinistra e la frase in corso evidenziata. I segnalibri
+/// sono un'icona arancione nel punto in cui sono stati presi.
 private struct ParagrafoTrascrizione: View {
     let testo: String
     /// Posizione (in caratteri, nel paragrafo) della parola in ascolto.
     let evidenziato: Int?
+    var segnalibri: [SegnoNelTesto] = []
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Capsule()
                 .fill(evidenziato != nil ? Color.accentColor : .clear)
                 .frame(width: 3)
-            Text(attribuito)
+            conSegnalibri
                 .font(.body)
                 .lineSpacing(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .animation(.easeInOut(duration: 0.2), value: evidenziato != nil)
+        .accessibilityHint(segnalibri.isEmpty ? "" : segnalibri.count == 1 ? "Contiene un segnalibro" : "Contiene \(segnalibri.count) segnalibri")
+    }
+
+    /// Il testo con le icone dei segnalibri inserite prima della parola in cui cadono.
+    private var conSegnalibri: Text {
+        let a = attribuito
+        guard !segnalibri.isEmpty else { return Text(a) }
+        var risultato = Text("")
+        var inizio = a.startIndex
+        for s in segnalibri.sorted(by: { $0.posizione < $1.posizione }) {
+            let offset = min(max(s.posizione, 0), testo.count)
+            let fine = a.characters.index(a.startIndex, offsetBy: offset)
+            guard fine >= inizio else { continue }
+            let segno = Text("\(Image(systemName: "bookmark.fill"))\(s.numero) ").font(.caption.bold()).foregroundStyle(.orange)
+            risultato = Text("\(risultato)\(Text(AttributedString(a[inizio..<fine])))\(segno)")
+            inizio = fine
+        }
+        return Text("\(risultato)\(Text(AttributedString(a[inizio...])))")
     }
 
     private var attribuito: AttributedString {
@@ -348,6 +591,55 @@ private struct ParagrafoTrascrizione: View {
             a[r].backgroundColor = Color.accentColor.opacity(0.18)
         }
         return a
+    }
+}
+
+/// Elenco dei segnalibri della registrazione, con la frase della trascrizione in cui cadono: un tocco porta lì nel
+/// testo e nell'audio.
+private struct ElencoSegnalibri: View {
+    let segnalibri: [TimeInterval]
+    let estratto: (TimeInterval) -> String?
+    let puòAggiungere: Bool
+    let aggiungiQui: () -> Void
+    let vai: (TimeInterval) -> Void
+    let elimina: ([Int]) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if segnalibri.isEmpty {
+                    ContentUnavailableView("Nessun segnalibro", systemImage: "bookmark",
+                                           description: Text("Aggiungili durante la registrazione, oppure tieni premuto un paragrafo della trascrizione."))
+                }
+                ForEach(Array(segnalibri.enumerated()), id: \.offset) { i, t in
+                    Button { vai(t) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Segnalibro \(i + 1) · \(tempo(t))", systemImage: "bookmark.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.orange)
+                            if let e = estratto(t) {
+                                Text(e).font(.callout).foregroundStyle(.primary).lineLimit(3)
+                            }
+                        }
+                    }
+                }
+                .onDelete { elimina(Array($0)) }
+                if puòAggiungere {
+                    Section {
+                        Button { aggiungiQui() } label: { Label("Aggiungi al punto in ascolto", systemImage: "bookmark.circle") }
+                    }
+                }
+            }
+            .navigationTitle("Segnalibri")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { dismiss() } } }
+        }
+    }
+
+    private func tempo(_ t: TimeInterval) -> String {
+        let s = Int(max(t, 0))
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%02d:%02d", s / 60, s % 60)
     }
 }
 
@@ -533,9 +825,21 @@ private struct MiniPlayer: View {
                     .accessibilityLabel(player.isPlaying ? "Pausa" : "Riproduci")
                     Button { player.skip(30) } label: { Image(systemName: "goforward.30").font(.title2).frame(width: 44, height: 44) }
                         .accessibilityLabel("Avanti di 30 secondi")
-                    Spacer()
+                    Spacer(minLength: 4)
                     Text("\(durata(trascinamento ?? player.currentTime)) / \(durata(player.duration))")
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    Menu {
+                        Picker("Velocità", selection: Binding(get: { player.rate }, set: { player.setRate($0) })) {
+                            ForEach(AudioPlayer.velocità, id: \.self) { Text(AudioPlayer.etichetta($0)).tag($0) }
+                        }
+                    } label: {
+                        Text(AudioPlayer.etichetta(player.rate))
+                            .font(.callout.weight(.semibold).monospacedDigit())
+                            .padding(.horizontal, 10).frame(minWidth: 52, minHeight: 32)
+                            .background(Color(.tertiarySystemFill), in: Capsule())
+                    }
+                    .accessibilityLabel("Velocità di riproduzione")
                 }
                 .buttonStyle(.borderless)
             }

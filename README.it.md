@@ -59,12 +59,14 @@ App iOS nativa (SwiftUI, Swift 6) che riunisce sotto un unico login i servizi pe
 - **Un solo accesso** per i servizi dell'Ateneo, con le credenziali solo nel Portachiavi di iOS.
 - **Oggi**, **Orario**, **Esami**, **Presenze** (con codice lezione o QR) e **Ariel**, letti e mostrati in modo nativo.
 - **Registrazioni delle lezioni**: registrazione a schermo bloccato, **trascrizione sul telefono** (Apple o NVIDIA
-  **Parakeet**), **riassunti con Apple Intelligence**, **glossario del corso** che corregge i termini tecnici e impara
-  dalle lezioni, archivio da importare su un altro iPhone direttamente dal menu Condividi.
+  **Parakeet**), trascrizione che **segue l'audio** con **segnalibri a due vie**, **riassunti** con Apple Intelligence
+  o con **Qwen 3.5 0.8B** scaricabile, **glossario del corso** che corregge i termini tecnici e impara dalle lezioni,
+  archivio da importare su un altro iPhone direttamente dal menu Condividi.
 - **Privacy**: audio e trascrizioni non lasciano mai l'iPhone; niente account, statistiche, tracciamento né SDK di
   terze parti.
-- **Requisiti**: iOS 26 o successivo (dall'iPhone 11); per riassunti e glossario serve Apple Intelligence (dall'iPhone
-  15 Pro).
+- **Requisiti**: iOS 26 o successivo (dall'iPhone 11); per i riassunti serve Apple Intelligence (dall'iPhone 15 Pro)
+  oppure il modello Qwen scaricabile (iPhone con almeno 6 GB di memoria, dall'iPhone 13 Pro e 14); per il glossario
+  Apple Intelligence.
 - **Provarla**: beta pubblica su TestFlight in arrivo; oppure compilarla da sé per uso personale (vedi
   [Requisiti e build](#requisiti-e-build) e [Versione dimostrativa](#versione-dimostrativa)).
 - **Storico delle modifiche**: [CHANGELOG.md](CHANGELOG.md).
@@ -109,7 +111,8 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
 
 - Ogni modifica va accompagnata dall'aggiornamento di questo README (funzionalità, endpoint, formati, stato dei lavori)
   e da una voce nel [Changelog](CHANGELOG.md).
-- Nessuna dipendenza esterna senza una ragione forte (oggi solo FluidAudio, per Parakeet).
+- Nessuna dipendenza esterna senza una ragione forte (oggi FluidAudio per Parakeet, MLX Swift e swift-transformers per
+  Qwen).
 - Mai dati personali reali (nomi, matricole, indirizzi) nel codice, nei commenti o nei test: usare segnaposto
   (`MARIO ROSSI`, `12345A`).
 - Commit firmati con `git commit -s` (accettazione dell'accordo per i contributi).
@@ -237,12 +240,16 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
   scelto da un selettore a tutta larghezza allineato a sinistra.
 - Timer, livello microfono, pausa/ripresa, **segnalibri**, annulla; continua a schermo bloccato e si mette in pausa
   durante le telefonate.
+- **Stop**: la registrazione entra subito nell'elenco (`AppModel.fermaRegistrazione`), poi il file si chiude con il
+  tempo extra di iOS (`beginBackgroundTask`) e parte la catena automatica. Prima si aggiungeva solo a file chiuso: se
+  nel frattempo iOS sospendeva l'app (con lo stop finisce l'audio in background) la registrazione spariva e ricompariva
+  al riavvio come "recuperata". Avvio, pause, interruzioni, stop e chiusura del file vanno nel registro dei lavori.
 - Archivio ordinato per insegnamento: la schermata principale elenca solo gli insegnamenti che hanno registrazioni
   (numero, durata totale, data dell'ultima); toccandone uno si apre il suo elenco. La ricerca per titolo,
   insegnamento o note mostra i risultati in un'unica lista.
 - Dettaglio: player (±15/30 s, velocità 0,75–2×, salto ai segnalibri), titolo, insegnamento, note, condivisione, eliminazione.
-  - L'audio continua aprendo trascrizione o riassunto a pagina intera, dove compare un mini player (pausa, ±15/30 s,
-    tempo). Quelle schermate "tengono" il player (`AudioPlayer.utilizzatori`); il dettaglio lo chiude solo se, uscendo,
+  - L'audio continua aprendo trascrizione o riassunto a pagina intera, dove compare un mini player (cursore, pausa,
+    ±15/30 s, tempo e le stesse velocità del player grande, 0,75–2×). Quelle schermate "tengono" il player (`AudioPlayer.utilizzatori`); il dettaglio lo chiude solo se, uscendo,
     nessuna lo sta usando. Se era chiuso, il play riapre il file dal punto in cui era.
 - **Condivisione dell'audio con un nome leggibile** ("Colloquio e processo anamnestico – 30 set 2026, ore 10.15.m4a"
   invece di `<id>.m4a`), ricavato al momento da titolo, data e ora, quindi anche per le registrazioni già fatte.
@@ -355,6 +362,13 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
     reggono alle correzioni del glossario e alle modifiche a mano) e fra due àncore la posizione si interpola
     (`MappaTesto`). Senza àncore (trascrizioni precedenti o `SFSpeechRecognizer`) la posizione si stima in proporzione
     alla durata.
+  - **Segnalibri a due vie** nella trascrizione: quelli presi durante la registrazione (o aggiunti dopo) compaiono nel
+    testo come icona arancione numerata, prima della parola in cui sono stati presi (posizione dalla stessa
+    `MappaTesto`). Il pulsante in alto apre l'elenco con la frase in cui cade ognuno: un tocco porta lì nel testo e
+    fa partire l'audio da quel punto; si eliminano con lo swipe, e c'è «Aggiungi al punto in ascolto». Tenendo
+    premuto un paragrafo: «Ascolta da qui», «Aggiungi segnalibro» (all'istante in cui inizia il paragrafo),
+    «Togli il segnalibro», «Copia paragrafo». È lo stesso elenco `Registrazione.segnalibri` (secondi) del player:
+    un segnalibro aggiunto nel testo compare anche fra quelli dell'audio, e viceversa.
   - **Pre-riscaldamento** di Parakeet: il modello si carica sul Neural Engine all'inizio di ogni registrazione (con la
     catena automatica attiva), così alla fine la trascrizione parte subito. Resta in memoria tre minuti dopo l'ultima
     trascrizione, poi si libera; si libera subito se iOS segnala memoria scarsa. Due trascrizioni insieme usano due
@@ -367,16 +381,51 @@ Regole complete, compilazione in locale e accordo per i contributi in [CONTRIBUT
       fermo iOS considerava bloccata l'attività di sistema e la chiudeva ("non riuscita").
   - Avanzamento e annulla; continua anche uscendo dalla schermata. Testo in paragrafi, modificabile, con **Writing Tools**
     conteggio parole, condivisione, nuova trascrizione.
-- **Riassunto** con Apple Intelligence, in _Altro › IA › Riassunti_: online (predefinita, quando Apple la abilita
-  per l'app) o sul telefono. Qwen 3.5 4B è stato tolto: su iPhone 17 Pro Max il riassunto di 20 minuti di lezione
-  richiedeva 3 minuti e il 3% di batteria (circa 30 minuti e 30% per due ore), il glossario 6-7 minuti e il 6%. Il
-  modello già scaricato (3 GB) si cancella da solo.
+- **Riassunto**, in _Altro › IA › Riassunti_: **Qwen 3.5 0.8B** scaricabile, Apple Intelligence online (predefinita,
+  quando Apple la abilita per l'app) o Apple Intelligence sul telefono. Si usa il motore scelto se disponibile, poi
+  Apple Intelligence sul telefono, poi Qwen se scaricato (`MotoreRiassunto.disponibile`): sugli iPhone senza Apple
+  Intelligence i riassunti si fanno con Qwen.
+  - **Qwen 3.5 0.8B** (`QwenLocale`, Alibaba, Apache 2.0; `mlx-community/Qwen3.5-0.8B-4bit`, 652 MB) con
+    [MLX Swift](https://github.com/ml-explore/mlx-swift-lm) sulla GPU.
+    - Scelto con una **prova alla cieca** (2026-10-07) sulla trascrizione reale di un'ora di laboratorio di
+      psicofarmacologia, fra Apple Intelligence e sette modelli scaricabili da 0,6 a 1,7 GB, giudicati da una
+      studentessa senza sapere quale fosse quale:
+
+      | Modello | Download | Tempo sul Mac (M1 Pro) | Memoria | Voto |
+      | --- | --- | --- | --- | --- |
+      | **Qwen 3.5 0.8B** | 652 MB | 35 s | 1,9 GB | **7** |
+      | Qwen 3.5 2B | 1,7 GB | 82 s | 2,5 GB | 6 |
+      | Apple Intelligence (sul telefono) | – | 122 s | – | 5 |
+      | LFM2 1.2B | 659 MB | 51 s | 1,6 GB | 4 |
+      | LFM 2.5 1.2B | 659 MB | 21 s | 1,6 GB | 4 |
+      | Llama 3.2 1B | 695 MB | 66 s | 1,6 GB | 4 |
+      | Qwen 3 1.7B | 968 MB | 38 s | 2,1 GB | 3 |
+
+      Qwen 3.5 0.8B: "specifico, comprensibile perché non troppo scientifico, struttura organizzata, liste utili e
+      spiegate bene", con punti chiave e domande da ripassare; mancava solo la spiegazione del concetto principale
+      prima dei dettagli (es. cos'è un recettore prima dei tipi di recettori), ora chiesta nel prompt. Apple
+      Intelligence: troppo corto, salta passaggi importanti. Qwen 3.5 2B: troppo lungo e ripetitivo. Gemma 3 1B e
+      SmolLM3 3B scartati perché troppo lenti.
+    - Il vecchio Qwen 3.5 4B (3 GB) era stato tolto il 2026-10-06: su iPhone 17 Pro Max 20 minuti di lezione in 3
+      minuti con il 3% di batteria. Lo 0.8B è circa 5 volte più leggero.
+    - Stessa pipeline dei riassunti online (`RiassuntoASezioni`) con i parametri della prova: blocchi di circa 1500
+      parole, temperatura 0,7, top-p 0,8, top-k 20, penalità di ripetizione 1,05, senza "ragionamento"
+      (`enable_thinking = false`), cache di MLX limitata a 256 MB.
+    - **Solo in primo piano**: iOS concede la GPU in background solo agli iPad con M3 o successivi, mai agli iPhone,
+      e un lavoro sulla GPU fuori dall'app la chiuderebbe. Il riassunto con Qwen non passa dall'attività di sistema
+      (`EsecuzioneEstesa.esegui(soloInPrimoPiano:)`): uscendo dall'app si mette in pausa (`QwenLocale.Errore.inPausa`)
+      e al ritorno riprende dalle sezioni già scritte.
+    - Supportato con almeno 6 GB di memoria (`QwenLocale.supportato`), non nel simulatore (MLX). Download come
+      Parakeet (avviso, avanzamento, ripresa, verifica della dimensione), nella cartella dei modelli; scaricato,
+      diventa il motore scelto; eliminato, si torna ad Apple Intelligence.
+    - Il glossario del corso resta ad Apple Intelligence: con il vecchio Qwen inventava parole.
   - **Apple Intelligence online** (`NuvolaApple`, Private Cloud Compute, iOS 27): il modello più grande di Apple sui
     suoi server, con 32K token di contesto.
-    - Pipeline a sezioni con memoria (`RiassuntoASezioni`): blocchi di circa 6000 parole (4-5 richieste per due ore
-      di lezione, il limite giornaliero conta le richieste); per ognuno il modello scrive le sezioni `### Titolo`
-      nuove, ricevendo i titoli già scritti e i termini del glossario del corso presenti nel blocco. Una passata
-      finale scrive _In breve_, _Punti chiave_ e _Da ripassare_.
+    - Pipeline a sezioni con memoria (`RiassuntoASezioni`, la stessa di Qwen): blocchi di circa 6000 parole (4-5
+      richieste per due ore di lezione, il limite giornaliero conta le richieste); per ognuno il modello scrive le
+      sezioni `### Titolo` nuove, aprendo ognuna con il concetto principale, ricevendo i titoli già scritti e i
+      termini del glossario del corso presenti nel blocco. Una passata finale scrive _In breve_, _Punti chiave_ e
+      _Da ripassare_.
     - Senza connessione, con il servizio non raggiungibile o oltre il limite giornaliero il riassunto continua con
       Apple Intelligence sul telefono.
     - Mostra il limite giornaliero di richieste e l'offerta di Apple per alzarlo con iCloud+.
@@ -487,8 +536,10 @@ icona e spiegazione, pulsante «Avanti» / «Inizia» in basso, «Salta» in alt
 1. **Benvenuto**: Oggi, Orario, Presenze, Esami e carriera, Ariel.
 2. **Registra le lezioni**: dove si avvia (scheda Registrazioni o «Inizia registrazione» in Oggi), schermo bloccato e
    segnalibri, audio migliorato per l'ascolto, privacy.
-3. **Trascrizioni e riassunti**: catena automatica, Apple o Parakeet, Apple Intelligence, lavoro in background; con
-   il pulsante per scaricare Parakeet (stessa conferma di Altro › IA) e lo stato di Apple Intelligence.
+3. **Trascrizioni e riassunti**: catena automatica, Apple o Parakeet, Apple Intelligence o Qwen, lavoro in
+   background; con i pulsanti per scaricare il modello di trascrizione più preciso e quello per i riassunti (stesse
+   conferme di Altro › IA) e lo stato di Apple Intelligence. Sugli iPhone senza Apple Intelligence dice che i
+   riassunti si fanno con il modello da scaricare.
 4. **Il glossario del corso**: a cosa serve, che impara dalle lezioni, dove si modifica; con il pulsante per crearlo
    subito.
 
@@ -531,8 +582,11 @@ la mostra di nuovo.
   verde / grigio), dati salvati, aggiornamento profilo, uscita
   (con scelta se conservare o eliminare registrazioni, foto e cache).
 - **IA** (icona processore): raccoglie tutte le impostazioni dei modelli, in vista di eventuali servizi cloud:
-  - motore di trascrizione (Apple o Parakeet), con download e spazio del modello, e motore di riassunti e glossario
-    (Apple Intelligence online o sul telefono);
+  - motore di trascrizione (Apple o Parakeet) e motore dei riassunti (Qwen, Apple Intelligence online o sul telefono),
+    con download e spazio dei modelli; il glossario usa sempre Apple Intelligence;
+  - sotto una trascrizione o un riassunto fatti con il modello di base, se quello più preciso non è scaricato, un
+    avviso «Non ti convince?» con il pulsante per scaricarlo e «Non mostrare più» (uno per la trascrizione e uno per i
+    riassunti, in `UserDefaults`);
   - catena automatica dopo ogni registrazione (trascrizione, riassunto, miglioramento);
   - miglioramento automatico dell'audio dopo ogni registrazione;
   - stato di Apple Intelligence per i riassunti (disponibile, disattivata, in download, non supportata), con cosa
@@ -582,8 +636,9 @@ dei docenti, manifesto degli studi) si scaricano e si mostrano con Quick Look (`
 
 - Xcode 27 (Swift 6.4), target **iOS 26.0+** (dal 2026-10-06: gli stessi iPhone di iOS 26, dall'iPhone 11 in poi),
   iPhone e iPad. Niente più controlli di versione e ripieghi per iOS 17–25.
-- **Dipendenze esterne**: solo [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.x (Apache 2.0) per
-  Parakeet su Core ML. HTML, CSS selector, XML, JSON, Keychain, audio, fotocamera, trascrizione Apple e riassunti Apple usano il
+- **Dipendenze esterne**: [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.x (Apache 2.0) per
+  Parakeet su Core ML; [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) 3.32.x (MIT, con MLX Swift) e
+  [swift-transformers](https://github.com/huggingface/swift-transformers) 1.3.x (Apache 2.0) per Qwen. HTML, CSS selector, XML, JSON, Keychain, audio, fotocamera, trascrizione Apple e riassunti Apple usano il
   parser interno e i framework di sistema.
 
 ```bash
@@ -621,7 +676,7 @@ le registrazioni si spostano con il backup (dalla vecchia app, _Esporta_ › men
   › _+ Capability_ › _Background Inference_) o sul portale sviluppatori;
 - _Increased Memory Limit_.
 
-_Background GPU Access_ è stato tolto insieme a Qwen, l'unico lavoro sulla GPU.
+_Background GPU Access_ non serve: iOS lo concede solo agli iPad con M3 o successivi, quindi Qwen lavora in primo piano.
 
 Ancora esclusi:
 
@@ -829,7 +884,7 @@ Verificati su risposte reali; i modelli Swift ne tengono conto.
 | Registrazioni                                                                                              | `Application Support/Registrazioni/<id>.m4a` (AAC mono 64 kbps, ~29 MB/ora) + metadati `<id>.json` + indice `registrazioni.json` |
 | Trascrizioni e riassunti                                                                                   | `Application Support/Registrazioni/<id>.txt` e `<id>.riassunto.md`, separati dall'indice                                  |
 | Modelli locali (se scaricati)                                                                              | `Application Support/Modelli/parakeet-ultra` + marcatore `installato-parakeet-ultra`, esclusi dal backup                    |
-| Motori scelti e catena automatica                                                                          | `UserDefaults` (`motoreTrascrizione`: `apple`/`parakeet`, `motoreRiassunto`: `cloud`/`apple`, `elaborazioneAutomatica`)     |
+| Motori scelti e catena automatica                                                                          | `UserDefaults` (`motoreTrascrizione`: `apple`/`parakeet`, `motoreRiassunto`: `cloud`/`apple`/`qwen`, `elaborazioneAutomatica`) |
 | Audio originale (se migliorato)                                                                            | `Application Support/Registrazioni/<id>.originale.m4a`; `<id>.m4a` è la versione migliorata                                |
 | Cookie di sessione                                                                                         | `HTTPCookieStorage` di sistema                                                                                            |
 | Orario, appelli, tasse, presenze, aule, esiti, partecipanti                                                | solo in memoria                                                                                                           |
@@ -861,7 +916,7 @@ registrazioni, foto profilo, file scaricati e cache o conservarli per un altro p
 | Fotocamera          | scansione del QR del codice lezione                 |
 | Riconoscimento vocale | trascrizione con il ripiego `SFSpeechRecognizer`  |
 | Audio in background | la registrazione continua a schermo bloccato        |
-| Elaborazione in background | trascrizione, riassunto, miglioramento e download proseguono fuori dall'app, anche Parakeet (_Background Inference_) |
+| Elaborazione in background | trascrizione, riassunto, miglioramento e download proseguono fuori dall'app, anche Parakeet (_Background Inference_); il riassunto con Qwen (GPU) si mette in pausa e riprende al ritorno |
 | Libreria foto       | nessun permesso: la foto profilo usa `PhotosPicker` |
 
 ---

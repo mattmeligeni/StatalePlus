@@ -13,7 +13,7 @@ contributi con una pull request al repository ufficiale; non si possono pubblica
 3. **Mai dati personali reali** (nomi, matricole, email, codici fiscali, indirizzi, registrazioni di lezioni) nel
    codice, nei commenti, nei test, negli screenshot o nei messaggi dei commit: usa i segnaposto `MARIO ROSSI`,
    `12345A`, `mario.rossi@studenti.unimi.it`. Niente catture di traffico (`.har`) né credenziali.
-4. **Nessuna dipendenza nuova** senza una ragione forte (oggi solo FluidAudio).
+4. **Nessuna dipendenza nuova** senza una ragione forte (oggi FluidAudio, MLX Swift e swift-transformers).
 5. **Nessun collegamento esterno** nell'app (browser, web view, link a siti): se qualcosa non si può integrare in modo
    nativo, non si aggiunge.
 6. **Stile del codice**: Swift 6 con isolamento predefinito sul MainActor, nomi e commenti in italiano come nel resto
