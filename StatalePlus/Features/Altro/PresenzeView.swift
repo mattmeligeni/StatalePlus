@@ -159,7 +159,6 @@ struct PresenzeView: View {
         }
         do {
             let r = try await app.services.easyBadge.timbra(TimbraturaRequest(matricola: matricolaInvio, codiceLezione: codice.trimmed))
-            print(matricolaInvio)
             risposta = r
             if r.esito == .registrata || r.esito == .fallita {
                 UINotificationFeedbackGenerator().notificationOccurred(r.esito == .registrata ? .success : .error)
