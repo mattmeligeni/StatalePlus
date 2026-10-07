@@ -566,7 +566,9 @@ la mostra di nuovo.
   "1 aula / 2 aule", indirizzo in formato italiano ("Via Celoria 2, 20133 Milano") e **Apri in Mappe**; ricerca sempre
   visibile per sede, aula o indirizzo; _Dove si tiene_ cerca le attività della giornata odierna.
 - **Presenze**: registrazione presenza con codice lezione digitato o da **QR** (slider di zoom fino a 5× per i codici
-  proiettati lontano; dopo la scansione la richiesta parte subito, perché il QR in aula cambia di continuo).
+  proiettati lontano; dopo la scansione la richiesta parte subito, perché il QR in aula cambia di continuo). Sopra il
+  codice, il campo **Matricola** in sola lettura mostra la matricola del profilo, quella con cui viene registrata la
+  presenza.
   Esiti: `ok` → "Presenza registrata", `warning` → "Presenza già registrata" (conta come confermata), `failure` →
   "Rilevazione non riuscita" con spiegazione (docente che ha chiuso la rilevazione, codice sbagliato o scaduto: il
   server usa lo stesso messaggio per tutti i casi). Per `ok` e `failure` l'esito si apre **a tutto schermo** (verde

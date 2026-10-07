@@ -21,6 +21,15 @@ struct PresenzeView: View {
                         Text("\(Formats.time(l.inizio)) – \(Formats.time(l.fine)) · \(l.aula)").font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                // Sola lettura: è la matricola del profilo con cui viene registrata la presenza.
+                LabeledContent("Matricola") {
+                    TextField("Matricola", text: .constant(app.studente?.matricola.uppercased() ?? "—"))
+                        .font(.body.monospaced())
+                        .multilineTextAlignment(.trailing)
+                        .foregroundStyle(.secondary)
+                        .disabled(true)
+                }
+                .accessibilityHint("La presenza viene registrata con questa matricola")
                 HStack {
                     CampoCodice(segnaposto: "Codice lezione", testo: $codice, invio: .send) { Task { await invia() } }
                     Button { showScanner = true } label: {
@@ -38,7 +47,7 @@ struct PresenzeView: View {
             } header: {
                 Text("Registra presenza")
             } footer: {
-                if let m = app.studente?.matricola { Text("Matricola \(m.uppercased())") }
+                if app.studente != nil { Text("La presenza viene registrata con la matricola indicata.") }
             }
 
             // Esito in una sezione a parte: la riga del pulsante non cambia forma né posizione.

@@ -15,6 +15,7 @@ Storico delle modifiche di Statale Plus (fino al 2026-10-06 "Statale+"), dal pi�
 - **Segnalibri a due vie** nella trascrizione: quelli presi registrando compaiono nel testo nel punto esatto, con un
   elenco dietro il pulsante in alto; tenendo premuto un paragrafo se ne aggiunge uno, che vale anche per l'audio.
 - Mini player con le stesse velocità del player grande (0,75–2×).
+- Presenze: campo Matricola in sola lettura sopra il codice lezione, con la matricola usata per la registrazione.
 - Stop della registrazione: la registrazione compare subito nell'elenco. Prima, se iOS sospendeva l'app mentre il file
   si chiudeva, spariva e ricompariva al riavvio come "recuperata", senza trascrizione né riassunto.
 - Presentazione e impostazioni aggiornate per il nuovo modello; crediti e NOTICE con Qwen, MLX Swift e
